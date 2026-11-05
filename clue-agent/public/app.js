@@ -67,3 +67,36 @@ async function renderPublications(items){$('publication-list').replaceChildren()
 $('publish-thread').addEventListener('click',async()=>{if(!currentThread)return;if(!confirm('Publish the latest saved research question, answer, sources and connected market? Your private forecast and notes are not included.'))return;try{await api('/api/threads/'+encodeURIComponent(currentThread)+'/publish',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});const data=await api('/api/threads/'+encodeURIComponent(currentThread));renderPublications(data.publications);$('save-status').textContent='Research shared. This is a snapshot, not a complete track record.'}catch(e){$('save-status').textContent=e.message}});
 async function showSharedReport(id){try{const data=await api('/api/public/'+encodeURIComponent(id));const s=data.snapshot;document.querySelector('.hero').hidden=true;document.querySelector('.side').hidden=true;document.querySelector('.footnote').hidden=true;document.querySelector('#question-form').hidden=true;document.querySelector('.workspace .section-head h2').textContent=s.question;document.querySelector('.workspace .muted').textContent='Public research snapshot · Published '+new Date(data.publishedAt).toLocaleString();$('selected-market').hidden=!s.market;if(s.market){$('selected-market').replaceChildren(element('div','CONNECTED MARKET','kicker'),element('strong',s.market.question),element('p',s.market.rules||'Rules unavailable','market-rules'));const a=element('a','View venue ↗');try{const u=new URL(s.market.sourceUrl);a.href=u.protocol==='https:'&&u.hostname==='polymarket.com'?u.href:'https://polymarket.com/'}catch{a.href='https://polymarket.com/'}a.target='_blank';a.rel='noopener noreferrer';$('selected-market').append(a)}renderReport(s.content+'\n\nSources returned by web search:\n'+s.sources.join('\n'));$('report-meta').textContent=`${s.model} · Retrieved ${new Date(s.retrievedAt).toLocaleString()} · An individual research snapshot`; $('report').hidden=false;$('save-research').hidden=true;$('forecast-section').hidden=true}catch(e){document.querySelector('main').replaceChildren(element('p',e.message))}}
 const sharedId=new URLSearchParams(location.search).get('share');if(sharedId)showSharedReport(sharedId);
+
+if (!sharedId) {
+  const main = document.querySelector('main');
+  const board = document.createElement('section');
+  board.className = 'market-board';
+  board.innerHTML = '<div class="board-heading"><div><div class="kicker">EXPLORE MARKETS</div><h1>What happens next?</h1><p>Explore real questions. Follow the evidence.</p></div><button type="button" class="primary" id="ask-anything">Ask a question ↗</button></div><nav class="categories" aria-label="Market categories"><button data-topic="world">Trending</button><button data-topic="politics">Politics</button><button data-topic="crypto">Crypto</button><button data-topic="economy">Economy</button><button data-topic="sports">Sports</button><button data-topic="technology">Technology</button></nav><p id="board-status" role="status">Loading markets…</p><div id="board-cards" class="board-cards"></div>';
+  main.prepend(board);
+  document.querySelector('.hero').hidden = true;
+  document.querySelector('#ask-anything').onclick = () => document.querySelector('#question').scrollIntoView({behavior:'smooth'});
+  async function loadBoard(topic) {
+    const cards = document.querySelector('#board-cards'), status = document.querySelector('#board-status');
+    cards.replaceChildren(); status.textContent = 'Loading markets…';
+    try {
+      const data = await api('/api/markets?q=' + encodeURIComponent(topic));
+      status.textContent = data.markets.length ? 'Polymarket · retrieved ' + new Date(data.retrievedAt).toLocaleTimeString() : 'No markets available for this topic.';
+      for (const m of data.markets.filter(m => !m.closed).slice(0,12)) {
+        const card = element('article', undefined, 'board-card');
+        card.append(element('div','POLYMARKET · OPEN','kicker'), element('h2',m.question));
+        const quotes = element('p', 'Best bid ' + (m.bestBid ?? '—') + '  ·  Best ask ' + (m.bestAsk ?? '—') + '  ·  Last trade ' + (m.lastTradePrice ?? '—'), 'board-quotes');
+        const button = element('button','Explore market →','board-open');
+        button.type = 'button'; button.onclick = () => { showMarket(m); document.querySelector('#selected-market').scrollIntoView({behavior:'smooth'}); };
+        card.append(quotes,button); cards.append(card);
+      }
+    } catch (error) { status.textContent = 'Markets unavailable: ' + error.message; }
+  }
+  document.querySelectorAll('.categories button').forEach(button => button.onclick = () => {
+    document.querySelectorAll('.categories button').forEach(b => b.classList.toggle('active', b === button));
+    loadBoard(button.dataset.topic);
+  });
+  document.querySelector('.categories button').textContent = 'World';
+  document.querySelector('.categories button').classList.add('active');
+  loadBoard('world');
+}
