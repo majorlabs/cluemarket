@@ -19,3 +19,7 @@ AI must cite sources and express uncertainty; users control private notes and ap
 [Polymarket docs](https://docs.polymarket.com/) · [NEAR docs](https://docs.near.org/) · [NEAR AI](https://docs.near.ai/) · [NEAR Intents](https://docs.near-intents.org/) · [Hackathon](https://nearhackathon.com/) · [Agent skills](https://github.com/near/agent-skills)
 
 No setup instructions are provided because there is no application in this repository yet.
+
+## Research beyond markets
+
+Clue agents are intended to research new user questions across available external sources, whether or not a market or existing Clue page exists. They can organize sourced findings in a living research thread and connect them to forecasts and markets when useful. See [research agents and living knowledge](docs/RESEARCH_AGENTS.md).

@@ -24,3 +24,7 @@ Acceptance: a new user can complete this journey against real available data wit
 Open decisions: authentication, database, source licensing, model provider, alert delivery, venue eligibility, social moderation, wallets, infrastructure cost and privacy model. ANS was mentioned but its intended meaning is unconfirmed.
 
 [Market data](https://docs.polymarket.com/) · [Order book](https://docs.polymarket.com/api-reference/market-data/get-order-book) · [Trading](https://docs.polymarket.com/trading/overview) · [Geoblock](https://docs.polymarket.com/api-reference/geoblock) · [Resolution](https://docs.polymarket.com/concepts/resolution) · [NEAR AI](https://docs.near.ai/) · [NEAR Intents](https://docs.near-intents.org/) · [NEAR CLI](https://docs.near.org/tools/near-cli) · [Agent skills](https://github.com/near/agent-skills) · [Hackathon prompts](https://github.com/nearai/near-hackathon-prompt-examples)
+
+## Broad research proof
+
+Support a new user question without requiring an existing market or page: research accessible sources, cite them, explain uncertainty, and save a private thread. If a matching market exists, connect it optionally. See [research agents](RESEARCH_AGENTS.md). Search-provider selection and actual access remain open.

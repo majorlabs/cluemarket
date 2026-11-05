@@ -147,3 +147,7 @@ The event requests a working prototype with a public repository and a public dem
 - Clarify what the user means by ANS if the intended resource cannot be identified from actual project links.
 - Preserve the founder's broad knowledge/market idea; do not constrain it to memecoins. Clearly distinguish a first implementation using existing Polymarket markets from the founder's proposed perpetual truth-seeking markets.
 - Prioritize independent validation of differentiation, actual source availability, cross-chain execution, order signing, payout/redeem and venue policies. No project claim is established as unshipped or commercially validated.
+
+## 14. Broad research agents and living knowledge
+
+The research agent is not confined to existing Clue pages or prediction markets. Users can ask new questions and direct research across available external sources, then save findings and optionally connect them to markets, forecasts and living research pages. User-directed monitoring, when implemented, can revisit sources and relate new evidence to a user's thesis and conditions. The page organizes the research; it does not restrict the agent. See [RESEARCH_AGENTS.md](RESEARCH_AGENTS.md) for the full journey, proof and boundaries.

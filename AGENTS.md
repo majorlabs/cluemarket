@@ -12,3 +12,7 @@ Read README.md and docs/PRODUCT_AND_BUILD_BRIEF.md before implementation. This r
 - Do not add secrets. Inspect third-party agent skills and scripts before use.
 - Respect the approved Clue mark and orange, cream, white and ink palette when assets are available. Brand clearance is unverified.
 - The meaning of ANS remains unconfirmed. Research before implementing a purported protocol.
+
+## Research agents
+
+Read docs/RESEARCH_AGENTS.md. Agents are not limited to existing Clue pages or markets: support user-directed research on new questions with accessible external sources. The living research page is an optional destination for organizing research. A market is an optional context, not a prerequisite. Preserve citations, uncertainty and privacy, and verify any search provider before claiming it works.
