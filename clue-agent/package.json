@@ -11,7 +11,8 @@
     "deploy": "eve deploy",
     "dev": "eve dev",
     "eval": "eve eval",
-    "start": "eve start",
+    "start": "node server.mjs",
+    "agent:start": "eve start",
     "typecheck": "tsc",
     "preview": "NODE_USE_ENV_PROXY=1 node server.mjs"
   },

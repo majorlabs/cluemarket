@@ -7,6 +7,8 @@ import { join, resolve } from 'node:path';
 
 const port = Number(process.env.PORT || 3000);
 const isPostgres = Boolean(process.env.DATABASE_URL);
+const hosted = process.env.CLUE_HOSTED === '1';
+if(hosted && !isPostgres) throw new Error('Hosted preview requires Postgres.');
 const directory = resolve(process.env.CLUE_DATA_DIR || '.clue-data');
 let secret = process.env.BETTER_AUTH_SECRET;
 let database;

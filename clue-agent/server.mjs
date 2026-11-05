@@ -1,11 +1,16 @@
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { toNodeHandler, fromNodeHeaders } from 'better-auth/node';
 import { auth, store } from './auth.mjs';
 
 const port = Number(process.env.PORT || 3000);
-const host = '127.0.0.1';
+const hosted=process.env.CLUE_HOSTED === '1';
+const host = hosted ? '0.0.0.0' : '127.0.0.1';
+const publicOrigin=hosted ? new URL(process.env.BETTER_AUTH_URL).origin : `http://127.0.0.1:${port}`;
+const allowedHosts=hosted ? [new URL(publicOrigin).host,process.env.CLUE_SERVICE_HOST].filter(Boolean) : ['127.0.0.1:'+port,'localhost:'+port];
+if(hosted && (!publicOrigin.startsWith('https://') || !process.env.CLUE_SERVICE_HOST || !process.env.CLUE_SIGNUP_TOKEN || process.env.CLUE_SIGNUP_TOKEN.length < 32)) throw new Error('Hosted preview requires HTTPS, CLUE_SERVICE_HOST and a strong CLUE_SIGNUP_TOKEN.');
+const researchQuota=new Map();
 const headers = {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
 const json = (res, code, body) => { res.writeHead(code, headers); res.end(JSON.stringify(body)); };
 async function getBody(req) { let value = ''; for await (const chunk of req) { value += chunk; if (value.length > 65536) throw new Error('Request too large'); } return JSON.parse(value); }
@@ -28,9 +33,12 @@ async function research(question, market) {
 }
 const app=http.createServer(async(req,res)=>{ try {
  const url=new URL(req.url,`http://${host}:${port}`);
- if (!['127.0.0.1:'+port,'localhost:'+port].includes(req.headers.host)) return json(res,403,{error:'Invalid host'});
- if (req.method==='POST' && req.headers.origin !== `http://${req.headers.host}`) return json(res,403,{error:'Invalid origin'});
- if(url.pathname.startsWith('/api/auth/')) return await toNodeHandler(auth)(req,res);
+ if (!allowedHosts.includes(req.headers.host)) return json(res,403,{error:'Invalid host'});
+ if (req.method==='POST' && req.headers.origin !== (hosted ? publicOrigin : `http://${req.headers.host}`)) return json(res,403,{error:'Invalid origin'});
+ if(url.pathname.startsWith('/api/auth/')) {
+  if(hosted && req.method==='POST' && url.pathname==='/api/auth/sign-up/email'){ const supplied=Buffer.from(String(req.headers['x-clue-invite']||'')), expected=Buffer.from(process.env.CLUE_SIGNUP_TOKEN); if(supplied.length!==expected.length || !timingSafeEqual(supplied,expected)) return json(res,403,{error:'A valid preview invitation is required.'}); }
+  return await toNodeHandler(auth)(req,res);
+ }
  const publicMatch=url.pathname.match(/^\/api\/public\/([a-f0-9-]+)$/);
  if(req.method==='GET' && publicMatch){const item=await store.get('SELECT snapshot, created_at FROM public_reports WHERE id=?',publicMatch[1]);if(!item)return json(res,404,{error:'Shared report unavailable.'}); return json(res,200,{snapshot:JSON.parse(item.snapshot),publishedAt:item.created_at});}
  if(url.pathname.startsWith('/api/threads')) {
@@ -68,7 +76,7 @@ const app=http.createServer(async(req,res)=>{ try {
  const marketMatch=url.pathname.match(/^\/api\/markets\/(\d+)$/);
  if(req.method==='GET' && marketMatch) { const market=await getJSON(`https://gamma-api.polymarket.com/markets/${marketMatch[1]}`); return json(res,200,{market:normalizeMarket(market,{slug:market.events?.[0]?.slug}), resolutionStatus:market.umaResolutionStatus || null, resolvedAt:market.closedTime || null,retrievedAt:new Date().toISOString()}); }
  if(req.method==='GET' && url.pathname==='/api/markets') { const q=(url.searchParams.get('q')||'').trim(); if(q.length<2 || q.length>200) return json(res,400,{error:'Enter a query between 2 and 200 characters.'}); return json(res,200,await marketSearch(q)); }
- if(req.method==='POST' && url.pathname==='/api/research') { const session=await auth.api.getSession({headers:fromNodeHeaders(req.headers)}); if(!session?.user?.id) return json(res,401,{error:'Sign in before using research.'}); const body=await getBody(req); const question=typeof body.question==='string'?body.question.trim():''; if(question.length<5 || question.length>2000) return json(res,400,{error:'Enter a question between 5 and 2,000 characters.'}); const market=body.market && typeof body.market.question==='string' ? {question:body.market.question.slice(0,1000), rules:typeof body.market.rules==='string'?body.market.rules.slice(0,8000):null}:null; return json(res,200,await research(question,market)); }
+ if(req.method==='POST' && url.pathname==='/api/research') { const session=await auth.api.getSession({headers:fromNodeHeaders(req.headers)}); if(!session?.user?.id) return json(res,401,{error:'Sign in before using research.'}); const now=Date.now(); const previous=researchQuota.get(session.user.id) || []; const recent=previous.filter(t=>t>now-3600000); if(recent.length>=10) return json(res,429,{error:'Research limit reached. Try again later.'}); recent.push(now); researchQuota.set(session.user.id,recent); const body=await getBody(req); const question=typeof body.question==='string'?body.question.trim():''; if(question.length<5 || question.length>2000) return json(res,400,{error:'Enter a question between 5 and 2,000 characters.'}); const market=body.market && typeof body.market.question==='string' ? {question:body.market.question.slice(0,1000), rules:typeof body.market.rules==='string'?body.market.rules.slice(0,8000):null}:null; return json(res,200,await research(question,market)); }
  if(req.method==='GET' && ['/','/app.js','/style.css'].includes(url.pathname)) { const path=url.pathname==='/'?'index.html':url.pathname.slice(1); const content=await readFile(new URL(`./public/${path}`,import.meta.url)); res.writeHead(200,{'Content-Type':path.endsWith('.html')?'text/html; charset=utf-8':path.endsWith('.js')?'text/javascript; charset=utf-8':'text/css; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Security-Policy':"default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'"}); return res.end(content); }
  json(res,404,{error:'Not found'});
  } catch(err){json(res,err.status || 502,{error:err.message || 'Request failed'});} });
