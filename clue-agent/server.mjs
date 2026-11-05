@@ -39,6 +39,7 @@ const app=http.createServer(async(req,res)=>{ try {
   if(hosted && req.method==='POST' && url.pathname==='/api/auth/sign-up/email'){ const supplied=Buffer.from(String(req.headers['x-clue-invite']||'')), expected=Buffer.from(process.env.CLUE_SIGNUP_TOKEN); if(supplied.length!==expected.length || !timingSafeEqual(supplied,expected)) return json(res,403,{error:'A valid preview invitation is required.'}); }
   return await toNodeHandler(auth)(req,res);
  }
+ if(req.method==='GET' && url.pathname==='/healthz') return json(res,200,{ok:true,service:'clue-api'});
  const publicMatch=url.pathname.match(/^\/api\/public\/([a-f0-9-]+)$/);
  if(req.method==='GET' && publicMatch){const item=await store.get('SELECT snapshot, created_at FROM public_reports WHERE id=?',publicMatch[1]);if(!item)return json(res,404,{error:'Shared report unavailable.'}); return json(res,200,{snapshot:JSON.parse(item.snapshot),publishedAt:item.created_at});}
  if(url.pathname.startsWith('/api/threads')) {
