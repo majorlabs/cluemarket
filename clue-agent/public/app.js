@@ -12,10 +12,11 @@ const status=element('p');status.id='research-status';status.setAttribute('role'
 const marketForm=element('form');marketForm.id='market-form';marketForm.innerHTML='<input id="market-query"><div id="markets"></div><div id="market-status"></div>'; $('compatibility').append(marketForm);
 const selectedBox=element('div');selectedBox.id='selected-market';$('detail-content').append(selectedBox);
 document.querySelector('.top').innerHTML='<a class="brand" href="/" aria-label="Clue home"><img src="/assets/clue-mark.jpg" alt="">clue<span>.</span></a><nav aria-label="Main navigation"><button data-view="markets-view" class="active">Markets</button><button data-view="ask-view">Ask Clue</button><button data-view="saved-view">Saved</button></nav><span id="account-label" hidden></span><button id="account-open">Account</button>';
+window.installClueTheme();
 document.querySelector('footer').innerHTML='<strong>clue.</strong><span>Follow the evidence.</span><a href="https://polymarket.com" target="_blank" rel="noopener">Market data: Polymarket </a>';
 
 
-function view(id){['markets-view','ask-view','saved-view','detail-view'].forEach(x=>$(x).hidden=x!==id);$('research-panel').hidden=!['ask-view','detail-view'].includes(id);document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===id));window.scrollTo(0,0);}
+function view(id){['markets-view','ask-view','saved-view','detail-view'].forEach(x=>$(x).hidden=x!==id);$('research-panel').hidden=!['ask-view','detail-view'].includes(id);document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===id));window.scrollTo(0,0);if(!matchMedia('(prefers-reduced-motion: reduce)').matches)$(id).animate([{opacity:.35,transform:'translateY(6px)'},{opacity:1,transform:'translateY(0)'}],{duration:200,easing:'cubic-bezier(.22,1,.36,1)'});}
 document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{if(b.dataset.view==='ask-view'){composer.hidden=false;selected=null;currentThread=null;currentReport=null;$('question').value='';$('report').hidden=true;} view(b.dataset.view)});
 $('back-markets').onclick=()=>view('markets-view');
 function element(tag,text,cls){const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(cls)el.className=cls;return el;}
