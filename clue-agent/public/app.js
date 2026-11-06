@@ -27,9 +27,9 @@ function renderReport(text){const target=$('report-text');target.replaceChildren
 let currentReport=null,currentThread=null,isSignUp=false,currentUser=null;
 const dialog=$('account-dialog');
 dialog.innerHTML='<h2>Connect your NEAR wallet</h2><p>Connect to research questions and keep your saved work private.</p><button id="wallet-connect" class="primary">Choose wallet</button><p id="account-status" role="status"></p><button id="account-close">Close</button>';
-$('wallet-connect').onclick=async()=>{try{$('account-status').textContent='Choose your wallet, then approve the connection message.';await window.clueConnect();dialog.close();await refreshAccount()}catch(e){$('account-status').textContent=e.message||'Connection canceled. Try again.'}};
+$('wallet-connect').onclick=async()=>{dialog.close();$('account-open').disabled=true;try{await window.clueConnect();await refreshAccount()}catch(e){$('account-status').textContent=e.message||'Connection canceled. Try again.';dialog.showModal()}finally{$('account-open').disabled=false}};
 
-$('account-open').addEventListener('click',()=>{if(currentUser){signOut();return}dialog.showModal()});
+$('account-open').addEventListener('click',()=>{if(currentUser){signOut();return}$('wallet-connect').click()});
 $('account-close').addEventListener('click',()=>dialog.close());
 async function api(path, options){const response=await fetch(path,options);const data=await response.json();if(!response.ok)throw Error(data.message||data.error||'Request failed');return data}
 async function refreshAccount(){try{const session=await api('/api/wallet/session');currentUser=session?.user||null;$('account-open').textContent=currentUser?'Disconnect':'Connect wallet';$('account-label').textContent=currentUser?currentUser.email:'Markets · evidence · forecasts';if(currentUser)await loadThreads();else{$('saved-threads').replaceChildren();$('saved-status').textContent='Connect your NEAR wallet to see your private saved work.'}}catch{$('saved-status').textContent='Account service unavailable.'}}
