@@ -4,6 +4,8 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import Database from 'better-sqlite3';
+import {createHash,randomBytes} from 'node:crypto';
 
 const dir=await mkdtemp(join(tmpdir(),'clue-test-'));
 const port=31000+Math.floor(Math.random()*10000), base=`http://127.0.0.1:${port}`;
@@ -14,7 +16,8 @@ async function ready(){for(let i=0;i<100;i++){try{if((await fetch(base)).ok)retu
 async function request(path,{cookie,body,method}={}){const res=await fetch(base+path,{method:method||(body?'POST':'GET'),headers:{Origin:base,...(body?{'Content-Type':'application/json'}:{}),...(cookie?{Cookie:cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:res.status,body:await res.json(),cookie:res.headers.getSetCookie().map(c=>c.split(';')[0]).join('; ')}}
 test('accounts isolate private research, revisions, forecasts and deletion',async()=>{
  await ready();
- const signup=async name=>request('/api/auth/sign-up/email',{body:{name,email:`${name}@example.test`,password:'testing-password-123'}});
+ // Seed two verified-wallet sessions; cryptographic verification has a separate test.
+ const signup=async name=>{const db=new Database(join(dir,'clue.sqlite'));const token=randomBytes(32).toString('hex');const now=new Date().toISOString();db.prepare('INSERT INTO user (id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,?,?,?)').run(name,name+'.near',name+'@test.invalid',0,now,now);db.prepare('INSERT INTO wallet_sessions VALUES (?,?,?,?)').run(createHash('sha256').update(token).digest('hex'),name,name+'.near',Date.now()+60000);db.close();return {status:200,cookie:'clue_wallet='+token}};
  const a=await signup('alice'),b=await signup('bob');assert.equal(a.status,200);assert.equal(b.status,200);
  const sample={question:'What evidence is available?',content:'A report.',sources:['https://example.org/evidence'],model:'test',retrievedAt:'2026-11-05T00:00:00Z'};
  const first=await request('/api/threads',{cookie:a.cookie,body:sample});assert.equal(first.status,201);const id=first.body.id;

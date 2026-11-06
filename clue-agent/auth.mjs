@@ -25,7 +25,7 @@ if (isPostgres) {
   database.pragma('journal_mode = WAL');
   database.pragma('foreign_keys = ON');
 }
-export const auth = betterAuth({ secret, baseURL: process.env.BETTER_AUTH_URL || `http://127.0.0.1:${port}`, database, emailAndPassword: { enabled: true, minPasswordLength: 10 } });
+export const auth = betterAuth({ secret, baseURL: process.env.BETTER_AUTH_URL || `http://127.0.0.1:${port}`, database, emailAndPassword: { enabled: false, minPasswordLength: 10 } });
 await (await auth.$context).runMigrations();
 const schema = `CREATE TABLE IF NOT EXISTS research_threads (
  id TEXT PRIMARY KEY, user_id TEXT NOT NULL, question TEXT NOT NULL,
