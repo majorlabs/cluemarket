@@ -10,3 +10,4 @@ html[data-theme="dark"]{--ink:#f3f3f1;--orange:#ff702e;--cream:#111213;--line:#2
 @media(max-width:760px){.top{gap:8px}.top nav button{font-size:11px;padding:0 6px}#account-open{font-size:10px;white-space:nowrap;padding:8px;min-height:40px}.brand{font-size:23px}}
 
 html[data-theme="light"]{color-scheme:light}.theme-button{margin-left:auto;white-space:nowrap;font-size:12px}#account-open{margin-left:0}@media(max-width:760px){.top{height:auto;min-height:104px;flex-wrap:wrap;padding:8px 16px;gap:8px}.top nav{order:3;width:100%;height:36px;justify-content:center}.top nav button{font-size:13px;padding:0 20px}.theme-button{min-height:40px;font-size:11px;padding:8px}.brand{margin-right:auto}.top #account-open{margin-left:0}}
+#theme-toggle{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;min-width:40px;padding:0}#theme-toggle svg{display:block;pointer-events:none}
