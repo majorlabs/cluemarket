@@ -266,3 +266,7 @@ dialog .actions{margin-top:8px}
 .ask-hero{padding:28px 32px}
 .hero{grid-template-columns:minmax(0,1fr) 340px}
 .section-head h2{font-size:18px}
+
+.brand-sub{font-style:normal;font-size:13px;font-weight:600;letter-spacing:.02em;color:var(--muted);border:1px solid var(--line-strong);border-radius:999px;padding:2px 9px;margin-left:2px;align-self:center}
+.foot .brand-sub{font-size:12px}
+@media(max-width:560px){.top .brand-sub{display:none}}
