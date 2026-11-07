@@ -10,6 +10,7 @@ export async function initWalletAuth(){
  await store.run('CREATE TABLE IF NOT EXISTS wallet_sessions (token TEXT PRIMARY KEY, user_id TEXT NOT NULL, account_id TEXT NOT NULL, expires REAL NOT NULL)');
 }
 const setCookie=(res,name,value,secure,maxAge)=>res.setHeader('Set-Cookie',name+'='+value+'; Path=/; HttpOnly; SameSite=Lax; Max-Age='+maxAge+(secure?'; Secure':''));
+export async function startSession(res,origin,userId,label){const token=randomBytes(32).toString('hex');await store.run('INSERT INTO wallet_sessions VALUES (?,?,?,?)',hash(token),userId,label,Date.now()+604800000);setCookie(res,'clue_wallet',token,origin.startsWith('https:'),604800)}
 export async function walletSession(req){const token=cookie(req,'clue_wallet');if(!token)return null;const s=await store.get('SELECT user_id,account_id FROM wallet_sessions WHERE token=? AND expires>?',hash(token),Date.now());return s?{user:{id:s.user_id,name:s.account_id,email:s.account_id}}:null}
 export async function walletRoute(req,res,path,body,origin){
  const secure=origin.startsWith('https:');

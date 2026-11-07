@@ -95,12 +95,13 @@ document.addEventListener("keydown", (e) => {
 const dialog = $("account-dialog");
 function openAccountDialog(message) {
   dialog.replaceChildren(
-    el("h2", { text: "Connect your NEAR wallet" }),
-    el("p", { text: message || "Connecting lets you research questions and keep forecasts private to you. Clue never holds your keys and never places trades." }),
+    el("h2", { text: "Sign in to Clue" }),
+    el("p", { text: message || "Signing in keeps your research and forecasts private to you. Clue never holds your keys and never places trades." }),
     el("p", { id: "account-status", class: "status err", role: "status" }),
-    el("div", { class: "actions" },
-      el("button", { class: "btn primary", id: "wallet-connect", text: "Choose wallet", onclick: connectWallet }),
-      el("button", { class: "btn", text: "Not now", onclick: () => dialog.close() })),
+    el("div", { class: "actions", style: "flex-direction:column;align-items:stretch" },
+      el("button", { class: "btn primary", id: "wallet-connect", type: "button", text: "Continue with NEAR wallet", onclick: connectWallet }),
+      el("button", { class: "btn", id: "privy-connect", type: "button", text: "Continue with email or wallet (Privy)", onclick: connectPrivy }),
+      el("button", { class: "btn ghost", type: "button", text: "Not now", onclick: () => dialog.close() })),
   );
   if (!dialog.open) dialog.showModal();
 }
@@ -111,10 +112,40 @@ async function connectWallet() {
   catch (e) { openAccountDialog(); $("account-status").textContent = e.message || "Connection cancelled. Try again."; }
   finally { $("account-open").disabled = false; }
 }
+let privyLoading = null;
+function loadPrivy() {
+  // The Privy bundle is large, so it loads only when someone chooses Privy.
+  privyLoading ||= (async () => {
+    const cfg = await api("/api/privy/config");
+    if (!cfg.enabled) throw new Error("Privy sign-in is not available right now.");
+    await new Promise((resolve, reject) => {
+      const s = el("script", { src: "/privy.js" });
+      s.onload = resolve; s.onerror = () => reject(new Error("Could not load Privy. Check your connection and try again."));
+      document.head.append(s);
+    });
+    await window.cluePrivy.init(cfg.appId);
+  })().catch((e) => { privyLoading = null; throw e; });
+  return privyLoading;
+}
+async function connectPrivy() {
+  const status = $("account-status"), btn = $("privy-connect");
+  btn.disabled = true; status.className = "status"; status.textContent = "Opening Privy…";
+  try {
+    await loadPrivy();
+    dialog.close(); // Privy shows its own sign-in window
+    const accessToken = await window.cluePrivy.login();
+    await post("/api/privy/login", { accessToken });
+    await refreshAccount();
+  } catch (e) {
+    openAccountDialog();
+    $("account-status").className = "status err";
+    $("account-status").textContent = e.message || "Sign-in was cancelled. Try again.";
+  }
+}
 async function refreshAccount() {
   try { user = (await api("/api/wallet/session"))?.user || null; } catch { user = null; }
   const b = $("account-open");
-  b.textContent = user ? shortName(user.name || user.email) : "Connect wallet";
+  b.textContent = user ? shortName(user.name || user.email) : "Sign in";
   b.title = user ? "Click to disconnect" : "";
   document.dispatchEvent(new CustomEvent("clue:account"));
 }
@@ -123,6 +154,7 @@ $("account-open").addEventListener("click", async () => {
   if (!user) return openAccountDialog();
   if (!confirm("Disconnect this wallet from Clue?")) return;
   try { await post("/api/wallet/disconnect", {}); } catch { /* session may already be gone */ }
+  try { await window.cluePrivy?.logout(); } catch { /* not signed in with Privy */ }
   await refreshAccount();
   if (location.hash.startsWith("#/saved")) route();
 });
@@ -442,7 +474,7 @@ function mountWorkspace(container, ctx) {
   async function runResearch() {
     const question = q.value.trim();
     if (question.length < 5) { rStatus.className = "status err"; rStatus.textContent = "Write a question of at least 5 characters."; q.focus(); return; }
-    if (!user) { openAccountDialog("Connect your wallet to run research. It keeps your work private to you."); return; }
+    if (!user) { openAccountDialog("Sign in to run research. It keeps your work private to you."); return; }
     researchBtn.disabled = true; rStatus.className = "status"; rStatus.textContent = "Searching sources. This can take up to a minute…";
     try {
       const d = await post("/api/research", { question, market: marketRef && marketRef.question ? { question: marketRef.question, rules: marketRef.rules || null } : null });
@@ -471,7 +503,7 @@ function mountWorkspace(container, ctx) {
   }
 
   async function saveForecast() {
-    if (!user) { openAccountDialog("Connect your wallet so your forecast is saved privately to you."); return; }
+    if (!user) { openAccountDialog("Sign in so your forecast is saved privately to you."); return; }
     if (!why.value.trim()) { fStatus.className = "status err"; fStatus.textContent = "Write a line on why you think so."; why.focus(); return; }
     if (!flip.value.trim()) { fStatus.className = "status err"; fStatus.textContent = "Say what would change your mind. It is what makes this forecast testable."; flip.focus(); return; }
     fStatus.className = "status"; fStatus.textContent = "Saving…";
@@ -536,7 +568,7 @@ async function askView(qs, stale) {
 /* ---------- saved ---------- */
 async function savedView(id, stale) {
   if (!user) {
-    app.replaceChildren(el("div", { class: "card empty" }, el("h2", { text: "Your research is private to you" }), el("p", { class: "muted", text: "Connect your NEAR wallet to see saved research and forecasts." }), el("button", { class: "btn primary", style: "margin-top:16px", type: "button", text: "Connect wallet", onclick: () => openAccountDialog() })));
+    app.replaceChildren(el("div", { class: "card empty" }, el("h2", { text: "Your research is private to you" }), el("p", { class: "muted", text: "Sign in to see saved research and forecasts." }), el("button", { class: "btn primary", style: "margin-top:16px", type: "button", text: "Sign in", onclick: () => openAccountDialog() })));
     document.addEventListener("clue:account", () => { if (location.hash.startsWith("#/saved")) route(); }, { once: true });
     return;
   }
