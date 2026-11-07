@@ -145,7 +145,7 @@ async function route() {
   if (parts[0] === "saved") { setNav("saved"); return savedView(parts[1], stale); }
   setNav("board");
   buildCategories(qs.get("q") ? null : qs.get("tag") || "");
-  return boardView(qs.get("tag") || "", qs.get("q") || "", stale);
+  return boardView(qs.get("tag") || "", qs.get("q") || "", stale, qs.get("sort") || "trending");
 }
 window.addEventListener("hashchange", route);
 
@@ -153,27 +153,26 @@ window.addEventListener("hashchange", route);
 function marketCard(ev) {
   const ms = ev.markets;
   const multi = ev.marketCount > 1 && ms.length > 1;
-  const rows = el("div", { class: "rows" });
+  const body = el("div", { class: "rows" });
   if (multi) {
     for (const m of [...ms].sort((a, b) => (b.outcomePrices[0] || 0) - (a.outcomePrices[0] || 0)).slice(0, 3)) {
-      const p = Number(m.outcomePrices[0]);
-      rows.append(el("div", { class: "orow" },
+      body.append(el("div", { class: "orow3" },
         el("span", { class: "name", text: m.groupItemTitle || m.question }),
-        el("span", { class: "val", text: pct(p) }),
-        el("div", { class: "bar", "aria-hidden": "true" }, el("i", { style: `width:${Math.max(2, Math.min(100, p * 100))}%` }))));
+        el("span", { class: "val", text: pct(m.outcomePrices[0]) }),
+        el("span", { class: "pills", "aria-hidden": "true" }, el("span", { class: "pillb y", text: "Yes" }), el("span", { class: "pillb n", text: "No" }))));
     }
   } else {
     const m = ms[0];
     const [a = "Yes", b = "No"] = m.outcomes;
-    rows.append(el("div", { class: "yn" },
-      el("span", { class: "y" }, el("span", { text: a }), el("b", { class: "num", text: pct(m.outcomePrices[0]) })),
-      el("span", { class: "n" }, el("span", { text: b }), el("b", { class: "num", text: pct(m.outcomePrices[1]) }))));
+    body.append(
+      el("div", { class: "bigp" }, el("b", { text: pct(m.outcomePrices[0]) }), el("span", { text: `chance · ${a}` })),
+      el("div", { class: "ybtns", "aria-hidden": "true" }, el("span", { class: "y", text: `${a} ${pct(m.outcomePrices[0])}` }), el("span", { class: "n", text: `${b} ${pct(m.outcomePrices[1])}` })));
   }
   return el("a", { class: "mcard", href: `#/event/${encodeURIComponent(ev.slug)}` },
     el("div", { class: "mcard-head" }, thumb(ev), el("h3", { text: ev.title })),
-    rows,
+    body,
     el("div", { class: "mfoot" },
-      el("span", { text: `${money(ev.volume24hr)} today` }),
+      el("span", { class: "num", text: `${money(ev.volume24hr)} today` }),
       ended(ev.endDate) ? el("span", { class: "tag ended", text: "Ended · awaiting result" }) : el("span", { text: `Ends ${day(ev.endDate)}` })));
 }
 
@@ -188,17 +187,19 @@ function askHero() {
     el("div", { class: "chips" }, EXAMPLES.map((q) => el("a", { class: "chip", href: `#/ask?q=${encodeURIComponent(q)}`, text: q }))));
 }
 
-async function boardView(tag, q, stale) {
-  const head = el("div", { class: "section-head" }, el("h2", { text: q ? `Results for “${q}”` : tag ? CATEGORIES.find((c) => c[1] === tag)?.[0] || "Markets" : "Trending markets" }), el("span", { class: "muted small", id: "board-meta" }));
+const SORTS = [["Trending", "trending"], ["Volume", "volume"], ["New", "new"], ["Ending soon", "ending"]];
+async function boardView(tag, q, stale, sort = "trending") {
+  const head = el("div", { class: "section-head" }, el("h2", { text: q ? `Results for “${q}”` : tag ? CATEGORIES.find((c) => c[1] === tag)?.[0] || "Markets" : "Trending markets" }), el("span", { class: "live", id: "board-meta" }));
+  const sortbar = q ? null : el("nav", { class: "sortbar", "aria-label": "Sort markets" }, SORTS.map(([label, v]) => el("a", { class: "chipb", href: `#/?${tag ? "tag=" + tag + "&" : ""}sort=${v}`, "aria-current": String(v === sort), text: label })));
   const grid = el("div", { class: "grid-board", "aria-busy": "true" }, Array.from({ length: 8 }, () => el("div", { class: "skeleton" })));
   const rail = el("aside", { class: "card rail" }, el("h2", { text: "Most traded today" }), el("ol", { id: "rail-list" }));
   const top = !q && !tag ? el("div", { class: "hero" }, askHero(), rail) : null;
-  app.replaceChildren(...[top, head, grid].filter(Boolean));
+  app.replaceChildren(...[top, head, sortbar, grid].filter(Boolean));
   try {
-    const d = await api(`/api/events?${q ? "q=" + encodeURIComponent(q) : "tag=" + encodeURIComponent(tag)}`);
+    const d = await api(`/api/events?${q ? "q=" + encodeURIComponent(q) : "tag=" + encodeURIComponent(tag) + "&sort=" + sort}`);
     if (stale()) return;
     grid.removeAttribute("aria-busy");
-    $("board-meta").textContent = `Polymarket · retrieved ${new Date(d.retrievedAt).toLocaleTimeString()}`;
+    $("board-meta").textContent = `Live from Polymarket · ${new Date(d.retrievedAt).toLocaleTimeString()}`;
     if (!d.events.length) { grid.replaceWith(el("div", { class: "card empty" }, el("h2", { text: "No open markets found" }), el("p", { class: "muted", text: "Try a broader word, another category, or ask Clue to research it directly." }), el("a", { class: "btn primary", style: "margin-top:16px", href: `#/ask${q ? "?q=" + encodeURIComponent(q) : ""}`, text: "Ask Clue instead" }))); return; }
     const live = d.events.filter((e) => !ended(e.endDate)), over = d.events.filter((e) => ended(e.endDate));
     grid.replaceChildren(...[...live, ...over].map(marketCard));
