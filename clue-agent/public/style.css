@@ -270,3 +270,10 @@ dialog .actions{margin-top:8px}
 .brand-sub{font-style:normal;font-size:13px;font-weight:600;letter-spacing:.02em;color:var(--muted);border:1px solid var(--line-strong);border-radius:999px;padding:2px 9px;margin-left:2px;align-self:center}
 .foot .brand-sub{font-size:12px}
 @media(max-width:560px){.top .brand-sub{display:none}}
+
+/* Responsive overrides. These must come last: the v2 rules above would otherwise re-apply the two-column hero on phones. */
+@media(max-width:1020px){.hero{grid-template-columns:minmax(0,1fr)}.ask-hero h1{max-width:none}}
+@media(max-width:560px){.ask-hero{padding:22px 18px}.ask-hero form{flex-direction:column}.ask-hero input{flex:none;height:50px;width:100%}.ask-hero .btn{width:100%;flex:none}.rail{padding:16px}}
+
+.opts-more{display:block;width:100%;border:0;border-top:1px solid var(--line);background:none;padding:13px 16px;font-weight:600;color:var(--brand-text);text-align:center}
+.opts-more:hover{background:var(--bg)}

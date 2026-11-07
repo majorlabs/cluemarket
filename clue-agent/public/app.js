@@ -276,16 +276,26 @@ async function eventView(slug, marketId, stale) {
         el("a", { href: safeLink(ev.sourceUrl), target: "_blank", rel: "noopener noreferrer", text: "View on Polymarket ↗" }))));
   app.replaceChildren(el("a", { class: "crumb", href: "#/", text: "← Markets" }), header, el("div", { class: "layout" }, left, workspaceBox));
 
+  let showAllOpts = false;
   function renderOptions() {
     if (open.length < 2) { optsBox.remove(); return; }
-    optsBox.replaceChildren(...open.slice(0, 40).map((m) => {
+    const LIMIT = 8;
+    let list = open.slice(0, 40);
+    let hidden = 0;
+    if (!showAllOpts && list.length > LIMIT) {
+      const head = list.slice(0, LIMIT);
+      if (!head.includes(sel)) head.push(sel); // the selected question always stays visible
+      hidden = list.length - head.length;
+      list = head;
+    }
+    optsBox.replaceChildren(...list.map((m) => {
       const p = Number(m.outcomePrices[0]);
       return el("button", { class: "opt", type: "button", "aria-pressed": String(m.id === sel.id), onclick: () => { sel = m; outcomeIdx = 0; history.replaceState(null, "", `#/event/${encodeURIComponent(slug)}?m=${m.id}`); renderAll(); } },
         el("span", { class: "name", text: m.groupItemTitle || m.question }),
         el("span", { class: "val", text: pct(p) }),
         el("small", { text: `${money(m.volume)} volume` }),
         el("div", { class: "bar", "aria-hidden": "true" }, el("i", { style: `width:${Math.max(1, Math.min(100, p * 100))}%` })));
-    }));
+    }), hidden > 0 || showAllOpts ? el("button", { class: "opts-more", type: "button", text: showAllOpts ? "Show fewer" : `Show all ${Math.min(open.length, 40)} questions`, onclick: () => { showAllOpts = !showAllOpts; renderOptions(); } }) : null);
   }
 
   function renderStage() {

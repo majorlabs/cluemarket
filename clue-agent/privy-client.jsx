@@ -61,8 +61,10 @@ export function mount(appId) {
 window.cluePrivy = {
   async init(appId) { if (!document.getElementById('privy-root')) mount(appId); await new Promise((r) => setTimeout(r, 0)); },
   async login() {
-    for (let i = 0; i < 100 && !state.api; i++) await new Promise((r) => setTimeout(r, 50));
-    if (!state.api) throw new Error('Privy could not start.');
+    // Privy takes a few seconds to start the first time. Wait for it instead of failing.
+    const deadline = Date.now() + 25000;
+    while (Date.now() < deadline && !(state.api && state.api.ready())) await new Promise((r) => setTimeout(r, 100));
+    if (!(state.api && state.api.ready())) throw new Error('Privy is taking too long to start. Check your connection and try again.');
     return state.api.login();
   },
   async logout() { if (state.api) await state.api.logout(); },
