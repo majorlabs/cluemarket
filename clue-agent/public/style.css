@@ -29,7 +29,7 @@ button{cursor:pointer}
 .top{position:sticky;top:0;z-index:30;background:var(--surface);border-bottom:1px solid var(--line)}
 .top-row{display:flex;align-items:center;gap:20px;max-width:1280px;margin:auto;padding:10px 24px}
 .brand{display:flex;align-items:center;gap:9px;text-decoration:none;font-weight:700;font-size:25px;letter-spacing:-.04em;flex:none}
-.brand img{border-radius:8px;display:block;background:#fff;object-fit:cover}
+.brand img{display:block}
 .brand b{color:var(--brand)}
 .search{position:relative;flex:1;max-width:520px;display:flex;align-items:center;color:var(--faint)}
 .search svg{position:absolute;left:14px;pointer-events:none}
@@ -310,3 +310,7 @@ dialog .actions{margin-top:8px}
 .ck-i{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:11px;flex:none;margin-top:1px;background:var(--bg);color:var(--faint)}
 .ck.ok .ck-i{background:var(--yes-wash);color:var(--yes)}.ck.bad .ck-i{background:var(--no-wash);color:var(--no)}
 .tk-preview{margin-top:4px}
+
+/* logo: cream mark on dark theme, ink mark on light theme */
+html:not([data-theme="light"]) .brand .mk-light{display:none}
+html[data-theme="light"] .brand .mk-dark{display:none}
