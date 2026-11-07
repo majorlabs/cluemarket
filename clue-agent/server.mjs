@@ -5,6 +5,7 @@ import { toNodeHandler, fromNodeHeaders } from 'better-auth/node';
 import { auth, store } from './auth.mjs';
 import {initWalletAuth,walletSession,walletRoute} from './wallet-auth.mjs';
 import {privyRoute} from './privy-auth.mjs';
+import {allowedOrigins,checkOrigin} from './origins.mjs';
 import {rnearSummary,rnearPosition} from './rhea.mjs';
 await initWalletAuth();
 
@@ -12,7 +13,8 @@ const port = Number(process.env.PORT || 3000);
 const hosted=process.env.CLUE_HOSTED === '1';
 const host = hosted ? '0.0.0.0' : '127.0.0.1';
 const publicOrigin=hosted ? new URL(process.env.BETTER_AUTH_URL).origin : `http://127.0.0.1:${port}`;
-const allowedHosts=hosted ? [new URL(publicOrigin).host,process.env.CLUE_SERVICE_HOST].filter(Boolean) : ['127.0.0.1:'+port,'localhost:'+port];
+const publicOrigins=hosted ? allowedOrigins(publicOrigin) : [];
+const allowedHosts=hosted ? [...publicOrigins.map(o=>new URL(o).host),process.env.CLUE_SERVICE_HOST].filter(Boolean) : ['127.0.0.1:'+port,'localhost:'+port];
 if(hosted && (!publicOrigin.startsWith('https://') || !process.env.CLUE_SERVICE_HOST || !process.env.CLUE_SIGNUP_TOKEN || process.env.CLUE_SIGNUP_TOKEN.length < 32)) throw new Error('Hosted preview requires HTTPS, CLUE_SERVICE_HOST and a strong CLUE_SIGNUP_TOKEN.');
 const researchQuota=new Map();
 const ASSET_TYPES={'/assets/clue-mark.jpg':'image/jpeg','/assets/clue-board.jpg':'image/jpeg','/assets/clue-mark.svg':'image/svg+xml','/assets/clue-mark-on-dark.svg':'image/svg+xml','/assets/favicon-32.png':'image/png','/assets/apple-touch-icon-180.png':'image/png','/assets/og-1200x630.png':'image/png'};
@@ -41,9 +43,10 @@ const app=http.createServer(async(req,res)=>{ try {
  const url=new URL(req.url,`http://${host}:${port}`);
  if(req.method==='GET' && url.pathname==='/healthz') return json(res,200,{ok:true,service:'clue-api'});
  if (!allowedHosts.includes(req.headers.host)) return json(res,403,{error:'Invalid host'});
- if (req.method==='POST' && req.headers.origin !== (hosted ? publicOrigin : `http://${req.headers.host}`)) return json(res,403,{error:'Invalid origin'});
- if(url.pathname.startsWith('/api/privy/'))return json(res,200,await privyRoute(req,res,url.pathname,req.method==='POST'?await getBody(req):{},publicOrigin));
- if(url.pathname.startsWith('/api/wallet/'))return json(res,200,await walletRoute(req,res,url.pathname,req.method==='POST'?await getBody(req):{},publicOrigin));
+ const requestOrigin=hosted ? (checkOrigin(req.headers.origin,publicOrigins) || publicOrigin) : `http://${req.headers.host}`;
+ if (req.method==='POST' && (hosted ? !checkOrigin(req.headers.origin,publicOrigins) : req.headers.origin !== requestOrigin)) return json(res,403,{error:'Invalid origin'});
+ if(url.pathname.startsWith('/api/privy/'))return json(res,200,await privyRoute(req,res,url.pathname,req.method==='POST'?await getBody(req):{},requestOrigin));
+ if(url.pathname.startsWith('/api/wallet/'))return json(res,200,await walletRoute(req,res,url.pathname,req.method==='POST'?await getBody(req):{},requestOrigin));
  if(url.pathname.startsWith('/api/auth/'))return json(res,410,{error:'Use your NEAR wallet to connect.'});
  const publicMatch=url.pathname.match(/^\/api\/public\/([a-f0-9-]+)$/);
  if(req.method==='GET' && publicMatch){const item=await store.get('SELECT snapshot, created_at FROM public_reports WHERE id=?',publicMatch[1]);if(!item)return json(res,404,{error:'Shared report unavailable.'}); return json(res,200,{snapshot:JSON.parse(item.snapshot),publishedAt:item.created_at});}
@@ -98,7 +101,7 @@ const app=http.createServer(async(req,res)=>{ try {
  if(req.method==='GET' && eventMatch){const u=new URL('https://gamma-api.polymarket.com/events');u.searchParams.set('slug',eventMatch[1]);const list=await getJSON(u);if(!list.length)return json(res,404,{error:'Market not found.'});return json(res,200,{retrievedAt:new Date().toISOString(),event:normalizeEvent(list[0],60)});}
  if(req.method==='GET' && (url.pathname==='/api/book'||url.pathname==='/api/history')) {
   const token=url.searchParams.get('token')||''; if(!/^\d{10,100}$/.test(token)) return json(res,400,{error:'Invalid market token.'});
-  if(url.pathname==='/api/book'){const depth=Math.min(Math.max(parseInt(url.searchParams.get('depth')||'8',10)||8,1),100);const d=await getJSON('https://clob.polymarket.com/book?token_id='+token);const lv=a=>(a||[]).map(x=>({price:Number(x.price),size:Number(x.size)}));return json(res,200,{retrievedAt:new Date().toISOString(),bookTime:d.timestamp?new Date(Number(d.timestamp)).toISOString():null,tickSize:d.tick_size??null,minOrderSize:d.min_order_size??null,bids:lv(d.bids).sort((a,b)=>b.price-a.price).slice(0,depth),asks:lv(d.asks).sort((a,b)=>a.price-b.price).slice(0,depth)});}
+  if(url.pathname==='/api/book'){const depth=Math.min(Math.max(parseInt(url.searchParams.get('depth')||'8',10)||8,1),100);const br=await fetch('https://clob.polymarket.com/book?token_id='+token,{signal:AbortSignal.timeout(12000),headers:{accept:'application/json'}});if(br.status===404)return json(res,200,{retrievedAt:new Date().toISOString(),available:false,bookTime:null,tickSize:null,minOrderSize:null,bids:[],asks:[]});if(!br.ok)throw new Error(`Provider returned HTTP ${br.status}`);const d=await br.json();const lv=a=>(a||[]).map(x=>({price:Number(x.price),size:Number(x.size)}));return json(res,200,{retrievedAt:new Date().toISOString(),available:true,bookTime:d.timestamp?new Date(Number(d.timestamp)).toISOString():null,tickSize:d.tick_size??null,minOrderSize:d.min_order_size??null,bids:lv(d.bids).sort((a,b)=>b.price-a.price).slice(0,depth),asks:lv(d.asks).sort((a,b)=>a.price-b.price).slice(0,depth)});}
   const interval=url.searchParams.get('interval')||'1w'; if(!['1d','1w','1m','max'].includes(interval)) return json(res,400,{error:'Invalid interval.'});
   const d=await getJSON(`https://clob.polymarket.com/prices-history?market=${token}&interval=${interval}&fidelity=${interval==='1d'?15:interval==='1w'?60:interval==='1m'?240:1440}`);
   return json(res,200,{retrievedAt:new Date().toISOString(),interval,points:(d.history||[]).map(h=>({t:h.t,p:h.p}))});
