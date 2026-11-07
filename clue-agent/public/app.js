@@ -219,14 +219,51 @@ function askHero() {
     el("div", { class: "chips" }, EXAMPLES.map((q) => el("a", { class: "chip", href: `#/ask?q=${encodeURIComponent(q)}`, text: q }))));
 }
 
+/* rNEAR (Rhea Finance liquid staking). Read-only: Clue never stakes or moves funds. */
+async function loadRhea(box) {
+  try {
+    const r = await api("/api/rnear/summary");
+    const row = (k, v) => el("div", { class: "rhea-row" }, el("span", { class: "muted", text: k }), el("b", { class: "num", text: v }));
+    box.replaceChildren(
+      el("div", { class: "rhea-head" }, el("h2", { text: "rNEAR staking" }), el("a", { class: "small", href: "https://www.rhea.finance", target: "_blank", rel: "noopener noreferrer", text: "Rhea Finance ↗" })),
+      el("div", { class: "rhea-apy" }, el("b", { class: "num", text: r.apyPercent == null ? "—" : `${r.apyPercent.toFixed(2)}%` }), el("span", { class: "muted small", text: "APY" })),
+      row("1 rNEAR =", r.nearPerRNear == null ? "—" : `${r.nearPerRNear.toFixed(4)} NEAR`),
+      row("Total staked", r.totalStakedNear == null ? "—" : `${Math.round(r.totalStakedNear).toLocaleString()} NEAR`),
+      row("Validators", String(r.validators)),
+      row("Unstake wait", `~${r.unstakeWaitHours}h`),
+      el("div", { id: "rhea-me" }),
+      el("p", { class: "muted small", style: "margin-top:8px", text: `Read-only from NEAR mainnet at ${new Date(r.retrievedAt).toLocaleTimeString()}. APY is variable and not a promise. Staking happens on Rhea; Clue does not move your funds.` }));
+    loadRheaMe();
+  } catch (e) {
+    box.replaceChildren(el("p", { class: "muted small", text: "rNEAR data is unavailable right now." }));
+  }
+}
+async function loadRheaMe() {
+  const slot = $("rhea-me");
+  if (!slot || !user) return;
+  try {
+    const d = await api("/api/rnear/me");
+    if (!d.linked) { slot.replaceChildren(el("p", { class: "muted small", style: "margin-top:8px", text: d.reason })); return; }
+    const p = d.position;
+    slot.replaceChildren(el("div", { class: "rhea-me" },
+      el("strong", { text: "Your position" }),
+      el("div", { class: "rhea-row" }, el("span", { class: "muted", text: "rNEAR balance" }), el("b", { class: "num", text: p.rNearBalance == null ? "—" : p.rNearBalance.toFixed(4) })),
+      el("div", { class: "rhea-row" }, el("span", { class: "muted", text: "Worth" }), el("b", { class: "num", text: p.stakedValueNear == null ? "—" : `${p.stakedValueNear.toFixed(4)} NEAR` })),
+      p.pendingUnstakeNear > 0 ? el("div", { class: "rhea-row" }, el("span", { class: "muted", text: "Unstaking" }), el("b", { class: "num", text: `${p.pendingUnstakeNear.toFixed(4)} NEAR` })) : null));
+  } catch (e) { slot.replaceChildren(el("p", { class: "muted small", text: `Could not load your position: ${e.message}` })); }
+}
+document.addEventListener("clue:account", () => loadRheaMe());
+
 const SORTS = [["Trending", "trending"], ["Volume", "volume"], ["New", "new"], ["Ending soon", "ending"]];
 async function boardView(tag, q, stale, sort = "trending") {
   const head = el("div", { class: "section-head" }, el("h2", { text: q ? `Results for “${q}”` : tag ? CATEGORIES.find((c) => c[1] === tag)?.[0] || "Markets" : "Trending markets" }), el("span", { class: "live", id: "board-meta" }));
   const sortbar = q ? null : el("nav", { class: "sortbar", "aria-label": "Sort markets" }, SORTS.map(([label, v]) => el("a", { class: "chipb", href: `#/?${tag ? "tag=" + tag + "&" : ""}sort=${v}`, "aria-current": String(v === sort), text: label })));
   const grid = el("div", { class: "grid-board", "aria-busy": "true" }, Array.from({ length: 8 }, () => el("div", { class: "skeleton" })));
-  const rail = el("aside", { class: "card rail" }, el("h2", { text: "Most traded today" }), el("ol", { id: "rail-list" }));
+  const rhea = el("div", { class: "rhea", id: "rhea-box" }, el("p", { class: "muted small", text: "Loading rNEAR…" }));
+  const rail = el("aside", { class: "card rail" }, el("h2", { text: "Most traded today" }), el("ol", { id: "rail-list" }), rhea);
   const top = !q && !tag ? el("div", { class: "hero" }, askHero(), rail) : null;
   app.replaceChildren(...[top, head, sortbar, grid].filter(Boolean));
+  if (top) loadRhea(rhea);
   try {
     const d = await api(`/api/events?${q ? "q=" + encodeURIComponent(q) : "tag=" + encodeURIComponent(tag) + "&sort=" + sort}`);
     if (stale()) return;

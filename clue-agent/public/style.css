@@ -277,3 +277,16 @@ dialog .actions{margin-top:8px}
 
 .opts-more{display:block;width:100%;border:0;border-top:1px solid var(--line);background:none;padding:13px 16px;font-weight:600;color:var(--brand-text);text-align:center}
 .opts-more:hover{background:var(--bg)}
+
+/* rNEAR card */
+.rhea{margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
+.rhea-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.rhea-head h2{font-size:15px;font-weight:650;margin:0}
+.rhea-head a{color:var(--brand-text);text-decoration:none}
+.rhea-apy{display:flex;align-items:baseline;gap:8px;margin:6px 0 8px}
+.rhea-apy b{font-size:30px;letter-spacing:-.04em;color:var(--yes)}
+.rhea-row{display:flex;justify-content:space-between;gap:12px;font-size:13.5px;padding:3px 0}
+.rhea-me{margin-top:10px;padding:10px 12px;background:var(--bg);border-radius:10px}
+.rhea-me strong{font-size:13px}
+
+.hero{align-items:start}
