@@ -52,14 +52,15 @@ function thumb(m, cls = "") {
   if (src) { const i = el("img", { class: `thumb ${cls}`, src, alt: "", loading: "lazy", width: 44, height: 44 }); i.onerror = () => i.replaceWith(el("div", { class: `thumb ph ${cls}`, text: (m.title || m.question || "?")[0] })); return i; }
   return el("div", { class: `thumb ph ${cls}`, text: (m.title || m.question || "?")[0] });
 }
-function linkify(target, text) {
+function linkify(target, text, allowed) {
+  const ok = allowed ? new Set(allowed.map((u) => { try { const x = new URL(u); return (x.origin + x.pathname.replace(/\/+$/, '')).toLowerCase(); } catch { return ''; } })) : null;
   target.replaceChildren();
   let last = 0;
   for (const m of text.matchAll(/https?:\/\/[^\s<>)\]"']+/g)) {
     target.append(text.slice(last, m.index));
     let v = m[0], tail = "";
     while (/[.,;:]$/.test(v)) { tail = v.slice(-1) + tail; v = v.slice(0, -1); }
-    try { const u = new URL(v); target.append(el("a", { href: u.href, target: "_blank", rel: "noopener noreferrer", text: v })); } catch { target.append(v); }
+    try { const u = new URL(v); const k = (u.origin + u.pathname.replace(/\/+$/, '')).toLowerCase(); if (ok && !ok.has(k)) target.append(v); else target.append(el("a", { href: u.href, target: "_blank", rel: "noopener noreferrer", text: v })); } catch { target.append(v); }
     target.append(tail);
     last = m.index + m[0].length;
   }
@@ -600,7 +601,7 @@ function mountWorkspace(container, ctx) {
 
   function showReport(r) {
     const text = el("div", { class: "report-text clamp" });
-    linkify(text, r.content);
+    linkify(text, r.content, r.sources || []);
     const more = el("button", { class: "btn small ghost", type: "button", text: "Read full research", onclick: () => { const c = text.classList.toggle("clamp"); more.textContent = c ? "Read full research" : "Show less"; } });
     reportBox.replaceChildren(
       el("span", { class: "label" }, "AI-generated · check the sources"),
@@ -616,7 +617,7 @@ function mountWorkspace(container, ctx) {
     researchBtn.disabled = true; rStatus.className = "status"; rStatus.textContent = "Searching sources. This can take up to a minute…";
     try {
       const d = await post("/api/research", { question, market: marketRef && marketRef.question ? { question: marketRef.question, rules: marketRef.rules || null } : null });
-      state.report = { question, market: marketRef, content: d.content, sources: d.sources, model: d.model, retrievedAt: d.retrievedAt };
+      state.report = { question, market: marketRef, content: d.content, sources: d.sources, model: d.model, retrievedAt: d.retrievedAt, researchId: d.researchId };
       showReport(state.report); markDone();
       rStatus.className = "status ok"; rStatus.textContent = "Research complete. Save it with your forecast below.";
       if (state.threadId) { try { await ensureThread(true); } catch { /* user can save manually */ } }
@@ -626,14 +627,10 @@ function mountWorkspace(container, ctx) {
 
   async function ensureThread(newRevision = false) {
     const r = state.report;
-    const body = {
-      threadId: state.threadId || undefined,
-      question: (r?.question || q.value.trim() || defaultQ).slice(0, 2000),
-      content: r?.content || "Started from a forecast. No research has been run yet.",
-      sources: r?.sources || [], model: r?.model || "none", retrievedAt: r?.retrievedAt || new Date().toISOString(),
-      market: marketRef || null,
-    };
-    if (body.question.length < 5) throw new Error("Write your question first (at least 5 characters).");
+    const body = r?.researchId
+      ? { threadId: state.threadId || undefined, researchId: r.researchId }
+      : { threadId: state.threadId || undefined, question: (q.value.trim() || defaultQ).slice(0, 2000), content: "Started from a forecast. No research has been run yet.", sources: [], model: "none", market: marketRef || null };
+    if (!body.researchId && body.question.length < 5) throw new Error("Write your question first (at least 5 characters).");
     if (state.threadId && !newRevision) return state.threadId;
     const d = await post("/api/threads", body);
     state.threadId = d.id;
@@ -756,7 +753,7 @@ async function sharedView(shareId) {
   setNav("ask");
   try {
     const d = await api(`/api/public/${encodeURIComponent(shareId)}`);
-    const text = el("div", { class: "report-text" }); linkify(text, d.snapshot.content);
+    const text = el("div", { class: "report-text" }); linkify(text, d.snapshot.content, d.snapshot.sources || []);
     app.replaceChildren(el("div", { class: "ask-page" },
       el("p", { class: "muted small", text: `Shared research snapshot · ${when(d.publishedAt)}` }),
       el("h1", { text: d.snapshot.question }),
