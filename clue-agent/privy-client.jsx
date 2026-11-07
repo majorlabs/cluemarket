@@ -48,7 +48,7 @@ export function mount(appId) {
       appId={appId}
       config={{
         loginMethods: ['email', 'wallet'],
-        appearance: { theme: 'dark', accentColor: '#ff6a2d', logo: '/assets/clue-mark.jpg', showWalletLoginFirst: false },
+        appearance: { theme: 'dark', accentColor: '#ff6a2d', logo: '/assets/clue-mark-on-dark.svg', showWalletLoginFirst: false },
         embeddedWallets: { ethereum: { createOnLogin: 'off' } },
       }}
     >
