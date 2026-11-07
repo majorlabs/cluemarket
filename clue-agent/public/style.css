@@ -290,3 +290,23 @@ dialog .actions{margin-top:8px}
 .rhea-me strong{font-size:13px}
 
 .hero{align-items:start}
+
+/* trade ticket */
+.rightcol{display:grid;gap:16px;align-self:start;min-width:0}
+.tk-head{display:flex;justify-content:space-between;align-items:center}
+.ticket .pad{padding:16px 20px 20px}
+.tk-row{display:flex;justify-content:space-between;gap:12px;font-size:13.5px;padding:4px 0}
+.tk-outcomes{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
+.tk-win,.tk-lose{border-radius:10px;padding:10px 12px;display:grid;gap:2px}
+.tk-win{background:var(--yes-wash);color:var(--yes)}.tk-lose{background:var(--no-wash);color:var(--no)}
+.tk-win b,.tk-lose b{font-size:20px}.tk-win small,.tk-lose small{color:inherit;opacity:.85;font-size:12px}
+.tk-warn{font-size:13px;margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--bg);color:var(--muted)}
+.tk-warn.warn{background:var(--brand-wash);color:var(--brand-text)}
+.tk-warn.block{background:var(--no-wash);color:var(--no)}
+.tk-submit{width:100%;margin-top:14px}
+.checklist{list-style:none;margin:14px 0 0;padding:0;display:grid;gap:6px;font-size:13px}
+.ck{display:flex;gap:8px;align-items:flex-start;color:var(--muted)}
+.ck b{color:var(--ink);font-weight:600}
+.ck-i{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:11px;flex:none;margin-top:1px;background:var(--bg);color:var(--faint)}
+.ck.ok .ck-i{background:var(--yes-wash);color:var(--yes)}.ck.bad .ck-i{background:var(--no-wash);color:var(--no)}
+.tk-preview{margin-top:4px}
