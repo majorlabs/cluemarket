@@ -299,7 +299,9 @@ async function eventView(slug, marketId, stale) {
 
   const optsBox = el("div", { class: "card opts", role: "group", "aria-label": "Questions in this event" });
   const stage = el("div", { id: "stage" });
-  const workspaceBox = el("aside", { class: "card panel" });
+  const workspaceBox = el("section", { class: "card" });
+  const ticketBox = el("section", { class: "card ticket", "aria-label": "Trade ticket" });
+  const rightCol = el("aside", { class: "rightcol" }, ticketBox, workspaceBox);
   const left = el("div", null, stage);
 
   const header = el("div", { class: "ev-head" }, thumb(ev),
@@ -311,7 +313,7 @@ async function eventView(slug, marketId, stale) {
         el("span", { text: `${money(ev.volume24hr)} in 24h` }),
         el("span", { text: `Closes ${day(ev.endDate)}` }),
         el("a", { href: safeLink(ev.sourceUrl), target: "_blank", rel: "noopener noreferrer", text: "View on Polymarket ↗" }))));
-  app.replaceChildren(el("a", { class: "crumb", href: "#/", text: "← Markets" }), header, el("div", { class: "layout" }, left, workspaceBox));
+  app.replaceChildren(el("a", { class: "crumb", href: "#/", text: "← Markets" }), header, el("div", { class: "layout" }, left, rightCol));
 
   let showAllOpts = false;
   function renderOptions() {
@@ -417,8 +419,94 @@ async function eventView(slug, marketId, stale) {
     } catch (e) { box.replaceChildren(el("div", { class: "chart-empty", text: `Chart unavailable: ${e.message}` })); }
   }
 
-  function renderAll() { renderStage(); mountWorkspace(workspaceBox, { market: sel, event: ev, outcome: () => (sel.outcomes[outcomeIdx] || "Yes"), outcomeIdx: () => outcomeIdx }); }
+  function renderAll() { renderStage(); mountTicket(ticketBox, { market: sel, outcome: sel.outcomes[outcomeIdx] || "Yes", token: sel.tokenIds[outcomeIdx], eventTitle: ev.title }); mountWorkspace(workspaceBox, { market: sel, event: ev, outcome: () => (sel.outcomes[outcomeIdx] || "Yes"), outcomeIdx: () => outcomeIdx }); }
   renderAll();
+}
+
+
+/* ---------- trade ticket (preview only: nothing here can place an order) ---------- */
+let geoPromise = null;
+const geoOnce = () => (geoPromise ||= window.ClueTicket.checkGeoblock());
+async function mountTicket(box, ctx) {
+  const m = ctx.market, T = window.ClueTicket;
+  let mode = "market", book = null, bookErr = "";
+  const usd = (n) => `$${Number.isFinite(n) ? n.toFixed(2) : "0.00"}`;
+  const cents = (p) => (p == null ? "—" : `${(p * 100).toFixed(1)}¢`);
+  const spend = el("input", { type: "number", min: "0", step: "1", value: "50", inputmode: "decimal", "aria-label": "Amount to spend in pUSD" });
+  const limitPrice = el("input", { type: "number", min: "0", max: "100", step: "0.1", inputmode: "decimal", "aria-label": "Limit price in cents" });
+  const shares = el("input", { type: "number", min: "0", step: "1", value: "10", inputmode: "decimal", "aria-label": "Number of shares" });
+  const geoBox = el("div", { class: "geo", role: "status" }, el("span", { class: "muted small", text: "Checking your location…" }));
+  const preview = el("div", { class: "tk-preview", "aria-live": "polite" });
+  const seg = el("div", { class: "seg", role: "group", "aria-label": "Order type" }, [["market", "Market"], ["limit", "Limit"]].map(([v, l]) =>
+    el("button", { type: "button", "aria-pressed": String(v === mode), text: l, onclick: () => { mode = v; draw(); } })));
+  const fields = el("div");
+
+  function drawFields() {
+    seg.querySelectorAll("button").forEach((b, i) => b.setAttribute("aria-pressed", String(["market", "limit"][i] === mode)));
+    const f = (label, input, hint) => el("label", { class: "field" }, el("span", { text: label }), hint && el("small", { text: hint }), input);
+    fields.replaceChildren(...(mode === "market"
+      ? [f("Amount to spend (pUSD)", spend, "Fills from the cheapest sellers upward.")]
+      : [f("Limit price (¢ per share)", limitPrice, `Most you'll pay. Steps of ${m.tickSize ? +(m.tickSize * 100).toFixed(2) : 1}¢.`), f("Shares", shares, `Minimum ${m.minOrderSize || 5} shares.`)]));
+  }
+
+  function drawPreview() {
+    if (bookErr) { preview.replaceChildren(el("p", { class: "status err", text: bookErr })); return; }
+    if (!book) { preview.replaceChildren(el("p", { class: "muted small", text: "Loading the live order book…" })); return; }
+    const r = T.previewBuy({
+      mode, asks: book.asks, bestBid: book.bids[0]?.price ?? null,
+      spend: Number(spend.value), shares: Number(shares.value), limitPrice: Number(limitPrice.value) / 100,
+      feesEnabled: m.feesEnabled, feeRate: m.feeRate, minSize: m.minOrderSize, tickSize: m.tickSize, accepting: m.acceptingOrders, builderFeeBps: 0,
+    });
+    const row = (k, v) => el("div", { class: "tk-row" }, el("span", { class: "muted", text: k }), el("b", { class: "num", text: v }));
+    const total = r.sharesFilled + r.restingShares;
+    preview.replaceChildren(...[
+      ...(total > 0 ? [
+        r.sharesFilled > 0 ? row("You'd get now", `${r.sharesFilled.toFixed(2)} shares @ ${cents(r.avgPrice)} avg`) : null,
+        r.restingShares > 0 ? row("Waiting on the book", `${r.restingShares.toFixed(2)} shares @ ${cents(r.restingPrice)}`) : null,
+        row("You pay", usd(r.cost)),
+        row("Polymarket fee (est.)", m.feesEnabled ? usd(r.platformFee) : "none on this market"),
+        row("Clue fee", "none"),
+        el("div", { class: "tk-outcomes" },
+          el("div", { class: "tk-win" }, el("small", { text: `If "${ctx.outcome}" happens` }), el("b", { class: "num", text: `+${usd(r.profitIfWin ?? 0)}` }), el("small", { text: `you receive ${usd(total)}` })),
+          el("div", { class: "tk-lose" }, el("small", { text: "If it doesn't" }), el("b", { class: "num", text: `−${usd(r.cost + r.platformFee)}` }), el("small", { text: "you lose what you paid" }))),
+      ] : []),
+      ...r.warnings.map((w) => el("p", { class: `tk-warn ${w.level}`, text: w.text })),
+      el("p", { class: "muted small", style: "margin-top:8px", text: `From the live book${book.bookTime ? ` at ${new Date(book.bookTime).toLocaleTimeString()}` : ""}. Fills can differ if the book moves. The fee is estimated from Polymarket's published formula; Polymarket sets the real fee.` }),
+    ].filter(Boolean));
+  }
+
+  function drawChecklist(geo) {
+    const item = (state, title, note) => el("li", { class: `ck ${state}` }, el("span", { class: "ck-i", "aria-hidden": "true", text: state === "ok" ? "✓" : state === "bad" ? "✕" : "•" }), el("span", null, el("b", { text: title }), note ? ` ${note}` : ""));
+    const loc = geo.state === "ok" ? item("ok", "Location", "can place orders")
+      : geo.state === "blocked" ? item("bad", "Location", `Polymarket doesn't allow new orders from ${[geo.region, geo.country].filter(Boolean).join(", ") || "your location"}`)
+      : item("todo", "Location", "couldn't be checked, so trading stays off");
+    geoBox.replaceChildren(
+      el("ul", { class: "checklist" }, loc,
+        item("todo", "Wallet", "connect an Ethereum wallet · coming next"),
+        item("todo", "Polymarket account", "created for you on first trade · coming next"),
+        item("todo", "Funds", "pUSD on Polygon · coming next")),
+      geo.state === "blocked" ? el("p", { class: "muted small", style: "margin-top:8px", text: "You can still research, forecast and preview. Clue doesn't help get around location limits." }) : null);
+  }
+
+  function draw() { drawFields(); drawPreview(); }
+  box.replaceChildren(
+    el("div", { class: "panel-head tk-head" }, el("h2", { text: "Trade" }), el("span", { class: "tag", text: "Preview only" })),
+    el("div", { class: "pad" },
+      el("p", { class: "small" }, el("b", { text: `Buy "${ctx.outcome}"` }), el("span", { class: "muted", text: ` · ${m.groupItemTitle || m.question}` })),
+      el("div", { style: "margin:10px 0" }, seg), fields, preview,
+      el("button", { class: "btn dark tk-submit", type: "button", disabled: true, title: "Trading isn't switched on yet.", text: "Place order — not available yet" }),
+      el("p", { class: "muted small", style: "margin-top:6px", text: "Orders will be signed by your own wallet and matched on Polymarket's order book. Clue never holds your funds." }),
+      geoBox));
+  [spend, limitPrice, shares].forEach((i) => i.addEventListener("input", drawPreview));
+  draw();
+  geoOnce().then(drawChecklist);
+  if (!ctx.token) { bookErr = "No order book for this outcome."; drawPreview(); return; }
+  try {
+    book = await api(`/api/book?token=${encodeURIComponent(ctx.token)}&depth=60`);
+    if (!box.isConnected) return;
+    if (!limitPrice.value && book.asks[0]) limitPrice.value = (book.asks[0].price * 100).toFixed(1);
+    draw();
+  } catch (e) { bookErr = `Couldn't load the order book: ${e.message}`; drawPreview(); }
 }
 
 /* SVG line chart with hover read-out */
