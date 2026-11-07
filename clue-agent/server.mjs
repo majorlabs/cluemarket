@@ -5,6 +5,7 @@ import { toNodeHandler, fromNodeHeaders } from 'better-auth/node';
 import { auth, store } from './auth.mjs';
 import {initWalletAuth,walletSession,walletRoute} from './wallet-auth.mjs';
 import {privyRoute} from './privy-auth.mjs';
+import {rnearSummary,rnearPosition} from './rhea.mjs';
 await initWalletAuth();
 
 const port = Number(process.env.PORT || 3000);
@@ -84,6 +85,13 @@ const app=http.createServer(async(req,res)=>{ try {
   if(q.length>=2){const u=new URL('https://gamma-api.polymarket.com/public-search');u.searchParams.set('q',q);u.searchParams.set('limit_per_type','24');u.searchParams.set('events_status','active');events=(await getJSON(u)).events||[];}
   else{const u=new URL('https://gamma-api.polymarket.com/events');u.searchParams.set('limit','28');u.searchParams.set('active','true');u.searchParams.set('closed','false');const sorts={trending:['volume24hr','false'],volume:['volume','false'],new:['startDate','false'],ending:['endDate','true']};const sort=sorts[url.searchParams.get('sort')]||sorts.trending;u.searchParams.set('order',sort[0]);u.searchParams.set('ascending',sort[1]);if(sort[0]==='endDate')u.searchParams.set('end_date_min',new Date().toISOString());if(tag)u.searchParams.set('tag_slug',tag);events=await getJSON(u);}
   return json(res,200,{retrievedAt:new Date().toISOString(),events:events.map(e=>normalizeEvent(e,4)).filter(e=>e.markets.length)});
+ }
+ if(req.method==='GET' && url.pathname==='/api/rnear/summary') return json(res,200,await rnearSummary());
+ if(req.method==='GET' && url.pathname==='/api/rnear/me') {
+  const session=await walletSession(req);
+  if(!session?.user?.id) return json(res,401,{error:'Sign in to see your rNEAR position.'});
+  if(!session.user.id.startsWith('near:')) return json(res,200,{linked:false,reason:'rNEAR positions need a NEAR wallet. You signed in with Privy, which has no NEAR account.'});
+  return json(res,200,{linked:true,position:await rnearPosition(session.user.name)});
  }
  const eventMatch=url.pathname.match(/^\/api\/events\/([a-z0-9-]{1,200})$/);
  if(req.method==='GET' && eventMatch){const u=new URL('https://gamma-api.polymarket.com/events');u.searchParams.set('slug',eventMatch[1]);const list=await getJSON(u);if(!list.length)return json(res,404,{error:'Market not found.'});return json(res,200,{retrievedAt:new Date().toISOString(),event:normalizeEvent(list[0],60)});}
