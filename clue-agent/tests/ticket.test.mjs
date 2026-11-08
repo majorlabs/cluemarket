@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const sandbox = {};
 new Function('window', readFileSync(new URL('../public/ticket.js', import.meta.url), 'utf8'))(sandbox);
-const { previewBuy, checkGeoblock, orderPlan } = sandbox.ClueTicket;
+const { previewBuy, checkGeoblock, orderPlan, validDepositAddress } = sandbox.ClueTicket;
 const near = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} should be within ${eps} of ${b}`);
 
 const asks = [{ price: 0.5, size: 100 }, { price: 0.52, size: 100 }, { price: 0.6, size: 1000 }];
@@ -98,4 +98,15 @@ test('the worst price never goes above 99¢', () => {
   const p = orderPlan({ ...ready, preview: previewBuy({ mode: 'market', asks: [{ price: 0.99, size: 1000 }], spend: 20, ...feeOpts }) });
   assert.equal(p.ok, true);
   assert.equal(p.maxPrice, 0.99);
+});
+
+test('only well-formed deposit addresses are ever shown', () => {
+  assert.equal(validDepositAddress('evm', '0x0CA3d6F8e10d5C9D717BAd215EA7B9ec7997e5Ad'), true);
+  assert.equal(validDepositAddress('evm', '0x0CA3d6F8e10d5C9D717BAd215EA7B9ec7997e5A'), false);   // one character short
+  assert.equal(validDepositAddress('evm', 'Ai1UZasfgnHdst7JNTB72WfwhtjcmrDuTezpvxeyBBC1'), false);
+  assert.equal(validDepositAddress('svm', 'Ai1UZasfgnHdst7JNTB72WfwhtjcmrDuTezpvxeyBBC1'), true);
+  assert.equal(validDepositAddress('svm', '0x0CA3d6F8e10d5C9D717BAd215EA7B9ec7997e5Ad'), false);
+  assert.equal(validDepositAddress('svm', 'Ai1UZasfgnHdst7JNTB72Wfwhtjc<script>'), false);
+  assert.equal(validDepositAddress('btc', 'bc1q0uv3ke7j7ljshjcj2k9s2jnrmqy0typqtc0p28'), false);   // not offered
+  assert.equal(validDepositAddress('evm', undefined), false);
 });

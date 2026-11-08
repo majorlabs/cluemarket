@@ -95,6 +95,14 @@
     return { ok: true, spend: Math.round(r.cost * 100) / 100, shares: r.sharesFilled, maxPrice, expectedCost: need, worstFill: worst };
   }
 
+  /** Only addresses of the right shape are ever shown for deposits: EVM (0x + 40 hex) or Solana (32-44 base58 characters). */
+  function validDepositAddress(kind, value) {
+    const v = String(value || "");
+    if (kind === "evm") return /^0x[0-9a-fA-F]{40}$/.test(v);
+    if (kind === "svm") return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v);
+    return false;
+  }
+
   /** Ask Polymarket whether the visitor's location may place orders. Runs in the visitor's browser so it sees their real location. */
   async function checkGeoblock(fetchImpl) {
     const f = fetchImpl || (root.fetch && root.fetch.bind(root));
@@ -113,5 +121,5 @@
   const fmt = (n) => (Number.isFinite(n) ? (Math.round(n * 100) / 100).toString() : "0");
   const pct = (p) => (p * 100).toFixed(p < 0.1 ? 1 : 0) + "¢";
 
-  root.ClueTicket = { previewBuy, checkGeoblock, orderPlan };
+  root.ClueTicket = { previewBuy, checkGeoblock, orderPlan, validDepositAddress };
 })(typeof window !== "undefined" ? window : globalThis);
