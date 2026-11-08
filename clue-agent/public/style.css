@@ -408,3 +408,20 @@ html[data-theme="light"] .fund{background:radial-gradient(120% 90% at 100% 0%,rg
 .deposit .acct-addr code{overflow-wrap:anywhere;word-break:break-all}
 
 .err-detail{display:block;margin-top:4px;opacity:.75;word-break:break-word}
+
+/* the account line on the trade card */
+.acct-strip{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--line,#2a3a44);border-radius:12px;font-size:14px}
+.acct-strip .as-text{min-width:0}
+.acct-strip.ok{border-color:var(--yes,#1fbf75)}
+.acct-strip.bad{color:var(--muted,#9aa7b0)}
+/* the price check card opens on tap */
+.fund-toggle{cursor:pointer}
+.fund-toggle::after{content:"▾";margin-left:8px;opacity:.7;transition:transform .15s}
+.fund-toggle[aria-expanded="true"]::after{transform:rotate(180deg)}
+.fund-body[hidden]{display:none}
+.fund-body{margin-top:8px}
+
+.geo .status:empty,.geo .status:not(.err):empty{display:none}
+.jump-trade{display:none}
+@media(max-width:1020px){.jump-trade{display:inline-flex}}
+.ticket{scroll-margin-top:130px}

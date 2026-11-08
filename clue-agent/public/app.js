@@ -350,6 +350,7 @@ async function eventView(slug, marketId, stale) {
         ended(ev.endDate) ? el("span", { class: "tag ended", text: "Ended · awaiting result" }) : el("span", { class: "tag live", text: "Open" }),
         el("span", { text: `${money(ev.volume)} volume` }),
         el("span", { text: `${money(ev.volume24hr)} in 24h` }),
+        el("button", { class: "btn small jump-trade", type: "button", text: "Trade ↓", onclick: () => ticketBox.scrollIntoView({ behavior: "smooth", block: "start" }) }),
         el("span", { text: `Closes ${day(ev.endDate)}` }),
         el("a", { href: safeLink(ev.sourceUrl), target: "_blank", rel: "noopener noreferrer", text: "View source ↗" }))));
   app.replaceChildren(el("a", { class: "crumb", href: "#/", text: "← Markets" }), header, el("div", { class: "layout" }, left, rightCol));
@@ -468,7 +469,7 @@ let geoPromise = null, ordersConfigPromise = null;
 const geoOnce = () => (geoPromise ||= window.ClueTicket.checkGeoblock());
 async function mountTicket(box, ctx) {
   const m = ctx.market, T = window.ClueTicket;
-  let mode = "market", book = null, bookErr = "", lastPreview = null, lastGeo = null;
+  let mode = "market", book = null, bookErr = "", lastPreview = null, lastGeo = null, depositOpen = false;
   const usd = (n) => `$${Number.isFinite(n) ? n.toFixed(2) : "0.00"}`;
   const cents = (p) => (p == null ? "—" : `${(p * 100).toFixed(1)}¢`);
   const spend = el("input", { type: "number", min: "0", step: "1", value: "50", inputmode: "decimal", "aria-label": "Amount to spend in dollars" });
@@ -505,14 +506,13 @@ async function mountTicket(box, ctx) {
         r.sharesFilled > 0 ? row("You'd get", `${r.sharesFilled.toFixed(2)} shares · ${cents(r.avgPrice)} each`) : null,
         r.restingShares > 0 ? row("Waiting for a seller", `${r.restingShares.toFixed(2)} shares at ${cents(r.restingPrice)}`) : null,
         row("You pay", usd(r.cost)),
-        row("Trading fee (estimate)", m.feesEnabled ? usd(r.platformFee) : "none on this market"),
-        row("Clue fee", "none"),
+        row("Fee", m.feesEnabled ? `${usd(r.platformFee)} · none from Clue` : "none"),
         el("div", { class: "tk-outcomes" },
           el("div", { class: "tk-win" }, el("small", { text: `If "${ctx.outcome}" happens` }), el("b", { class: "num", text: `+${usd(r.profitIfWin ?? 0)}` }), el("small", { text: `you receive ${usd(total)}` })),
           el("div", { class: "tk-lose" }, el("small", { text: "If it doesn't" }), el("b", { class: "num", text: `−${usd(r.cost + r.platformFee)}` }), el("small", { text: "you lose what you paid" }))),
       ] : []),
       ...r.warnings.map((w) => el("p", { class: `tk-warn ${w.level}`, text: w.text })),
-      el("p", { class: "muted small", style: "margin-top:8px", text: `Based on live orders${book.bookTime ? ` at ${new Date(book.bookTime).toLocaleTimeString()}` : ""}. The real price can change if orders change, and the final fee is confirmed when the order is placed.` }),
+      el("p", { class: "muted small", style: "margin-top:8px", text: `Live prices${book.bookTime ? ` at ${new Date(book.bookTime).toLocaleTimeString()}` : ""}. The final price and fee are confirmed when you order.` }),
     ].filter(Boolean));
   }
 
@@ -591,46 +591,38 @@ async function mountTicket(box, ctx) {
 
   function drawChecklist(geo) {
     lastGeo = geo; syncOrder();
-    const item = (state, title, note) => el("li", { class: `ck ${state}` }, el("span", { class: "ck-i", "aria-hidden": "true", text: state === "ok" ? "✓" : state === "bad" ? "✕" : "•" }), el("span", null, el("b", { text: title }), note ? ` ${note}` : ""));
-    const loc = geo.state === "ok" ? item("ok", "Location", "can place orders")
-      : geo.state === "blocked" ? item("bad", "Location", `Trading isn't available in ${[geo.region, geo.country].filter(Boolean).join(", ") || "your location"}`)
-      : item("todo", "Location", "couldn't be checked, so trading stays off");
     const isPrivy = user && String(user.id || "").startsWith("privy:"), isNear = user && String(user.id || "").startsWith("near:");
-    const t = tradingSetup, short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
-    const rows = t
-      ? [item("ok", "Your wallet", short(t.signer)), item("ok", "Ready to trade", "set up"),
-         t.balance > 0 ? item("ok", "Money in your account", `$${t.balance.toFixed(2)}`) : item("todo", "Money in your account", "$0.00. Tap Show my deposit address to add some.")]
-      : [item("todo", "Your wallet", isPrivy ? "ready to use" : "needs an email or Ethereum wallet sign-in"), item("todo", "Ready to trade", "set up in one step"), item("todo", "Money in your account", "after setup")];
+    const t = tradingSetup;
     const status = el("p", { class: "status", role: "status", "aria-live": "polite" });
-    let action = null;
-    if (!user) action = el("button", { class: "btn small", type: "button", text: "Sign in to set up trading", onclick: () => openAccountDialog("Sign in to set up trading.") });
-    else if (isNear) action = el("p", { class: "muted small", text: "Trading needs an email or Ethereum wallet sign-in for now. NEAR wallet accounts can research, forecast and preview." });
+    const strip = (text, action, tone = "") => el("div", { class: `acct-strip ${tone}` }, el("span", { class: "as-text", text }), action);
+    let line;
+    if (geo.state === "blocked") line = strip(`Trading isn't available in ${[geo.region, geo.country].filter(Boolean).join(", ") || "your location"}.`, null, "bad");
+    else if (geo.state !== "ok") line = strip("Couldn't check your location, so trading is off.", null, "bad");
+    else if (!user) line = strip("Sign in to trade.", el("button", { class: "btn small", type: "button", text: "Sign in", onclick: () => openAccountDialog("Sign in to trade.") }));
+    else if (isNear) line = strip("Trading needs an email or Ethereum sign-in.", null);
     else if (isPrivy && !t) {
-      const go = el("button", { class: "btn primary small", type: "button", text: "Set up trading", disabled: geo.state !== "ok", title: geo.state !== "ok" ? "Trading is off where you are." : "", onclick: async () => {
+      const go = el("button", { class: "btn primary small", type: "button", text: "Set up trading", onclick: async () => {
         go.disabled = true; status.className = "status";
         const words = { wallet: "Setting up your trading account…", permissions: "Setting permission to trade…", balance: "Checking your balance…" };
         try { await loadTrading(); } catch (e) { status.className = "status err"; status.textContent = e.message; go.disabled = false; return; }
         const r = await window.clueTrading.setup((step) => { status.textContent = `${words[step]} Approve it in your wallet if it asks.`; });
         if (r.ok) { tradingSetup = r; drawChecklist(geo); } else { status.className = "status err"; status.replaceChildren(r.error, r.detail ? el("small", { class: "err-detail", text: ` (${r.detail})` }) : ""); go.disabled = false; }
       } });
-      action = go;
+      line = strip("Trading isn't set up yet.", go);
+    } else if (t) {
+      line = strip(`Ready to trade · $${t.balance.toFixed(2)}`, el("button", { class: "btn small", type: "button", text: depositOpen ? "Hide" : "Add money", onclick: () => { depositOpen = !depositOpen; drawChecklist(geo); } }), "ok");
     }
-    geoBox.replaceChildren(...kids(
-      el("ul", { class: "checklist" }, loc, ...rows),
-      t ? depositPanel(geo) : null,
-      action, status,
-      geo.state === "blocked" ? el("p", { class: "muted small", style: "margin-top:8px", text: "You can still research, forecast and preview. Clue doesn't help get around location limits." }) : null));
+    geoBox.replaceChildren(...kids(line, t && depositOpen ? depositPanel(geo) : null, status));
   }
 
   function draw() { drawFields(); drawPreview(); }
   box.replaceChildren(
-    el("div", { class: "panel-head tk-head" }, el("h2", { text: "Trade" }), el("span", { class: "tag", text: "Preview" })),
+    el("div", { class: "panel-head tk-head" }, el("h2", { text: "Trade" })),
     el("div", { class: "pad" },
-      el("p", { class: "small" }, el("b", { text: `Buy "${ctx.outcome}"` }), el("span", { class: "muted", text: ` · ${m.groupItemTitle || m.question}` })),
+      geoBox,
+      el("p", { class: "small", style: "margin-top:12px" }, el("b", { text: `Buy "${ctx.outcome}"` }), el("span", { class: "muted", text: ` · ${m.groupItemTitle || m.question}` })),
       el("div", { style: "margin:10px 0" }, seg), fields, preview,
-      placeBtn, orderOut,
-      el("p", { class: "muted small", style: "margin-top:6px", text: "You will approve every order with your own wallet. Clue never holds your money." }),
-      geoBox));
+      placeBtn, orderOut));
   [spend, limitPrice, shares].forEach((i) => i.addEventListener("input", drawPreview));
   draw();
   geoOnce().then(drawChecklist);
@@ -910,13 +902,18 @@ async function mountFunding(box) {
     } catch (e) { out.replaceChildren(el("p", { class: "status err", text: e.message })); }
     finally { go.disabled = false; }
   } });
-  box.replaceChildren(...kids(title, intro,
+  const body = el("div", { class: "fund-body", hidden: true });
+  title.classList.add("fund-toggle"); title.setAttribute("role", "button"); title.tabIndex = 0; title.setAttribute("aria-expanded", "false");
+  const flip = () => { body.hidden = !body.hidden; title.setAttribute("aria-expanded", String(!body.hidden)); };
+  title.addEventListener("click", flip); title.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); flip(); } });
+  body.replaceChildren(...kids(intro,
     el("div", { class: "fund-step" }, el("span", { class: "fund-n", text: "1" }), el("b", { text: "Where is your money now?" })), el("div", { class: "chains", role: "group", "aria-label": "Where your money is" }, chips),
     el("div", { class: "fund-step" }, el("span", { class: "fund-n", text: "2" }), el("b", { text: "How much?" })),
     el("div", { class: "amt" }, el("span", { text: "$" }), amount), el("div", { class: "quicks" }, quick),
     el("div", { class: "fund-step" }, el("span", { class: "fund-n", text: "3" }), el("b", { text: "Your wallet address" })),
     walletBox, address, el("p", { class: "fund-hint", text: "It starts with 0x. This is where the money would arrive." }), emailNote,
     go, out));
+  box.replaceChildren(title, body);
 }
 
 /* ---------- journal: the memory loop ---------- */
