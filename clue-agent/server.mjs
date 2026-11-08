@@ -78,6 +78,7 @@ const app=http.createServer(async(req,res)=>{ try {
  if(url.pathname.startsWith('/api/auth/'))return json(res,410,{error:'Use your NEAR wallet to connect.'});
  const publicMatch=url.pathname.match(/^\/api\/public\/([a-f0-9-]+)$/);
  if(req.method==='GET' && publicMatch){const item=await store.get('SELECT snapshot, created_at FROM public_reports WHERE id=?',publicMatch[1]);if(!item)return json(res,404,{error:'Shared report unavailable.'}); return json(res,200,{snapshot:JSON.parse(item.snapshot),publishedAt:item.created_at});}
+ if(req.method==='GET' && url.pathname==='/api/pm/config') return json(res,200,{ordersLive:process.env.CLUE_ORDERS_LIVE==='1',builderCode:process.env.POLYMARKET_BUILDER_CODE||null});
  if(req.method==='POST' && url.pathname==='/api/pm/sign') {
   const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in to trade.'});
   const b=await getBody(req);

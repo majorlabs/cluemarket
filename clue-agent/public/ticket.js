@@ -68,6 +68,33 @@
     return out;
   }
 
+  /**
+   * Decide whether a market buy may be sent, and the worst price Clue will accept for it.
+   * Everything is re-checked against the live book at the moment of ordering, not when the page was drawn.
+   * `preview` is previewBuy({mode:"market"}) run on a fresh book. `balance` is dollars in the user's trading account, or null if unknown.
+   * The order is all-or-nothing: it only goes through if it fills completely at no worse than `maxPrice`.
+   */
+  function orderPlan(o) {
+    const no = (reason) => ({ ok: false, reason });
+    const r = o.preview;
+    if (!o.signedIn) return no("Sign in to trade.");
+    if (!o.geo || o.geo.state !== "ok") return no(o.geo && o.geo.state === "blocked" ? "Trading isn't available where you are." : "Your location couldn't be checked, so trading stays off.");
+    if (!o.setUp) return no("Set up trading first.");
+    if (o.accepting === false) return no("This market isn't accepting orders right now.");
+    if (!r || !r.sharesFilled) return no("Nobody is selling this outcome right now.");
+    if (r.restingShares > 0 || r.unfilledBudget > 0.005) return no("There aren't enough sellers for this amount. Try a smaller amount.");
+    const minSize = o.minSize || 5;
+    if (r.sharesFilled < minSize - 1e-9) return no(`The minimum order is ${minSize} shares. This is ${fmt(r.sharesFilled)}.`);
+    const need = r.cost + r.platformFee + (r.builderFee || 0);
+    if (o.balance == null) return no("Your balance couldn't be read.");
+    if (o.balance + 1e-9 < need) return no(`You need ${money(need)} in your account and have ${money(o.balance)}. Use Add money.`);
+    const worst = r.fills[r.fills.length - 1].price;
+    const tick = o.tickSize || 0.01, tol = o.tolerance == null ? 0.01 : o.tolerance;
+    const steps = Math.ceil((worst * (1 + tol)) / tick - 1e-9);
+    const maxPrice = Math.min(0.99, Math.round(steps * tick * 1e6) / 1e6);
+    return { ok: true, spend: Math.round(r.cost * 100) / 100, shares: r.sharesFilled, maxPrice, expectedCost: need, worstFill: worst };
+  }
+
   /** Ask Polymarket whether the visitor's location may place orders. Runs in the visitor's browser so it sees their real location. */
   async function checkGeoblock(fetchImpl) {
     const f = fetchImpl || (root.fetch && root.fetch.bind(root));
@@ -86,5 +113,5 @@
   const fmt = (n) => (Number.isFinite(n) ? (Math.round(n * 100) / 100).toString() : "0");
   const pct = (p) => (p * 100).toFixed(p < 0.1 ? 1 : 0) + "¢";
 
-  root.ClueTicket = { previewBuy, checkGeoblock };
+  root.ClueTicket = { previewBuy, checkGeoblock, orderPlan };
 })(typeof window !== "undefined" ? window : globalThis);

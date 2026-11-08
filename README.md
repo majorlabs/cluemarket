@@ -73,7 +73,7 @@ This table separates what has been run from what has not. Nothing here is claime
 | Email sign-in and the wallet made for you | **Verified** on the live site |
 | NEAR wallet sign-in | **Partly verified**: the signed-message and key checks are tested; a sign-in with a real wallet app on mainnet has not been recorded |
 | Trading setup (trading account and permission) | **Built**; the first run from a supported location is not yet recorded. Trading is blocked from the address the project was tested from |
-| Placing orders | **Not built.** Planned in [docs/TRADING_PLAN.md](docs/TRADING_PLAN.md); needs a funded test wallet |
+| Placing orders | **Built in test mode.** Clue re-checks the live orders, works out the worst price it will accept, and signs the order with your wallet, but sends nothing until real orders are switched on. Not yet run with real money. See [docs/TRADING_PLAN.md](docs/TRADING_PLAN.md) |
 | Sending money from other chains | **Not built** (price check only) |
 | Alerts when evidence changes, public profiles | **Not built** |
 
@@ -132,6 +132,7 @@ Settings (names only; never commit values):
 | `POLYMARKET_BUILDER_API_KEY`, `_SECRET`, `_PASSPHRASE`, `_CODE` | Our builder account for trading. Used only on the server to sign trading setup requests; never sent to the browser |
 | `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | Postgres and auth, for a hosted deployment |
 | `CLUE_HOSTED`, `CLUE_SERVICE_HOST`, `CLUE_SIGNUP_TOKEN` | Hosted-mode switches |
+| `CLUE_ORDERS_LIVE` | Set to `1` to let orders actually be sent. Off by default: orders are checked and signed, then discarded |
 | `CLUE_PUBLIC_ORIGINS` | https addresses allowed to sign in (list them all, comma-separated) |
 
 ## How it works

@@ -460,12 +460,12 @@ async function eventView(slug, marketId, stale) {
 }
 
 
-/* ---------- trade ticket (preview only: nothing here can place an order) ---------- */
-let geoPromise = null;
+/* ---------- trade ticket: preview, and an order check that sends nothing unless real orders are switched on ---------- */
+let geoPromise = null, ordersConfigPromise = null;
 const geoOnce = () => (geoPromise ||= window.ClueTicket.checkGeoblock());
 async function mountTicket(box, ctx) {
   const m = ctx.market, T = window.ClueTicket;
-  let mode = "market", book = null, bookErr = "";
+  let mode = "market", book = null, bookErr = "", lastPreview = null, lastGeo = null;
   const usd = (n) => `$${Number.isFinite(n) ? n.toFixed(2) : "0.00"}`;
   const cents = (p) => (p == null ? "—" : `${(p * 100).toFixed(1)}¢`);
   const spend = el("input", { type: "number", min: "0", step: "1", value: "50", inputmode: "decimal", "aria-label": "Amount to spend in dollars" });
@@ -494,6 +494,7 @@ async function mountTicket(box, ctx) {
       spend: Number(spend.value), shares: Number(shares.value), limitPrice: Number(limitPrice.value) / 100,
       feesEnabled: m.feesEnabled, feeRate: m.feeRate, minSize: m.minOrderSize, tickSize: m.tickSize, accepting: m.acceptingOrders, builderFeeBps: 0,
     });
+    lastPreview = r; syncOrder();
     const row = (k, v) => el("div", { class: "tk-row" }, el("span", { class: "muted", text: k }), el("b", { class: "num", text: v }));
     const total = r.sharesFilled + r.restingShares;
     preview.replaceChildren(...[
@@ -512,7 +513,46 @@ async function mountTicket(box, ctx) {
     ].filter(Boolean));
   }
 
+  // ---- ordering: every check is repeated on a fresh book at the moment of ordering ----
+  const orderOut = el("div", { class: "order-out", role: "status", "aria-live": "polite" });
+  const placeBtn = el("button", { class: "btn dark tk-submit", type: "button", disabled: true, text: "Review my order", onclick: () => submitOrder() });
+  const ordersConfig = () => (ordersConfigPromise ||= api("/api/pm/config").catch(() => ({ ordersLive: false, builderCode: null })));
+  const planFor = (preview) => T.orderPlan({
+    preview: mode === "market" ? preview : null, signedIn: Boolean(user), geo: lastGeo, setUp: Boolean(tradingSetup), balance: tradingSetup ? tradingSetup.balance : null,
+    accepting: m.acceptingOrders, minSize: m.minOrderSize, tickSize: m.tickSize,
+  });
+  const previewOn = (b) => T.previewBuy({ mode: "market", asks: b.asks, bestBid: b.bids[0]?.price ?? null, spend: Number(spend.value), feesEnabled: m.feesEnabled, feeRate: m.feeRate, minSize: m.minOrderSize, tickSize: m.tickSize, accepting: m.acceptingOrders, builderFeeBps: 0 });
+  async function syncOrder() {
+    const cfg = await ordersConfig();
+    placeBtn.textContent = cfg.ordersLive ? "Place order" : "Review my order";
+    const p = mode !== "market" ? { ok: false, reason: "Orders use the Market tab for now." } : planFor(lastPreview);
+    placeBtn.disabled = !p.ok; placeBtn.title = p.ok ? "" : p.reason;
+  }
+  async function submitOrder() {
+    placeBtn.disabled = true; orderOut.className = "order-out"; orderOut.textContent = "Checking the live orders again…";
+    const show = (cls, ...nodes) => { orderOut.className = `order-out ${cls}`; orderOut.replaceChildren(...nodes); };
+    try {
+      const cfg = await ordersConfig();
+      const fresh = await api(`/api/book?token=${encodeURIComponent(ctx.token)}&depth=60`);
+      book = fresh; const plan = planFor(previewOn(fresh));
+      if (!plan.ok) { show("err", el("p", { text: plan.reason })); return; }
+      if (cfg.ordersLive && !confirm(`Buy "${ctx.outcome}" for about ${usd(plan.expectedCost)}?\n\nIt only goes through if all of it fills at ${cents(plan.maxPrice)} a share or better. Otherwise nothing is bought and no money is spent.`)) { show("", el("p", { text: "Cancelled. Nothing was sent." })); return; }
+      show("", el("p", { text: cfg.ordersLive ? "Placing your order. Approve it in your wallet if it asks…" : "Preparing your order…" }));
+      await loadTrading();
+      const res = await window.clueTrading.order({ assetId: ctx.token, spend: plan.spend, maxPrice: plan.maxPrice, builderCode: cfg.builderCode, send: cfg.ordersLive });
+      const line = (k, v) => el("div", { class: "tk-row" }, el("span", { class: "muted", text: k }), el("b", { class: "num", text: v }));
+      if (!res.ok) show("err", el("p", { text: res.error }));
+      else if (!res.sent) show("test", el("b", { text: "Test mode: your order is ready, and it was NOT sent." }),
+        line("Would spend", usd(plan.spend)), line("Worst price accepted", cents(plan.maxPrice)), line("Fills", "completely or not at all"),
+        el("p", { class: "muted small", text: "Trading is not switched on for real orders yet, so no money moved." }));
+      else if (res.filled) show("ok", el("b", { text: "Your order filled." }), line("Shares bought", res.shares.toFixed(2)), line("You paid", usd(res.paid)), line("Average price", cents(res.avgPrice)));
+      else show("warn", el("p", { text: res.note }));
+    } catch (e) { show("err", el("p", { text: e.message || "Could not check the order. Nothing was sent." })); }
+    finally { syncOrder(); }
+  }
+
   function drawChecklist(geo) {
+    lastGeo = geo; syncOrder();
     const item = (state, title, note) => el("li", { class: `ck ${state}` }, el("span", { class: "ck-i", "aria-hidden": "true", text: state === "ok" ? "✓" : state === "bad" ? "✕" : "•" }), el("span", null, el("b", { text: title }), note ? ` ${note}` : ""));
     const loc = geo.state === "ok" ? item("ok", "Location", "can place orders")
       : geo.state === "blocked" ? item("bad", "Location", `Trading isn't available in ${[geo.region, geo.country].filter(Boolean).join(", ") || "your location"}`)
@@ -549,7 +589,7 @@ async function mountTicket(box, ctx) {
     el("div", { class: "pad" },
       el("p", { class: "small" }, el("b", { text: `Buy "${ctx.outcome}"` }), el("span", { class: "muted", text: ` · ${m.groupItemTitle || m.question}` })),
       el("div", { style: "margin:10px 0" }, seg), fields, preview,
-      el("button", { class: "btn dark tk-submit", type: "button", disabled: true, title: "Trading isn't switched on yet.", text: "Place order — not available yet" }),
+      placeBtn, orderOut,
       el("p", { class: "muted small", style: "margin-top:6px", text: "You will approve every order with your own wallet. Clue never holds your money." }),
       geoBox));
   [spend, limitPrice, shares].forEach((i) => i.addEventListener("input", drawPreview));
