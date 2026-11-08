@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const sandbox = {};
 new Function('window', readFileSync(new URL('../public/ticket.js', import.meta.url), 'utf8'))(sandbox);
-const { previewBuy, checkGeoblock } = sandbox.ClueTicket;
+const { previewBuy, checkGeoblock, orderPlan } = sandbox.ClueTicket;
 const near = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} should be within ${eps} of ${b}`);
 
 const asks = [{ price: 0.5, size: 100 }, { price: 0.52, size: 100 }, { price: 0.6, size: 1000 }];
@@ -63,4 +63,39 @@ test('location check reports blocked, ok and unknown honestly', async () => {
   assert.equal((await checkGeoblock(mk({ blocked: false, country: 'NG' }))).state, 'ok');
   assert.equal((await checkGeoblock(async () => { throw new Error('network'); })).state, 'unknown');
   assert.equal((await checkGeoblock(mk({}, false))).state, 'unknown');
+});
+
+// ---- Checking an order before it is sent ----
+const ready = { signedIn: true, geo: { state: 'ok' }, setUp: true, accepting: true, minSize: 5, tickSize: 0.01, balance: 100 };
+const plan = (spend, extra = {}) => orderPlan({ ...ready, ...extra, preview: previewBuy({ mode: 'market', asks, spend, ...feeOpts }) });
+
+test('a good order is allowed, with the worst price set 1% above the last price it touches', () => {
+  const p = plan(60);
+  assert.equal(p.ok, true);
+  assert.equal(p.worstFill, 0.52);
+  assert.equal(p.maxPrice, 0.53);            // 0.52 x 1.01 = 0.5252, rounded up to the next 1¢ step
+  near(p.spend, 60);
+  assert.ok(p.expectedCost > 60);            // the fee is on top
+});
+
+test('each safety check refuses with a plain reason', () => {
+  assert.match(plan(60, { signedIn: false }).reason, /Sign in/);
+  assert.match(plan(60, { geo: { state: 'blocked' } }).reason, /isn't available where you are/);
+  assert.match(plan(60, { geo: { state: 'unknown' } }).reason, /couldn't be checked/);
+  assert.match(plan(60, { setUp: false }).reason, /Set up trading/);
+  assert.match(plan(60, { accepting: false }).reason, /isn't accepting orders/);
+  assert.match(plan(60, { balance: 10 }).reason, /Add money/);
+  assert.match(plan(60, { balance: null }).reason, /balance couldn't be read/);
+});
+
+test('an order under the 5-share minimum, or bigger than the book, is refused', () => {
+  assert.match(plan(1).reason, /minimum order is 5 shares/);          // $1 at 50¢ is 2 shares
+  assert.match(plan(5000).reason, /aren't enough sellers/);           // the whole book is under $1,500
+  assert.match(orderPlan({ ...ready, preview: previewBuy({ mode: 'market', asks: [], spend: 10, ...feeOpts }) }).reason, /Nobody is selling/);
+});
+
+test('the worst price never goes above 99¢', () => {
+  const p = orderPlan({ ...ready, preview: previewBuy({ mode: 'market', asks: [{ price: 0.99, size: 1000 }], spend: 20, ...feeOpts }) });
+  assert.equal(p.ok, true);
+  assert.equal(p.maxPrice, 0.99);
 });
