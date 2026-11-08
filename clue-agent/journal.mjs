@@ -18,11 +18,21 @@ export async function liveMarket(id, now = Date.now()) {
     const response = await fetch(`${GAMMA}/markets/${id}`, { signal: AbortSignal.timeout(8000), headers: { accept: 'application/json' } });
     if (response.ok) {
       const m = await response.json();
-      data = { closed: Boolean(m.closed), outcomePrices: parseList(m.outcomePrices), outcomes: parseList(m.outcomes), endDate: m.endDate || null, question: m.question || null };
+      data = { closed: Boolean(m.closed), outcomePrices: parseList(m.outcomePrices), outcomes: parseList(m.outcomes), endDate: m.endDate || null, question: m.question || null, rules: typeof m.description === 'string' ? m.description : null, eventSlug: m.events?.[0]?.slug || null };
     }
   } catch { /* leave null: the page says the market could not be reached */ }
   if (data) { if (cache.size > 500) cache.clear(); cache.set(id, { at: now, data }); }
   return data;
+}
+
+// The market a piece of research or a forecast is about, exactly as Polymarket describes it. The browser only names the market (its numeric id);
+// the question, rules and outcomes are read from Polymarket here, so nothing typed or altered in the browser can pose as market text.
+export async function marketRecord(id) {
+  if (!validMarketId(String(id))) throw Object.assign(new Error('That is not a valid market.'), { status: 400 });
+  const m = await liveMarket(String(id));
+  if (!m || !m.question) throw Object.assign(new Error('Could not load that market from Polymarket. Try again in a moment.'), { status: 502 });
+  const outcomes = m.outcomes.length ? m.outcomes.map(String) : ['Yes', 'No'];
+  return { id: String(id), question: String(m.question).slice(0, 1000), rules: m.rules ? m.rules.slice(0, 8000) : null, outcomes, endDate: m.endDate, eventSlug: m.eventSlug, sourceUrl: m.eventSlug ? `https://polymarket.com/event/${encodeURIComponent(m.eventSlug)}` : null };
 }
 
 // Facts about the market a forecast is about, taken from what the server stored with the research, never from the browser.

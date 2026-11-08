@@ -8,7 +8,7 @@ import {privyRoute,privyWalletRoute} from './privy-auth.mjs';
 import {allowedOrigins,checkOrigin} from './origins.mjs';
 import {cleanAnswer} from './answer-links.mjs';
 import {HourlyBudget} from './budget.mjs';
-import {journalFor,marketFacts,watchFor} from './journal.mjs';
+import {journalFor,marketFacts,watchFor,marketRecord} from './journal.mjs';
 import {reserve,settle,release,allowance} from './aispend.mjs';
 import {fundingQuote,SOURCES,DEST} from './fund.mjs';
 await initWalletAuth();
@@ -104,7 +104,7 @@ const app=http.createServer(async(req,res)=>{ try {
    } else {
     // No research yet: only the fixed placeholder may be saved, so nothing written by the browser can pose as AI research.
     if(b.content!==NO_RESEARCH_YET||(Array.isArray(b.sources)&&b.sources.length)||(b.model!==undefined&&b.model!=='none')) return json(res,400,{error:'Research must come from Clue. Run research, then save it.'});
-    content=NO_RESEARCH_YET; sources=[]; model='none'; retrievedAt=new Date().toISOString(); market=b.market&&typeof b.market==='object'?b.market:null;
+    content=NO_RESEARCH_YET; sources=[]; model='none'; retrievedAt=new Date().toISOString(); market=b.market&&typeof b.market==='object'&&b.market.id!==undefined&&b.market.id!==null?await marketRecord(b.market.id):null;
    }
    if(question.length<5||question.length>2000) return json(res,400,{error:'Research data is invalid.'});
    const now=new Date().toISOString(); const id=typeof b.threadId==='string'?b.threadId:randomUUID();
@@ -139,7 +139,7 @@ const app=http.createServer(async(req,res)=>{ try {
  if(req.method==='POST' && url.pathname==='/api/research') {
   const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Connect your NEAR wallet to research this question.'});
   const body=await getBody(req); const question=typeof body.question==='string'?body.question.trim():''; if(question.length<5 || question.length>2000) return json(res,400,{error:'Enter a question between 5 and 2,000 characters.'});
-  const market=body.market && typeof body.market.question==='string' ? {question:body.market.question.slice(0,1000), rules:typeof body.market.rules==='string'?body.market.rules.slice(0,8000):null}:null;
+  const market=body.market && body.market.id!==undefined && body.market.id!==null ? await marketRecord(body.market.id) : null;
   const slot=await reserve(session.user.id);
   if(!slot.ok){ const a=await allowance(session.user.id); return json(res,429,{error:slot.reason==='user-limit'?`You have used your ${a.freePerDay} free researches for today. They reset at midnight UTC.`:'Research is paused for today to keep costs under control. Please try again tomorrow.',allowance:a}); }
   if(!researchGlobal.take()){ await release(slot.id); return json(res,429,{error:'Clue is handling a lot of research right now. Please try again in a little while.'}); }

@@ -31,7 +31,6 @@ All tests: 22 pass, 1 skipped without a key (the live red team, which passed wit
 ## Still open
 
 - **Misleading text without links.** A prompt injection can still make the answer *say* misleading things (for example "official place to claim winnings") even though the link is removed. Answers are labelled AI-generated with a warning, but the words are not filtered.
-- **Market text in shared pages.** The market question and rules attached to research come from the browser. A user could attach invented market text to their own research and publish it. Fix: look the market up on Polymarket by id on the server.
 - **The hourly overall budget resets on restart** and is per server instance. The free allowance and the daily dollar cap are now stored in the database and do not reset (see below).
 - **No per-IP limit.** Behind Vercel the client IP is hard to trust, so only per-account and overall limits exist.
 - **The live site's other security headers.** Vercel serves the page without a full Content-Security-Policy (only `frame-ancestors`). A full policy needs testing with Privy and the NEAR wallet scripts.
@@ -60,3 +59,7 @@ Found by signing in on the live site with a real email code. Privy returns its p
 ## Wallets for email sign-ins (8 Nov)
 
 Privy is now asked to create an Ethereum wallet for people who sign in without one (`createOnLogin: 'users-without-wallets'`); anyone who already has a wallet is left alone. The "Add money" panel shows the address from `GET /api/privy/wallet`, which asks Privy's API (with the app secret, on the server) which wallet belongs to the signed-in account. The browser never supplies the address, NEAR-wallet accounts are never looked up, and only a plain 0x Ethereum address is returned. The wallet belongs to the user (Privy's non-custodial user wallets); Clue holds no keys. Tests: `tests/privy-wallet.test.mjs`. Not verified until live: whether the Privy dashboard's own embedded-wallet setting (currently reported as off, mode `user-controlled-server-wallets-only`) allows creation; this needs a real sign-in on the live site.
+
+## Market text now comes from Polymarket (8 Nov)
+
+Research and saved threads used to take the market's question and rules from the browser and keep no market id, so the Journal could not find the market to compare with, and a user could attach invented market text to research they then published. The browser now sends only the market's numeric id; the server reads the question, rules and outcomes from Polymarket and stores those. Text sent with no id names no market. A malformed id is refused (400) and an unknown market (502), both before any AI is used or any free research is counted. Tests: `tests/market-link.test.mjs`.
