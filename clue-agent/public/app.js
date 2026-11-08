@@ -558,6 +558,7 @@ function mountWorkspace(container, ctx) {
   const q = el("textarea", { id: "ws-q", rows: 2, maxlength: 2000, placeholder: market ? "Ask something specific, or research this market’s question" : "What do you want to understand?" }); q.value = defaultQ;
   const rStatus = el("p", { class: "status", role: "status", "aria-live": "polite" });
   const reportBox = el("div", { class: "report", hidden: true });
+  const allowLine = el("p", { class: "muted small", role: "status", "aria-live": "polite" });
   const researchBtn = el("button", { class: "btn dark", type: "button", text: "Research with sources", onclick: runResearch });
 
   const prior = ctx.forecasts?.[0];
@@ -580,7 +581,7 @@ function mountWorkspace(container, ctx) {
     el("div", { class: "step-title" }, el("span", { class: "step-n", text: "1" }), "Research it"),
     el("p", { class: "muted small", text: market ? "Clue searches the web for evidence for and against. The market’s own rules still decide how it resolves." : "Clue searches the web for evidence for and against, and says when evidence is thin." }),
     el("label", { class: "field" }, el("span", { text: "Your question" }), q),
-    el("div", { class: "actions" }, researchBtn), rStatus, reportBox);
+    el("div", { class: "actions" }, researchBtn), allowLine, rStatus, reportBox);
 
   const step2 = el("section", { class: "step" },
     el("div", { class: "step-title" }, el("span", { class: "step-n", text: "2" }), "What do you think?"),
@@ -596,6 +597,8 @@ function mountWorkspace(container, ctx) {
   container.replaceChildren(el("div", { class: "panel-head" }, el("h2", { text: "Your read" })), el("div", { class: "steps" }, step1, step2));
   if (state.report) showReport(state.report);
   if (ctx.forecasts?.length) renderForecasts(ctx.forecasts);
+  const showAllowance = (a) => { allowLine.textContent = !a ? "" : a.paused ? "Research is paused for today to keep costs under control." : `${a.remaining} of ${a.freePerDay} free researches left today. They reset at midnight UTC.`; };
+  if (user) api("/api/research/allowance").then(showAllowance).catch(() => {});
   const markDone = () => { step1.classList.add("done"); step1.classList.remove("active"); step2.classList.add("active"); };
   if (state.report) markDone();
 
@@ -618,7 +621,7 @@ function mountWorkspace(container, ctx) {
     try {
       const d = await post("/api/research", { question, market: marketRef && marketRef.question ? { question: marketRef.question, rules: marketRef.rules || null } : null });
       state.report = { question, market: marketRef, content: d.content, sources: d.sources, model: d.model, retrievedAt: d.retrievedAt, researchId: d.researchId };
-      showReport(state.report); markDone();
+      showReport(state.report); markDone(); showAllowance(d.allowance);
       rStatus.className = "status ok"; rStatus.textContent = "Research complete. Save it with your forecast below.";
       if (state.threadId) { try { await ensureThread(true); } catch { /* user can save manually */ } }
     } catch (e) { rStatus.className = "status err"; rStatus.textContent = e.message; }

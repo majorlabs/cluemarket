@@ -41,6 +41,11 @@ const schema = `CREATE TABLE IF NOT EXISTS research_threads (
  reasoning TEXT NOT NULL, change_condition TEXT NOT NULL, created_at TEXT NOT NULL,
  FOREIGN KEY(thread_id) REFERENCES research_threads(id) ON DELETE CASCADE
 ); CREATE TABLE IF NOT EXISTS public_reports (id TEXT PRIMARY KEY, thread_id TEXT NOT NULL, user_id TEXT NOT NULL, snapshot TEXT NOT NULL, created_at TEXT NOT NULL, FOREIGN KEY(thread_id) REFERENCES research_threads(id) ON DELETE CASCADE, FOREIGN KEY(user_id) REFERENCES "user"(id) ON DELETE CASCADE); CREATE INDEX IF NOT EXISTS public_reports_owner ON public_reports(user_id, thread_id); CREATE INDEX IF NOT EXISTS forecast_thread ON forecast_revisions(thread_id, created_at); CREATE INDEX IF NOT EXISTS research_threads_owner ON research_threads(user_id, updated_at); CREATE INDEX IF NOT EXISTS research_revisions_thread ON research_revisions(thread_id, created_at);;
+CREATE TABLE IF NOT EXISTS ai_usage (
+ id TEXT PRIMARY KEY, user_id TEXT NOT NULL, day TEXT NOT NULL, created_at TEXT NOT NULL,
+ status TEXT NOT NULL, input_tokens INTEGER, output_tokens INTEGER, cost_usd REAL NOT NULL, estimated INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS ai_usage_day ON ai_usage(day, user_id);
 CREATE TABLE IF NOT EXISTS research_results (
  id TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at TEXT NOT NULL,
  question TEXT NOT NULL, content TEXT NOT NULL, sources TEXT NOT NULL,
