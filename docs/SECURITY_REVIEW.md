@@ -35,7 +35,7 @@ All tests: 22 pass, 1 skipped without a key (the live red team, which passed wit
 - **The hourly overall budget resets on restart** and is per server instance. The free allowance and the daily dollar cap are now stored in the database and do not reset (see below).
 - **No per-IP limit.** Behind Vercel the client IP is hard to trust, so only per-account and overall limits exist.
 - **The live site's other security headers.** Vercel serves the page without a full Content-Security-Policy (only `frame-ancestors`). A full policy needs testing with Privy and the NEAR wallet scripts.
-- **NEAR wallet sign-in end to end.** The local NEAR sandbox needs 65,535 open files and this machine allows 20,000, so the wallet login was not run against a real chain. Its signature checks are covered by the existing unit test; the account-key check calls mainnet RPC and is mocked in tests.
+- **NEAR wallet sign-in with a real wallet app.** The signature and key checks are tested, but a sign-in through a real wallet app on mainnet has not been recorded.
 - **Trading and funding** are not built yet (preview only), so no money paths exist to attack. They will need their own review before real orders.
 - **Keys in chat.** The Privy secret, the Polymarket builder key and two NEAR AI keys were shared in the build conversation. They are kept only in Railway variables, never in the repo, but they should be rotated.
 
