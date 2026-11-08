@@ -82,3 +82,38 @@ window.clueTrading.order = async function order({ assetId, spend, maxPrice, buil
     return { ok: false, sent: false, error: 'The order could not be placed. If you are not sure whether it went through, check your positions before trying again.' };
   }
 };
+
+// Polymarket's own deposit service gives each trading account its own address per chain. Anything sent there in a supported token
+// is turned into trading money automatically. Called straight from the browser; nothing about the user passes through Clue's server.
+window.clueTrading.depositAddresses = async function depositAddresses(wallet, builderCode) {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(String(wallet || ''))) return { ok: false, error: 'Set up trading first, so there is an account to send money to.' };
+  try {
+    const r = await fetch('https://bridge.polymarket.com/deposit', {
+      method: 'POST', headers: { 'content-type': 'application/json', ...(builderCode ? { 'X-Builder-Code': builderCode } : {}) }, body: JSON.stringify({ address: wallet }),
+    });
+    if (!r.ok) return { ok: false, error: 'Polymarket could not give a deposit address right now. Try again in a minute.' };
+    const d = await r.json();
+    return { ok: true, evm: d && d.address && d.address.evm, svm: d && d.address && d.address.svm };
+  } catch (e) {
+    return { ok: false, error: 'Could not reach the deposit service. Try again in a minute.' };
+  }
+};
+
+// The deposit rules change over time, so the minimums shown to people are read live.
+window.clueTrading.depositMinimums = async function depositMinimums() {
+  try {
+    const d = await (await fetch('https://bridge.polymarket.com/supported-assets')).json();
+    const pick = (chain) => (d.supportedAssets || []).find((a) => a.chainName === chain && a.token && a.token.symbol === 'USDC');
+    return { solana: pick('Solana') && pick('Solana').minCheckoutUsd, polygon: pick('Polygon') && pick('Polygon').minCheckoutUsd };
+  } catch { return {}; }
+};
+
+window.clueTrading.balance = async function balance() {
+  try {
+    const client = await openClient();
+    const b = await fetchBalanceAllowance(client, { assetType: 'COLLATERAL' });
+    return { ok: true, balance: dollars(b.balance) };
+  } catch (e) {
+    return { ok: false, error: 'Could not read your balance right now. Try again in a minute.' };
+  }
+};

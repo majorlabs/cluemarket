@@ -139,15 +139,18 @@ async function connectWallet() {
 }
 let privyLoading = null;
 let tradingLoading = null, tradingSetup = null;   // tradingSetup: what the last setup found, for this page load
+let tradingScript = null;
+function loadTradingScript() {
+  // Just the trading code, with no sign-in window. Enough for reading deposit addresses.
+  tradingScript ||= new Promise((resolve, reject) => {
+    const s = el("script", { src: "/trading.js" });
+    s.onload = resolve; s.onerror = () => reject(new Error("Could not load trading. Check your connection and try again."));
+    document.head.append(s);
+  }).catch((e) => { tradingScript = null; throw e; });
+  return tradingScript;
+}
 function loadTrading() {
-  tradingLoading ||= (async () => {
-    await loadPrivy();
-    await new Promise((resolve, reject) => {
-      const s = el("script", { src: "/trading.js" });
-      s.onload = resolve; s.onerror = () => reject(new Error("Could not load trading. Check your connection and try again."));
-      document.head.append(s);
-    });
-  })().catch((e) => { tradingLoading = null; throw e; });
+  tradingLoading ||= (async () => { await loadPrivy(); await loadTradingScript(); })().catch((e) => { tradingLoading = null; throw e; });
   return tradingLoading;
 }
 function loadPrivy() {
@@ -551,6 +554,41 @@ async function mountTicket(box, ctx) {
     finally { syncOrder(); }
   }
 
+  // Putting money into the trading account: Polymarket gives the account its own address for each chain.
+  function depositPanel(geo) {
+    const out = el("div", { class: "deposit" });
+    const status = el("p", { class: "status", role: "status", "aria-live": "polite" });
+    const copy = (text) => el("button", { class: "btn small", type: "button", text: "Copy", onclick: async (ev) => { try { await navigator.clipboard.writeText(text); ev.currentTarget.textContent = "Copied"; } catch { ev.currentTarget.textContent = "Select and copy"; } } });
+    const refresh = el("button", { class: "btn small", type: "button", text: "Refresh my balance", onclick: async () => {
+      refresh.disabled = true; status.className = "status"; status.textContent = "Checking your balance…";
+      try { await loadTrading(); } catch (e) { status.className = "status err"; status.textContent = e.message; refresh.disabled = false; return; }
+      const r = await window.clueTrading.balance(); refresh.disabled = false;
+      if (r.ok) { tradingSetup = { ...tradingSetup, balance: r.balance }; drawChecklist(geo); } else { status.className = "status err"; status.textContent = r.error; }
+    } });
+    const show = el("button", { class: "btn small", type: "button", text: "Show my deposit address", onclick: async () => {
+      show.disabled = true; status.className = "status"; status.textContent = "Getting your deposit address…";
+      try { await loadTradingScript(); } catch (e) { status.className = "status err"; status.textContent = e.message; show.disabled = false; return; }
+      const cfg = await ordersConfig();
+      const [a, mins] = await Promise.all([window.clueTrading.depositAddresses(tradingSetup.wallet, cfg.builderCode), window.clueTrading.depositMinimums()]);
+      if (!a.ok) { status.className = "status err"; status.textContent = a.error; show.disabled = false; return; }
+      const choices = [
+        { id: "svm", label: "Solana", token: "USDC", addr: a.svm, min: mins.solana },
+        { id: "evm", label: "Polygon", token: "USDC", addr: a.evm, min: mins.polygon },
+      ].filter((c) => T.validDepositAddress(c.id, c.addr));
+      if (!choices.length) { status.className = "status err"; status.textContent = "Polymarket returned an address Clue could not check, so it is not shown. Try again in a minute."; show.disabled = false; return; }
+      const detail = el("div");
+      const pick = (c) => detail.replaceChildren(
+        el("p", { class: "small" }, "Send ", el("b", { text: `${c.token} on ${c.label}` }), c.min ? ` (at least $${c.min})` : "", " to:"),
+        el("div", { class: "acct-addr" }, el("code", { text: c.addr }), copy(c.addr)),
+        el("p", { class: "tk-warn warn", text: `Send only ${c.token} on ${c.label}. Other coins, or the same coin on another chain, can be lost for good. Anything under the minimum is not processed.` }),
+        el("p", { class: "muted small", text: "This address belongs to your trading account only. It can take a few minutes to arrive. Tap Refresh my balance to check." }));
+      const seg2 = el("div", { class: "seg", role: "group", "aria-label": "Where is your money" }, choices.map((c, i) => el("button", { type: "button", text: c.label, "aria-pressed": String(i === 0), onclick: (ev) => { seg2.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", "false")); ev.currentTarget.setAttribute("aria-pressed", "true"); pick(c); } })));
+      status.textContent = ""; out.replaceChildren(seg2, detail, refresh, status); pick(choices[0]);
+    } });
+    out.append(show, refresh, status);
+    return out;
+  }
+
   function drawChecklist(geo) {
     lastGeo = geo; syncOrder();
     const item = (state, title, note) => el("li", { class: `ck ${state}` }, el("span", { class: "ck-i", "aria-hidden": "true", text: state === "ok" ? "✓" : state === "bad" ? "✕" : "•" }), el("span", null, el("b", { text: title }), note ? ` ${note}` : ""));
@@ -561,7 +599,7 @@ async function mountTicket(box, ctx) {
     const t = tradingSetup, short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
     const rows = t
       ? [item("ok", "Your wallet", short(t.signer)), item("ok", "Ready to trade", "set up"),
-         t.balance > 0 ? item("ok", "Money in your account", `$${t.balance.toFixed(2)}`) : item("todo", "Money in your account", "$0.00. Use Add money to put some in.")]
+         t.balance > 0 ? item("ok", "Money in your account", `$${t.balance.toFixed(2)}`) : item("todo", "Money in your account", "$0.00. Tap Show my deposit address to add some.")]
       : [item("todo", "Your wallet", isPrivy ? "ready to use" : "needs an email or Ethereum wallet sign-in"), item("todo", "Ready to trade", "set up in one step"), item("todo", "Money in your account", "after setup")];
     const status = el("p", { class: "status", role: "status", "aria-live": "polite" });
     let action = null;
@@ -579,6 +617,7 @@ async function mountTicket(box, ctx) {
     }
     geoBox.replaceChildren(...kids(
       el("ul", { class: "checklist" }, loc, ...rows),
+      t ? depositPanel(geo) : null,
       action, status,
       geo.state === "blocked" ? el("p", { class: "muted small", style: "margin-top:8px", text: "You can still research, forecast and preview. Clue doesn't help get around location limits." }) : null));
   }
