@@ -1,6 +1,6 @@
 # Instructions for contributors and coding agents
 
-Read README.md and docs/PRODUCT_AND_BUILD_BRIEF.md before implementation. This repository contains planning documents, not a working product. Preserve broad prediction and knowledge scope; memecoins are optional topics.
+Read README.md and docs/PRODUCT_AND_BUILD_BRIEF.md before implementation. The app is in `clue-agent/` (see README.md for what is built and verified); the other documents are plans. Trading and NEAR Intents funding are planned, not built. Preserve broad prediction and knowledge scope; memecoins are optional topics.
 
 - Build and demonstrate one real end-to-end journey before expanding. Separate planned, simulated and verified features.
 - Use current official integration documentation. Retain IDs, retrieval times, resolution terms and market provenance.

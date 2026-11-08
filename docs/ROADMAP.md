@@ -1,6 +1,6 @@
 # Implementation roadmap
 
-Status: proposed. No feature below is shipped or verified.
+Status: partly built. The README's "What works today" table says what has been verified. Anything below that the table does not list as verified is still proposed.
 
 ## First complete journey
 
