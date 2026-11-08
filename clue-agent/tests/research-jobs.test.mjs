@@ -10,10 +10,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 
-let mode = 'slow';
+let mode = 'slow', calls = 0;
 const ai = http.createServer((req, res) => {
   req.resume(); req.on('end', () => {
     if (mode === 'down') { res.writeHead(500); return res.end('{}'); }
+    calls++;
+    if (mode === 'cut-once' && calls % 2 === 1 || mode === 'cut-always') {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write('data: {"choices":[{"delta":{"content":"Evidence is th'); return res.end();            // the answer is cut off mid-line
+    }
     setTimeout(() => {
       res.writeHead(200, { 'Content-Type': 'text/event-stream' });
       const chunk = (o) => res.write(`data: ${JSON.stringify(o)}\n\n`);
@@ -90,6 +95,29 @@ test('a failed research says so plainly and does not use up the free run', async
   assert.equal(j.status, 'failed');
   assert.match(j.error, /isn.t available right now/);
   assert.ok(!/HTTP|server|NEAR AI|configur|API_KEY|provider/i.test(j.error), j.error);   // no developer wording reaches the user
+  const a = await (await fetch(base + '/api/research/allowance', { headers: { Cookie: cookie } })).json();
+  assert.equal(a.usedToday, 0);
+});
+
+test('an answer cut off once is recovered by a second try, and counts as one free research', async () => {
+  const cookie = signup('frank');
+  mode = 'cut-once'; calls = 1;                                                  // the next request is the first of a pair: it is cut off
+  const { researchId } = await (await start(cookie)).json();
+  const j = await untilFinished(cookie, researchId);
+  mode = 'slow';
+  assert.equal(j.status, 'done');
+  assert.match(j.content, /Evidence is thin/);
+  assert.equal(j.allowance.usedToday, 1);
+});
+
+test('an answer that is always cut off fails plainly and costs no free research', async () => {
+  const cookie = signup('gina');
+  mode = 'cut-always';
+  const { researchId } = await (await start(cookie)).json();
+  const j = await untilFinished(cookie, researchId);
+  mode = 'slow';
+  assert.equal(j.status, 'failed');
+  assert.match(j.error, /didn.t come back complete/);
   const a = await (await fetch(base + '/api/research/allowance', { headers: { Cookie: cookie } })).json();
   assert.equal(a.usedToday, 0);
 });
