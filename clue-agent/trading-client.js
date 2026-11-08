@@ -23,7 +23,7 @@ const friendly = (e) => {
   const text = String((e && e.message) || e || '');
   if (/reject|denied|cancel/i.test(text)) return 'You cancelled the request in your wallet. Nothing was changed.';
   if (/Remote signer rejected/i.test(text)) return 'Clue could not set up trading for this account right now. Try again in a minute.';
-  if (/builder|relayer/i.test(text)) return 'Polymarket could not set up your trading wallet right now. Try again in a minute.';
+  if (/builder|relayer/i.test(text)) return 'Trading could not be set up right now. Try again in a minute.';
   return 'Trading setup did not finish. Nothing was changed. Try again in a minute.';
 };
 

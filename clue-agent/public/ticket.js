@@ -48,7 +48,7 @@
       }
       out.restingShares = Math.max(0, left);
       out.restingPrice = out.restingShares > 0 ? lim : null;
-      if (o.tickSize && Math.abs(lim / o.tickSize - Math.round(lim / o.tickSize)) > 1e-6) warn("warn", `Price must be a multiple of ${o.tickSize}. Polymarket will reject this one.`);
+      if (o.tickSize && Math.abs(lim / o.tickSize - Math.round(lim / o.tickSize)) > 1e-6) warn("warn", `Price must be a multiple of ${o.tickSize}. The market would reject this one.`);
       if (out.restingShares > 0) warn("info", `${fmt(out.restingShares)} shares wouldn't fill now. They'd wait for a seller at ${pct(lim)} and might never fill.`);
     }
 
@@ -62,7 +62,7 @@
     }
     if (o.bestBid != null && out.bestAsk != null && out.bestAsk - o.bestBid >= 0.1) warn("warn", `Thin market: buyers and sellers are ${((out.bestAsk - o.bestBid) * 100).toFixed(0)} points apart. Selling back later could cost a lot.`);
     const total = out.sharesFilled + out.restingShares;
-    if (o.minSize && total > 0 && total < o.minSize - 1e-9) warn("block", `Polymarket's minimum order is ${o.minSize} shares. This is ${fmt(total)}.`);
+    if (o.minSize && total > 0 && total < o.minSize - 1e-9) warn("block", `The minimum order is ${o.minSize} shares. This is ${fmt(total)}.`);
     if (o.accepting === false) warn("block", "This market isn't accepting orders right now.");
     out.ok = !out.warnings.some((w) => w.level === "block") && total > 0;
     return out;

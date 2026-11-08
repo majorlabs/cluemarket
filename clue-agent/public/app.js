@@ -279,7 +279,7 @@ async function boardView(tag, q, stale, sort = "trending") {
     const d = await api(`/api/events?${q ? "q=" + encodeURIComponent(q) : "tag=" + encodeURIComponent(tag) + "&sort=" + sort}`);
     if (stale()) return;
     grid.removeAttribute("aria-busy");
-    $("board-meta").textContent = `Live from Polymarket · ${new Date(d.retrievedAt).toLocaleTimeString()}`;
+    $("board-meta").textContent = `Live prices · ${new Date(d.retrievedAt).toLocaleTimeString()}`;
     if (!d.events.length) { grid.replaceWith(el("div", { class: "card empty" }, el("h2", { text: "No open markets found" }), el("p", { class: "muted", text: "Try a broader word, another category, or ask Clue to research it directly." }), el("a", { class: "btn primary", style: "margin-top:16px", href: `#/ask${q ? "?q=" + encodeURIComponent(q) : ""}`, text: "Ask Clue instead" }))); return; }
     const live = d.events.filter((e) => !ended(e.endDate)), over = d.events.filter((e) => ended(e.endDate));
     grid.replaceChildren(...[...live, ...over].map(marketCard));
@@ -312,7 +312,7 @@ async function eventView(slug, marketId, stale) {
   const stage = el("div", { id: "stage" });
   const workspaceBox = el("section", { class: "card" });
   const ticketBox = el("section", { class: "card ticket", "aria-label": "Trade ticket" });
-  const fundBox = el("section", { class: "card pad fund", "aria-label": "Fund your Polymarket account" });
+  const fundBox = el("section", { class: "card pad fund", "aria-label": "Add money" });
   mountFunding(fundBox);
   const rightCol = el("aside", { class: "rightcol" }, ticketBox, fundBox, workspaceBox);
   const left = el("div", null, stage);
@@ -325,7 +325,7 @@ async function eventView(slug, marketId, stale) {
         el("span", { text: `${money(ev.volume)} volume` }),
         el("span", { text: `${money(ev.volume24hr)} in 24h` }),
         el("span", { text: `Closes ${day(ev.endDate)}` }),
-        el("a", { href: safeLink(ev.sourceUrl), target: "_blank", rel: "noopener noreferrer", text: "View on Polymarket ↗" }))));
+        el("a", { href: safeLink(ev.sourceUrl), target: "_blank", rel: "noopener noreferrer", text: "View source ↗" }))));
   app.replaceChildren(el("a", { class: "crumb", href: "#/", text: "← Markets" }), header, el("div", { class: "layout" }, left, rightCol));
 
   let showAllOpts = false;
@@ -393,9 +393,9 @@ async function eventView(slug, marketId, stale) {
   function drawRules(box) {
     const rules = sel.rules || ev.description;
     const text = el("div", { class: "rules" });
-    linkify(text, rules || "Polymarket published no resolution text for this market.");
+    linkify(text, rules || "No rules were published for this market.");
     box.append(...kids(
-      el("p", { class: "muted small", style: "margin-bottom:10px", text: "These are Polymarket’s own rules. They decide how this question is settled. Clue can’t change them." }),
+      el("p", { class: "muted small", style: "margin-bottom:10px", text: "These are the market’s own rules. They decide how this question is settled. Clue can’t change them." }),
       text,
       rules && rules.length > 700 ? el("button", { class: "btn small ghost", type: "button", text: "Show all", onclick: (e) => { text.classList.toggle("open"); e.target.textContent = text.classList.contains("open") ? "Show less" : "Show all"; } }) : null,
       el("dl", { class: "facts" },
@@ -465,7 +465,7 @@ async function mountTicket(box, ctx) {
   function drawPreview() {
     if (bookErr) { preview.replaceChildren(el("p", { class: "status err", text: bookErr })); return; }
     if (!book) { preview.replaceChildren(el("p", { class: "muted small", text: "Loading live orders…" })); return; }
-    if (book.available === false) { preview.replaceChildren(el("p", { class: "tk-warn block", text: "Nobody is buying or selling this outcome on Polymarket right now, so it can’t be traded. Pick another question above." })); return; }
+    if (book.available === false) { preview.replaceChildren(el("p", { class: "tk-warn block", text: "Nobody is buying or selling this outcome right now, so it can’t be traded. Pick another question above." })); return; }
     const r = T.previewBuy({
       mode, asks: book.asks, bestBid: book.bids[0]?.price ?? null,
       spend: Number(spend.value), shares: Number(shares.value), limitPrice: Number(limitPrice.value) / 100,
@@ -478,28 +478,28 @@ async function mountTicket(box, ctx) {
         r.sharesFilled > 0 ? row("You'd get", `${r.sharesFilled.toFixed(2)} shares · ${cents(r.avgPrice)} each`) : null,
         r.restingShares > 0 ? row("Waiting for a seller", `${r.restingShares.toFixed(2)} shares at ${cents(r.restingPrice)}`) : null,
         row("You pay", usd(r.cost)),
-        row("Polymarket fee (estimate)", m.feesEnabled ? usd(r.platformFee) : "none on this market"),
+        row("Trading fee (estimate)", m.feesEnabled ? usd(r.platformFee) : "none on this market"),
         row("Clue fee", "none"),
         el("div", { class: "tk-outcomes" },
           el("div", { class: "tk-win" }, el("small", { text: `If "${ctx.outcome}" happens` }), el("b", { class: "num", text: `+${usd(r.profitIfWin ?? 0)}` }), el("small", { text: `you receive ${usd(total)}` })),
           el("div", { class: "tk-lose" }, el("small", { text: "If it doesn't" }), el("b", { class: "num", text: `−${usd(r.cost + r.platformFee)}` }), el("small", { text: "you lose what you paid" }))),
       ] : []),
       ...r.warnings.map((w) => el("p", { class: `tk-warn ${w.level}`, text: w.text })),
-      el("p", { class: "muted small", style: "margin-top:8px", text: `Based on live orders${book.bookTime ? ` at ${new Date(book.bookTime).toLocaleTimeString()}` : ""}. The real price can change if orders change. Polymarket sets the final fee.` }),
+      el("p", { class: "muted small", style: "margin-top:8px", text: `Based on live orders${book.bookTime ? ` at ${new Date(book.bookTime).toLocaleTimeString()}` : ""}. The real price can change if orders change, and the final fee is confirmed when the order is placed.` }),
     ].filter(Boolean));
   }
 
   function drawChecklist(geo) {
     const item = (state, title, note) => el("li", { class: `ck ${state}` }, el("span", { class: "ck-i", "aria-hidden": "true", text: state === "ok" ? "✓" : state === "bad" ? "✕" : "•" }), el("span", null, el("b", { text: title }), note ? ` ${note}` : ""));
     const loc = geo.state === "ok" ? item("ok", "Location", "can place orders")
-      : geo.state === "blocked" ? item("bad", "Location", `Polymarket doesn't allow new orders from ${[geo.region, geo.country].filter(Boolean).join(", ") || "your location"}`)
+      : geo.state === "blocked" ? item("bad", "Location", `Trading isn't available in ${[geo.region, geo.country].filter(Boolean).join(", ") || "your location"}`)
       : item("todo", "Location", "couldn't be checked, so trading stays off");
     const isPrivy = user && String(user.id || "").startsWith("privy:"), isNear = user && String(user.id || "").startsWith("near:");
     const t = tradingSetup, short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
     const rows = t
-      ? [item("ok", "Your wallet", short(t.signer)), item("ok", "Your Polymarket account", short(t.wallet)), item("ok", "Permission to trade", "set"),
+      ? [item("ok", "Your wallet", short(t.signer)), item("ok", "Ready to trade", "set up"),
          t.balance > 0 ? item("ok", "Money in your account", `$${t.balance.toFixed(2)}`) : item("todo", "Money in your account", "$0.00. Use Add money to put some in.")]
-      : [item("todo", "Your wallet", isPrivy ? "ready to use" : "needs an email or Ethereum wallet sign-in"), item("todo", "Your Polymarket account", "created when you set up trading"), item("todo", "Permission to trade", "set when you set up trading"), item("todo", "Money in your account", "after setup")];
+      : [item("todo", "Your wallet", isPrivy ? "ready to use" : "needs an email or Ethereum wallet sign-in"), item("todo", "Ready to trade", "set up in one step"), item("todo", "Money in your account", "after setup")];
     const status = el("p", { class: "status", role: "status", "aria-live": "polite" });
     let action = null;
     if (!user) action = el("button", { class: "btn small", type: "button", text: "Sign in to set up trading", onclick: () => openAccountDialog("Sign in to set up trading.") });
@@ -507,7 +507,7 @@ async function mountTicket(box, ctx) {
     else if (isPrivy && !t) {
       const go = el("button", { class: "btn primary small", type: "button", text: "Set up trading", disabled: geo.state !== "ok", title: geo.state !== "ok" ? "Trading is off where you are." : "", onclick: async () => {
         go.disabled = true; status.className = "status";
-        const words = { wallet: "Signing in to Polymarket and creating your trading account…", permissions: "Setting permission to trade…", balance: "Checking your balance…" };
+        const words = { wallet: "Setting up your trading account…", permissions: "Setting permission to trade…", balance: "Checking your balance…" };
         try { await loadTrading(); } catch (e) { status.className = "status err"; status.textContent = e.message; go.disabled = false; return; }
         const r = await window.clueTrading.setup((step) => { status.textContent = `${words[step]} Approve it in your wallet if it asks.`; });
         if (r.ok) { tradingSetup = r; drawChecklist(geo); } else { status.className = "status err"; status.textContent = r.error; go.disabled = false; }
@@ -719,7 +719,7 @@ async function askView(qs, stale) {
     if (e.key !== "Enter") return;
     e.preventDefault();
     const v = searchIn.value.trim(); if (v.length < 2) return;
-    pickBox.replaceChildren(el("p", { class: "muted small", text: "Searching Polymarket…" }));
+    pickBox.replaceChildren(el("p", { class: "muted small", text: "Searching markets…" }));
     try {
       const d = await api(`/api/events?q=${encodeURIComponent(v)}`);
       pickBox.replaceChildren(d.events.length ? el("div", { class: "pick-list" }, d.events.slice(0, 6).map((ev) => el("button", { type: "button", onclick: () => connect(ev.markets[0]) }, el("span", { text: ev.markets[0].question }), el("b", { class: "num", text: pct(ev.markets[0].outcomePrices[0]) })))) : el("p", { class: "muted small", text: "No open markets found. You can still research the question on its own." }));
@@ -736,7 +736,7 @@ async function askView(qs, stale) {
     el("p", { text: "Ask about anything. Clue looks for sources on both sides, tells you where the evidence is thin, and lets you record your own forecast to revisit later. A market is optional context." }),
     el("section", { class: "card ask-box" },
       el("strong", { text: "Optional: connect a real market" }),
-      el("p", { class: "muted small", style: "margin:2px 0 10px", text: "Pulls in the exact question, rules and current price from Polymarket. Press Enter to search." }),
+      el("p", { class: "muted small", style: "margin:2px 0 10px", text: "Pulls in the exact question, rules and current price. Press Enter to search." }),
       searchIn, pickBox, linkedBox),
     holder));
   remount();
@@ -744,11 +744,11 @@ async function askView(qs, stale) {
 
 
 
-/* ---------- add money: see what moving money into your Polymarket balance would cost (nothing is sent) ---------- */
+/* ---------- add money: see what moving money into your Clue balance would cost (nothing is sent) ---------- */
 const CHAIN_LOOK = { "ethereum-usdc": { name: "Ethereum", color: "#627eea" }, "base-usdc": { name: "Base", color: "#0052ff" }, "optimism-usdc": { name: "Optimism", color: "#ff0420" } };
 async function mountFunding(box) {
   const title = el("div", { class: "fund-title" }, el("h2", { text: "Add money" }), el("span", { class: "fund-badge", text: "Price check" }));
-  const intro = el("p", { class: "fund-intro", text: "Polymarket is paid for in dollars on the Polygon network. Pick where your money is now and see what it would cost to bring it over." });
+  const intro = el("p", { class: "fund-intro", text: "Pick where your money is now and see what it would cost to bring it into Clue." });
   if (!user) { box.replaceChildren(title, intro, el("button", { class: "btn primary", type: "button", text: "Sign in to check a price", onclick: () => openAccountDialog("Sign in to check what adding money would cost.") })); return; }
   let options;
   try { options = await api("/api/fund/options"); } catch { box.replaceChildren(title, el("p", { class: "fund-intro", text: "Prices aren’t available right now. Try again in a minute." })); return; }
@@ -762,7 +762,7 @@ async function mountFunding(box) {
   });
   const amount = el("input", { id: "fund-amount", type: "text", inputmode: "decimal", autocomplete: "off", value: "25", "aria-label": "How much, in dollars" });
   const quick = [10, 25, 100].map((n) => el("button", { type: "button", class: "quick", text: `$${n}`, onclick: () => { amount.value = String(n); } }));
-  const address = el("input", { id: "fund-address", type: "text", autocomplete: "off", spellcheck: "false", placeholder: "0x…", "aria-label": "Your Polymarket address" });
+  const address = el("input", { id: "fund-address", type: "text", autocomplete: "off", spellcheck: "false", placeholder: "0x…", "aria-label": "Your wallet address" });
   try { address.value = localStorage.getItem("clue.fundAddress") || ""; } catch { /* storage may be blocked */ }
   const isPrivy = user.id && String(user.id).startsWith("privy:");
   const walletBox = el("div", { class: "mywallet", hidden: true });
@@ -798,7 +798,7 @@ async function mountFunding(box) {
         el("div", { class: "rc-top" },
           el("div", null, el("span", { text: "You send" }), el("b", { class: "num", text: dollars(q.pay) }), el("small", { text: `on ${look.name}` })),
           el("div", { class: "rc-mid", "aria-hidden": "true" }),
-          el("div", { class: "rc-get" }, el("span", { text: "You get about" }), el("b", { class: "num", text: dollars(q.receive) }), el("small", { text: "in your Polymarket balance" }))),
+          el("div", { class: "rc-get" }, el("span", { text: "You get about" }), el("b", { class: "num", text: dollars(q.receive) }), el("small", { text: "in your Clue balance" }))),
         el("dl", { class: "rc-list" },
           el("dt", { text: "Worst case you get" }), el("dd", { class: "num", text: dollars(q.minimumReceive) }),
           el("dt", { text: "Fee for moving it" }), el("dd", { class: "num", text: dollars(q.costUsd) }),
@@ -812,7 +812,7 @@ async function mountFunding(box) {
     el("div", { class: "fund-step" }, el("span", { class: "fund-n", text: "1" }), el("b", { text: "Where is your money now?" })), el("div", { class: "chains", role: "group", "aria-label": "Where your money is" }, chips),
     el("div", { class: "fund-step" }, el("span", { class: "fund-n", text: "2" }), el("b", { text: "How much?" })),
     el("div", { class: "amt" }, el("span", { text: "$" }), amount), el("div", { class: "quicks" }, quick),
-    el("div", { class: "fund-step" }, el("span", { class: "fund-n", text: "3" }), el("b", { text: "Your Polymarket address" })),
+    el("div", { class: "fund-step" }, el("span", { class: "fund-n", text: "3" }), el("b", { text: "Your wallet address" })),
     walletBox, address, el("p", { class: "fund-hint", text: "It starts with 0x. This is where the money would arrive." }), emailNote,
     go, out));
 }
@@ -824,7 +824,7 @@ const FLAG_TEXT = {
   moved: (w) => `Market moved ${signed(w.movePoints, " pts")} since you forecast`,
   gap: (w) => `You are ${Math.abs(w.gapPoints)} pts ${w.gapPoints > 0 ? "above" : "below"} the market`,
   "closing-soon": (w) => `Closes in ${Math.max(0, Math.ceil(w.daysToClose))} day${Math.ceil(w.daysToClose) === 1 ? "" : "s"}`,
-  "awaiting-resolution": () => "Closed, waiting for Polymarket to resolve it",
+  "awaiting-resolution": () => "Closed, waiting for the result",
   resolved: (w) => (w.happened ? "Resolved: it happened" : "Resolved: it did not happen"),
 };
 function flagChips(w) {
@@ -894,7 +894,7 @@ function watchCard(d, state) {
   box.append(el("h2", { text: w?.state === "resolved" ? "What happened" : "Since you forecast" }));
   box.append(el("p", {}, "You said ", el("b", { class: "num", text: `${f.probability}%` }), el("span", { class: "muted", text: ` on ${day(f.created_at)}${f.outcome_label ? ` for “${f.outcome_label}”` : ""}.` })));
   if (!w) { box.append(el("p", { class: "muted", text: "No market is connected to this forecast, so there is nothing to compare it with. Connect a market on the Ask page next time to have Clue watch it." })); }
-  else if (!w.reachable) { box.append(el("p", { class: "muted", text: "Clue couldn’t reach Polymarket just now. Your forecast is safe; open this page again in a minute." })); }
+  else if (!w.reachable) { box.append(el("p", { class: "muted", text: "Clue couldn’t reach the market just now. Your forecast is safe; open this page again in a minute." })); }
   else {
     box.append(el("p", { class: "muted", text: `Market then ${pts(w.marketAtForecast)}, now ${pts(w.marketNow)}${w.movePoints != null ? ` (${signed(w.movePoints, " pts")})` : ""}.${w.marketAtForecast == null ? " The market’s price wasn’t recorded when this was saved." : ""}` }));
     const chips = flagChips(w); if (chips.length) box.append(el("div", { class: "jchips" }, chips));

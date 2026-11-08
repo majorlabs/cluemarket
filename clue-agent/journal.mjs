@@ -30,7 +30,7 @@ export async function liveMarket(id, now = Date.now()) {
 export async function marketRecord(id) {
   if (!validMarketId(String(id))) throw Object.assign(new Error('That is not a valid market.'), { status: 400 });
   const m = await liveMarket(String(id));
-  if (!m || !m.question) throw Object.assign(new Error('Could not load that market from Polymarket. Try again in a moment.'), { status: 502 });
+  if (!m || !m.question) throw Object.assign(new Error('Could not load that market. Try again in a moment.'), { status: 502 });
   const outcomes = m.outcomes.length ? m.outcomes.map(String) : ['Yes', 'No'];
   return { id: String(id), question: String(m.question).slice(0, 1000), rules: m.rules ? m.rules.slice(0, 8000) : null, outcomes, endDate: m.endDate, eventSlug: m.eventSlug, sourceUrl: m.eventSlug ? `https://polymarket.com/event/${encodeURIComponent(m.eventSlug)}` : null };
 }
