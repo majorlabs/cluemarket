@@ -56,3 +56,7 @@ Not covered: the web search tool may have a cost beyond tokens; check the first 
 ## Privy sign-in was rejecting every real login (8 Nov)
 
 Found by signing in on the live site with a real email code. Privy returns its public key as one line with no line breaks; Node cannot read that form, so every Privy token failed with "Sign-in could not be verified". The earlier test used a locally generated key that had line breaks, which is why it passed. Fixed by rebuilding the standard layout before use (`normalizePem` in `privy-auth.mjs`), with a test using the key in Privy's one-line form. Verified against a real token from a real sign-in and Privy's real key. Text that is not a key is still refused.
+
+## Wallets for email sign-ins (8 Nov)
+
+Privy is now asked to create an Ethereum wallet for people who sign in without one (`createOnLogin: 'users-without-wallets'`); anyone who already has a wallet is left alone. The "Add money" panel shows the address from `GET /api/privy/wallet`, which asks Privy's API (with the app secret, on the server) which wallet belongs to the signed-in account. The browser never supplies the address, NEAR-wallet accounts are never looked up, and only a plain 0x Ethereum address is returned. The wallet belongs to the user (Privy's non-custodial user wallets); Clue holds no keys. Tests: `tests/privy-wallet.test.mjs`. Not verified until live: whether the Privy dashboard's own embedded-wallet setting (currently reported as off, mode `user-controlled-server-wallets-only`) allows creation; this needs a real sign-in on the live site.

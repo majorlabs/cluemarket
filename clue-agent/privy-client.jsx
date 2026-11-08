@@ -49,7 +49,8 @@ export function mount(appId) {
       config={{
         loginMethods: ['email', 'wallet'],
         appearance: { theme: 'dark', accentColor: '#ff6a2d', logo: '/assets/clue-mark-on-dark.svg', showWalletLoginFirst: false },
-        embeddedWallets: { ethereum: { createOnLogin: 'off' } },
+        // People who sign in with just an email get a wallet made for them. Anyone who already has one is left alone.
+        embeddedWallets: { ethereum: { createOnLogin: 'users-without-wallets' } },
       }}
     >
       <Bridge />

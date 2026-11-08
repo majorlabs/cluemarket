@@ -4,7 +4,7 @@ import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { toNodeHandler, fromNodeHeaders } from 'better-auth/node';
 import { auth, store } from './auth.mjs';
 import {initWalletAuth,walletSession,walletRoute} from './wallet-auth.mjs';
-import {privyRoute} from './privy-auth.mjs';
+import {privyRoute,privyWalletRoute} from './privy-auth.mjs';
 import {allowedOrigins,checkOrigin} from './origins.mjs';
 import {cleanAnswer} from './answer-links.mjs';
 import {HourlyBudget} from './budget.mjs';
@@ -54,6 +54,7 @@ const app=http.createServer(async(req,res)=>{ try {
  if (!allowedHosts.includes(req.headers.host)) return json(res,403,{error:'Invalid host'});
  const requestOrigin=hosted ? (checkOrigin(req.headers.origin,publicOrigins) || publicOrigin) : `http://${req.headers.host}`;
  if (req.method!=='GET' && req.method!=='HEAD' && (hosted ? !checkOrigin(req.headers.origin,publicOrigins) : req.headers.origin !== requestOrigin)) return json(res,403,{error:'Invalid origin'});
+ if(req.method==='GET' && url.pathname==='/api/privy/wallet'){const session=await walletSession(req);if(!session?.user?.id)return json(res,401,{error:'Sign in to see your wallet.'});return json(res,200,await privyWalletRoute(session.user.id));}
  if(url.pathname.startsWith('/api/privy/'))return json(res,200,await privyRoute(req,res,url.pathname,req.method==='POST'?await getBody(req):{},requestOrigin));
  if(url.pathname.startsWith('/api/wallet/'))return json(res,200,await walletRoute(req,res,url.pathname,req.method==='POST'?await getBody(req):{},requestOrigin));
  if(url.pathname.startsWith('/api/auth/'))return json(res,410,{error:'Use your NEAR wallet to connect.'});
