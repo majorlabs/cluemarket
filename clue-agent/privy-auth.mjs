@@ -7,6 +7,15 @@ import { startSession } from './wallet-auth.mjs';
 
 const b64 = (s) => Buffer.from(s.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
 
+// Privy returns its public key as ONE line ("-----BEGIN PUBLIC KEY-----MFkw...-----END PUBLIC KEY-----"), with no line breaks.
+// Node cannot read that, so rebuild the standard layout. A key that already has line breaks passes through unchanged in meaning.
+export function normalizePem(pem) {
+  if (!String(pem).includes('-----BEGIN PUBLIC KEY-----')) return pem;
+  const body = String(pem).replace(/-----BEGIN PUBLIC KEY-----|-----END PUBLIC KEY-----|\s+/g, '');
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(body)) return pem;
+  return '-----BEGIN PUBLIC KEY-----\n' + body.match(/.{1,64}/g).join('\n') + '\n-----END PUBLIC KEY-----\n';
+}
+
 // Pure function so it can be tested with a locally generated key.
 export function verifyPrivyToken(token, { appId, publicKeyPem, now = Date.now() }) {
   if (typeof token !== 'string' || token.length > 8192) throw fail('Invalid sign-in token.');
@@ -17,7 +26,7 @@ export function verifyPrivyToken(token, { appId, publicKeyPem, now = Date.now() 
   if (header.alg !== 'ES256') throw fail('Unsupported token type.');
   const sig = b64(parts[2]);
   let ok = false;
-  try { ok = sig.length === 64 && createVerify('SHA256').update(parts[0] + '.' + parts[1]).verify({ key: createPublicKey(publicKeyPem), dsaEncoding: 'ieee-p1363' }, sig); } catch { ok = false; }
+  try { ok = sig.length === 64 && createVerify('SHA256').update(parts[0] + '.' + parts[1]).verify({ key: createPublicKey(normalizePem(publicKeyPem)), dsaEncoding: 'ieee-p1363' }, sig); } catch { ok = false; }
   if (!ok) throw fail('Sign-in could not be verified.');
   if (claims.iss !== 'privy.io' || claims.aud !== appId) throw fail('Sign-in was issued for a different app.');
   if (typeof claims.exp !== 'number' || claims.exp * 1000 <= now) throw fail('Sign-in expired. Try again.');
