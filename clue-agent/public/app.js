@@ -303,7 +303,9 @@ async function eventView(slug, marketId, stale) {
   const stage = el("div", { id: "stage" });
   const workspaceBox = el("section", { class: "card" });
   const ticketBox = el("section", { class: "card ticket", "aria-label": "Trade ticket" });
-  const rightCol = el("aside", { class: "rightcol" }, ticketBox, workspaceBox);
+  const fundBox = el("section", { class: "card pad fund", "aria-label": "Fund your Polymarket account" });
+  mountFunding(fundBox);
+  const rightCol = el("aside", { class: "rightcol" }, ticketBox, fundBox, workspaceBox);
   const left = el("div", null, stage);
 
   const header = el("div", { class: "ev-head" }, thumb(ev),
@@ -704,6 +706,60 @@ async function askView(qs, stale) {
   remount();
 }
 
+
+
+/* ---------- add money: see what moving money into your Polymarket balance would cost (nothing is sent) ---------- */
+const CHAIN_LOOK = { "ethereum-usdc": { name: "Ethereum", color: "#627eea" }, "base-usdc": { name: "Base", color: "#0052ff" }, "optimism-usdc": { name: "Optimism", color: "#ff0420" } };
+async function mountFunding(box) {
+  const title = el("div", { class: "fund-title" }, el("h2", { text: "Add money" }), el("span", { class: "fund-badge", text: "Price check" }));
+  const intro = el("p", { class: "fund-intro", text: "Polymarket is paid for in dollars on the Polygon network. Pick where your money is now and see what it would cost to bring it over." });
+  if (!user) { box.replaceChildren(title, intro, el("button", { class: "btn primary", type: "button", text: "Sign in to check a price", onclick: () => openAccountDialog("Sign in to check what adding money would cost.") })); return; }
+  let options;
+  try { options = await api("/api/fund/options"); } catch { box.replaceChildren(title, el("p", { class: "fund-intro", text: "Prices aren’t available right now. Try again in a minute." })); return; }
+
+  let picked = options.sources[0].id;
+  const chips = options.sources.map((o) => {
+    const look = CHAIN_LOOK[o.id] || { name: o.label, color: "#93a4ad" };
+    const b = el("button", { type: "button", class: "chain", "aria-pressed": String(o.id === picked), onclick: () => { picked = o.id; chips.forEach((c) => c.setAttribute("aria-pressed", String(c === b))); } },
+      el("i", { style: `background:${look.color}` }), look.name);
+    return b;
+  });
+  const amount = el("input", { id: "fund-amount", type: "text", inputmode: "decimal", autocomplete: "off", value: "25", "aria-label": "How much, in dollars" });
+  const quick = [10, 25, 100].map((n) => el("button", { type: "button", class: "quick", text: `$${n}`, onclick: () => { amount.value = String(n); } }));
+  const address = el("input", { id: "fund-address", type: "text", autocomplete: "off", spellcheck: "false", placeholder: "0x…", "aria-label": "Your Polymarket address" });
+  try { address.value = localStorage.getItem("clue.fundAddress") || ""; } catch { /* storage may be blocked */ }
+  const emailNote = user.id && !String(user.id).startsWith("near:")
+    ? el("p", { class: "fund-hint", text: "You signed in with email, so you don’t have a wallet in Clue yet. A built-in wallet is the next thing we’re adding. For now, paste the address of a wallet you own." }) : null;
+  const out = el("div", { class: "fund-out", role: "status", "aria-live": "polite" });
+  const go = el("button", { class: "btn primary fund-go", type: "button", text: "See what I’d get", onclick: async () => {
+    go.disabled = true; out.replaceChildren(el("p", { class: "fund-wait", text: "Checking the best way to move your money…" }));
+    try {
+      try { localStorage.setItem("clue.fundAddress", address.value.trim()); } catch { /* ignore */ }
+      const q = await api(`/api/fund/quote?${new URLSearchParams({ source: picked, amount: amount.value.trim(), address: address.value.trim() })}`);
+      const dollars = (n) => `$${n.toFixed(n < 1 ? 3 : 2)}`;
+      const look = CHAIN_LOOK[q.source.id] || { name: q.source.label };
+      out.replaceChildren(el("div", { class: "receipt" },
+        el("div", { class: "rc-top" },
+          el("div", null, el("span", { text: "You send" }), el("b", { class: "num", text: dollars(q.pay) }), el("small", { text: `on ${look.name}` })),
+          el("div", { class: "rc-mid", "aria-hidden": "true" }),
+          el("div", { class: "rc-get" }, el("span", { text: "You get about" }), el("b", { class: "num", text: dollars(q.receive) }), el("small", { text: "in your Polymarket balance" }))),
+        el("dl", { class: "rc-list" },
+          el("dt", { text: "Worst case you get" }), el("dd", { class: "num", text: dollars(q.minimumReceive) }),
+          el("dt", { text: "Fee for moving it" }), el("dd", { class: "num", text: dollars(q.costUsd) }),
+          q.networkFeeUsd != null ? el("dt", { text: "Network fee" }) : null, q.networkFeeUsd != null ? el("dd", { class: "num", text: `about ${dollars(q.networkFeeUsd)}, paid in ${q.networkFeeToken}` }) : null,
+          q.seconds != null ? el("dt", { text: "Takes" }) : null, q.seconds != null ? el("dd", { class: "num", text: `about ${q.seconds} seconds` }) : null),
+        el("p", { class: "fund-foot", text: "This is a price check only. Nothing has been sent and your money hasn’t moved. Sending is the next thing we’re adding." })));
+    } catch (e) { out.replaceChildren(el("p", { class: "status err", text: e.message })); }
+    finally { go.disabled = false; }
+  } });
+  box.replaceChildren(...kids(title, intro,
+    el("div", { class: "fund-step" }, el("span", { class: "fund-n", text: "1" }), el("b", { text: "Where is your money now?" })), el("div", { class: "chains", role: "group", "aria-label": "Where your money is" }, chips),
+    el("div", { class: "fund-step" }, el("span", { class: "fund-n", text: "2" }), el("b", { text: "How much?" })),
+    el("div", { class: "amt" }, el("span", { text: "$" }), amount), el("div", { class: "quicks" }, quick),
+    el("div", { class: "fund-step" }, el("span", { class: "fund-n", text: "3" }), el("b", { text: "Your Polymarket address" })),
+    address, el("p", { class: "fund-hint", text: "It starts with 0x. This is where the money would arrive." }), emailNote,
+    go, out));
+}
 
 /* ---------- journal: the memory loop ---------- */
 const signed = (n, unit = "") => `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n)}${unit}`;

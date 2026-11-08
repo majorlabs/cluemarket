@@ -46,6 +46,7 @@ Clue shows live Polymarket data and previews trades against the real order book.
 | **See NEAR staking** | A read-only card with rNEAR (Rhea Finance) rates from NEAR mainnet. NEAR wallet users also see their own rNEAR balance. |
 | **Revisit and share** | Saved research and forecasts live under **Journal**. Export a thread, delete it, or publish a snapshot of the research alone (never your private forecast). |
 | **Free research, capped** | Each account gets 2 free researches a day on NEAR AI's cheapest model, and all free research together stops at a daily dollar cap (default $0.25), so it cannot drain the account that pays for it. |
+| **Funding prices** | On a market page, see what it would cost to bring USDC from Ethereum, Base or Optimism into pUSD on Polygon, the money Polymarket trades with. Prices come from Rhea's cross-chain API. Quote only: nothing is sent yet. |
 | **Memory loop** | Each forecast records the market's price at that moment (read by the server, not the browser) and which outcome you meant. The **Journal** compares it with the market every time you open it: price moves, gaps, closing dates, and resolution. When a market resolves, Clue scores your forecast against the market's price at the time and asks what you learned. It will not claim you are good or bad until at least 5 forecasts have resolved. |
 | **Sign in your way** | A NEAR wallet (a signed message, no transaction) or Privy (email or an Ethereum wallet). |
 
