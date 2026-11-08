@@ -30,11 +30,13 @@
     "zod": "4.5.4"
   },
   "devDependencies": {
+    "@polymarket/client": "^0.17.0",
     "@privy-io/react-auth": "^3.51.3",
     "@types/node": "24.x",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "viem": "^2.57.16"
   },
   "engines": {
     "node": "24.x"
