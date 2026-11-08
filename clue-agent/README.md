@@ -1,4 +1,4 @@
-# clue-agent
+# Clue app
 
 The Clue Markets app: a plain-JavaScript front end (`public/`) served by one Node server (`server.mjs`). The product overview, status and screenshots are in the [root README](../README.md).
 
@@ -7,7 +7,7 @@ The Clue Markets app: a plain-JavaScript front end (`public/`) served by one Nod
 ```sh
 npm install
 npm run preview        # http://127.0.0.1:3000 (loopback only)
-node --test tests/*.mjs
+npm test
 ```
 
 Run the tests from this folder: one of them starts `server.mjs` by relative path. The live red-team test (`tests/redteam.live.test.mjs`) runs only when `NEARAI_API_KEY` is set and spends a little NEAR AI credit.
@@ -26,7 +26,6 @@ Run the tests from this folder: one of them starts `server.mjs` by relative path
 | `public/` | The site: `app.js`, `ticket.js` (trade preview maths), `style.css`, assets, fonts |
 | `privy-client.jsx`, `trading-client.js` | Sources of `public/privy.js` and `public/trading.js`. Rebuild with `npm run build:privy` and `npm run build:trading` |
 | `tests/` | Node tests (`node:test`) |
-| `agent/` | An early, unused eve agent scaffold. Do not deploy it without adding authentication and reviewing its tools |
 
 ## Deploy
 

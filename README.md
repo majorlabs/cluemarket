@@ -14,14 +14,12 @@
   <a href="#try-it-in-five-minutes">Try it</a> ·
   <a href="#quick-start">Run it yourself</a> ·
   <a href="docs/TRADING_PLAN.md">Trading plan</a> ·
-  <a href="docs/SECURITY_REVIEW.md">Security</a> ·
-  <a href="docs/ROADMAP.md">Roadmap</a>
+  <a href="docs/SECURITY_REVIEW.md">Security</a>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
   <a href="https://near.org"><img src="https://img.shields.io/badge/built%20on-NEAR-000000.svg" alt="Built on NEAR"></a>
-  <a href="https://nearhackathon.com"><img src="https://img.shields.io/badge/NEAR%20Hackathon-2026-orange.svg" alt="NEAR Hackathon 2026"></a>
 </p>
 
 <p align="center"><img src="docs/images/home.png" alt="The Clue Markets home page: an ask box and the most traded markets" width="880"></p>
@@ -168,23 +166,33 @@ Trading setup and orders go from the user's own browser straight to the venue, s
 
 Node.js, plain JavaScript front end, `better-auth` with SQLite or Postgres (`better-sqlite3`, `pg`), `@near-js/crypto`, `@hot-labs/near-connect` (NEAR wallet), `@privy-io/react-auth` (loaded only when email sign-in is chosen), `@polymarket/client` and `viem` (loaded only when someone sets up trading), `esbuild`, React 19 (the Privy window only), Geist and Geist Mono fonts (SIL Open Font License). Market data: public market APIs. Photo on the cover image: NASA, Apollo 17 (public domain).
 
-Much of the code was written with AI coding assistants (Claude Code and Codex) and reviewed and tested by the team, as the NEAR Hackathon rules allow. The product work began on 5 November 2026, inside the hackathon window.
-
 ## Security
 
 Private research is isolated per account, and a test proves it by trying to read, publish and delete another account's data. Saving and sharing research is limited to answers the server itself produced; links that did not come from the web search are removed; market text comes from the market, not the browser; the site cannot be framed by other sites; every state-changing request needs an approved origin; research has per-person and overall limits and a daily spending cap; and emails are never shown or sent back to the browser. The review used a model with its refusals removed (on NEAR AI Cloud) to attack Clue's own research pipeline, and each confirmed issue was fixed with a test. Read [docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md), including what is still open.
 
-## Documentation
+## Repository layout
 
-| | |
-| --- | --- |
-| [Product and build brief](docs/PRODUCT_AND_BUILD_BRIEF.md) | The vision, journeys, trust boundaries and build gates |
-| [Roadmap](docs/ROADMAP.md) | The build order and acceptance criteria |
-| [Trading plan](docs/TRADING_PLAN.md) | How trading will work, in phases, and what each phase needs |
-| [Research agents](docs/RESEARCH_AGENTS.md) | How research is meant to work and its boundaries |
-| [Security review](docs/SECURITY_REVIEW.md) | Findings, fixes and what remains open |
-| [Integration findings](docs/INITIAL_INTEGRATION_FINDINGS.md) | Early notes on the market venue, NEAR AI and NEAR Intents |
-| [Contributor rules](AGENTS.md) | The rules the project follows |
+```
+.
+├── clue-agent/            the app: server, website and tests
+│   ├── server.mjs         HTTP server and all /api routes
+│   ├── public/            the website (HTML, JavaScript, CSS, fonts)
+│   ├── tests/             automated tests
+│   └── *.mjs              server modules (sign-in, journal, research limits, ...)
+├── docs/
+│   ├── SECURITY_REVIEW.md what was attacked, what was fixed, what is open
+│   ├── TRADING_PLAN.md    how trading works and what is built
+│   └── images/            screenshots used in this README
+├── CONTRIBUTING.md
+├── SECURITY.md
+└── LICENSE
+```
+
+The app's own README, with a file-by-file table, is in [clue-agent/README.md](clue-agent/README.md).
+
+## Contributing and security
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. To report a vulnerability, follow [SECURITY.md](SECURITY.md); please do not open a public issue for one.
 
 ## Limitations
 

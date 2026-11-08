@@ -31,6 +31,6 @@ A phase is not called working until it has run end to end with real data. Phase 
 3. **A small funded test wallet** and permission to test with it.
 4. **Legal advice** on offering trading from the countries where Clue will be used.
 
-## Rules that stay in force (see AGENTS.md)
+## Rules that stay in force
 
 Never store private keys. Require explicit approval for every order. Never bypass location or account limits. Report partial fills and errors accurately. Do not claim a feature works until it has been run.
