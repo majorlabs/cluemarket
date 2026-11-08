@@ -21,7 +21,7 @@ const publicOrigin=hosted ? new URL(process.env.BETTER_AUTH_URL).origin : `http:
 const publicOrigins=hosted ? allowedOrigins(publicOrigin) : [];
 const allowedHosts=hosted ? [...publicOrigins.map(o=>new URL(o).host),process.env.CLUE_SERVICE_HOST].filter(Boolean) : ['127.0.0.1:'+port,'localhost:'+port];
 if(hosted && (!publicOrigin.startsWith('https://') || !process.env.CLUE_SERVICE_HOST || !process.env.CLUE_SIGNUP_TOKEN || process.env.CLUE_SIGNUP_TOKEN.length < 32)) throw new Error('Hosted preview requires HTTPS, CLUE_SERVICE_HOST and a strong CLUE_SIGNUP_TOKEN.');
-const signUser=new HourlyBudget(300);
+const signUser=new HourlyBudget(1200);
 const fundUser=new HourlyBudget(30);
 const fundGlobal=new HourlyBudget(300);
 const researchGlobal=new HourlyBudget(Math.max(1,Number(process.env.CLUE_RESEARCH_GLOBAL_PER_HOUR)||60));
@@ -83,7 +83,7 @@ const app=http.createServer(async(req,res)=>{ try {
   const b=await getBody(req);
   const mine=await privyWalletRoute(session.user.id);
   const check=checkSignRequest(b,mine.wallet?.address);
-  if(!check.ok) return json(res,check.status,{error:check.error});
+  if(!check.ok){ console.log('pm-sign refused',check.status,String(b&&b.method).slice(0,8),String(b&&b.path).slice(0,80)); return json(res,check.status,{error:check.error}); }
   if(!signUser.take(session.user.id)) return json(res,429,{error:'Too many requests. Try again in a little while.'});
   const key=process.env.POLYMARKET_BUILDER_API_KEY,secret=process.env.POLYMARKET_BUILDER_SECRET,passphrase=process.env.POLYMARKET_BUILDER_PASSPHRASE;
   if(!key||!secret||!passphrase) return json(res,503,{error:'Trading is not switched on yet.'});

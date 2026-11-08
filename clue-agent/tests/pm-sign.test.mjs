@@ -27,15 +27,27 @@ test("the headers are exactly what Polymarket's own package produces", async () 
   } finally { Date.now = realNow; }
 });
 
-test('only the four relayer requests Clue needs can be signed', () => {
+test('only the requests trading needs can be signed; anything that manages our builder account cannot', () => {
   const ok = (m, p, b) => checkSignRequest({ method: m, path: p, body: b }, ME).ok;
   const post = JSON.stringify({ from: ME });
+  // relayer: creating the trading wallet and setting permissions
   assert.ok(ok('GET', '/deployed?address=0xabc&type=WALLET'));
+  assert.ok(ok('GET', '/deployed'));                                              // the package also signs it with no query string
+  assert.ok(ok('GET', '/v1/account/transactions/params'));
   assert.ok(ok('GET', '/v1/account/transactions/params?address=0xabc&type=WALLET'));
   assert.ok(ok('GET', '/v1/account/transactions/0190a7c2-1111-7000-8000-abcdef012345'));
   assert.ok(ok('POST', '/submit', post));
-  for (const [m, p] of [['GET', '/'], ['GET', '/submit'], ['POST', '/deployed?address=0xabc'], ['POST', '/v1/session-signers/authorizations'], ['POST', '/v1/session-signers/revocations'],
-    ['GET', '/v1/account/transactions/../../admin'], ['GET', '/deployed?address=0xabc#frag'], ['GET', '/deployed?address=<script>'], ['DELETE', '/submit'], ['POST', '/submit/'], ['POST', '/Submit']])
+  // order server: sign-in and orders
+  assert.ok(ok('POST', '/auth/api-key'));
+  assert.ok(ok('GET', '/auth/derive-api-key'));
+  for (const [m, p] of [['POST', '/order'], ['POST', '/orders'], ['DELETE', '/order'], ['DELETE', '/orders'], ['DELETE', '/cancel-all'], ['DELETE', '/cancel-market-orders'],
+    ['GET', '/data/orders'], ['GET', '/data/trades?market=0xabc'], ['GET', '/balance-allowance?asset_type=COLLATERAL&signature_type=3'], ['GET', '/balance-allowance/update?asset_type=COLLATERAL']])
+    assert.ok(ok(m, p, m === 'GET' ? undefined : '{}'), `${m} ${p} should be signed`);
+  // never: managing our builder account, listing or creating builder keys, session signers, or anything off the list
+  for (const [m, p] of [['POST', '/auth/builder-api-key'], ['GET', '/auth/builder-api-key'], ['DELETE', '/auth/builder-api-key'], ['GET', '/auth/api-keys'], ['DELETE', '/auth/api-key'],
+    ['GET', '/'], ['GET', '/submit'], ['POST', '/deployed?address=0xabc'], ['POST', '/v1/session-signers/authorizations'], ['POST', '/v1/session-signers/revocations'],
+    ['GET', '/v1/account/transactions/../../admin'], ['GET', '/deployed?address=0xabc#frag'], ['GET', '/deployed?address=<script>'], ['PUT', '/submit'], ['POST', '/submit/'], ['POST', '/Submit'],
+    ['GET', '/builder/trades'], ['POST', '/order/../auth/builder-api-key'], ['DELETE', '/auth/builder-api-key/abc']])
     assert.ok(!ok(m, p, post), `${m} ${p} should not be signed`);
 });
 

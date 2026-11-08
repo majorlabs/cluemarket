@@ -59,3 +59,15 @@ test('server: sign-in required; a NEAR user gets no wallet lookup', async () => 
   assert.equal(r.status, 200);
   assert.deepEqual(await r.json(), { wallet: null, reason: 'not-privy' });
 });
+
+test('an email is never sent back to the browser, even if one was stored as the account name', async () => {
+  const cookie = signup('privy:did:privy:cmemail1', 'private.person@example.com');       // an older session that stored the email as its name
+  const r = await fetch(base + '/api/wallet/session', { headers: { Cookie: cookie } });
+  const text = await r.text();
+  assert.equal(r.status, 200);
+  assert.ok(!/@|example\.com|private\.person/.test(text), text);
+  assert.equal(JSON.parse(text).user.name, 'Account');
+  // NEAR accounts are public by nature, so their account name is still shown
+  const near = signup('near:zoe.near', 'zoe.near');
+  assert.equal((await (await fetch(base + '/api/wallet/session', { headers: { Cookie: near } })).json()).user.name, 'zoe.near');
+});
