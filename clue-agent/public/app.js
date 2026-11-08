@@ -31,6 +31,7 @@ function el(tag, attrs, ...kids) {
   for (const kid of kids.flat()) if (kid != null && kid !== false) n.append(kid.nodeType ? kid : document.createTextNode(kid));
   return n;
 }
+const kids = (...a) => a.flat().filter((x) => x != null && x !== false);
 const pct = (p, d = 0) => (p == null || !Number.isFinite(Number(p)) ? "—" : `${(Number(p) * 100).toFixed(Number(p) > 0 && Number(p) < 0.01 ? 1 : d)}%`);
 const money = (n) => (!n ? "$0" : n >= 1e9 ? `$${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${Math.round(n / 1e3)}K` : `$${Math.round(n)}`);
 const when = (iso) => (iso ? new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "unavailable");
@@ -51,14 +52,15 @@ function thumb(m, cls = "") {
   if (src) { const i = el("img", { class: `thumb ${cls}`, src, alt: "", loading: "lazy", width: 44, height: 44 }); i.onerror = () => i.replaceWith(el("div", { class: `thumb ph ${cls}`, text: (m.title || m.question || "?")[0] })); return i; }
   return el("div", { class: `thumb ph ${cls}`, text: (m.title || m.question || "?")[0] });
 }
-function linkify(target, text) {
+function linkify(target, text, allowed) {
+  const ok = allowed ? new Set(allowed.map((u) => { try { const x = new URL(u); return (x.origin + x.pathname.replace(/\/+$/, '')).toLowerCase(); } catch { return ''; } })) : null;
   target.replaceChildren();
   let last = 0;
   for (const m of text.matchAll(/https?:\/\/[^\s<>)\]"']+/g)) {
     target.append(text.slice(last, m.index));
     let v = m[0], tail = "";
     while (/[.,;:]$/.test(v)) { tail = v.slice(-1) + tail; v = v.slice(0, -1); }
-    try { const u = new URL(v); target.append(el("a", { href: u.href, target: "_blank", rel: "noopener noreferrer", text: v })); } catch { target.append(v); }
+    try { const u = new URL(v); const k = (u.origin + u.pathname.replace(/\/+$/, '')).toLowerCase(); if (ok && !ok.has(k)) target.append(v); else target.append(el("a", { href: u.href, target: "_blank", rel: "noopener noreferrer", text: v })); } catch { target.append(v); }
     target.append(tail);
     last = m.index + m[0].length;
   }
@@ -327,14 +329,14 @@ async function eventView(slug, marketId, stale) {
       hidden = list.length - head.length;
       list = head;
     }
-    optsBox.replaceChildren(...list.map((m) => {
+    optsBox.replaceChildren(...kids(list.map((m) => {
       const p = Number(m.outcomePrices[0]);
       return el("button", { class: "opt", type: "button", "aria-pressed": String(m.id === sel.id), onclick: () => { sel = m; outcomeIdx = 0; history.replaceState(null, "", `#/event/${encodeURIComponent(slug)}?m=${m.id}`); renderAll(); } },
         el("span", { class: "name", text: m.groupItemTitle || m.question }),
         el("span", { class: "val", text: pct(p) }),
         el("small", { text: `${money(m.volume)} volume` }),
         el("div", { class: "bar", "aria-hidden": "true" }, el("i", { style: `width:${Math.max(1, Math.min(100, p * 100))}%` })));
-    }), hidden > 0 || showAllOpts ? el("button", { class: "opts-more", type: "button", text: showAllOpts ? "Show fewer" : `Show all ${Math.min(open.length, 40)} questions`, onclick: () => { showAllOpts = !showAllOpts; renderOptions(); } }) : null);
+    }), hidden > 0 || showAllOpts ? el("button", { class: "opts-more", type: "button", text: showAllOpts ? "Show fewer" : `Show all ${Math.min(open.length, 40)} questions`, onclick: () => { showAllOpts = !showAllOpts; renderOptions(); } }) : null));
   }
 
   function renderStage() {
@@ -381,7 +383,7 @@ async function eventView(slug, marketId, stale) {
     const rules = sel.rules || ev.description;
     const text = el("div", { class: "rules" });
     linkify(text, rules || "Polymarket published no resolution text for this market.");
-    box.append(
+    box.append(...kids(
       el("p", { class: "muted small", style: "margin-bottom:10px", text: "This is the venue’s own wording. It decides how the market settles. Nothing on Clue overrides it." }),
       text,
       rules && rules.length > 700 ? el("button", { class: "btn small ghost", type: "button", text: "Show all", onclick: (e) => { text.classList.toggle("open"); e.target.textContent = text.classList.contains("open") ? "Show less" : "Show all"; } }) : null,
@@ -389,7 +391,7 @@ async function eventView(slug, marketId, stale) {
         fact("Resolution source", sel.resolutionSource || ev.resolutionSource || "Not stated"),
         fact("Resolution status", sel.resolutionStatus || "Not resolved yet"),
         fact("Market closes", when(sel.endDate)),
-        fact("Market ID", sel.conditionId || "unavailable")));
+        fact("Market ID", sel.conditionId || "unavailable"))));
   }
   const fact = (k, v) => el("div", null, el("dt", { text: k }), el("dd", { text: v }));
 
@@ -399,6 +401,7 @@ async function eventView(slug, marketId, stale) {
     try {
       const b = await api(`/api/book?token=${encodeURIComponent(token)}`);
       if (!box.isConnected) return;
+      if (b.available === false) { box.replaceChildren(el("p", { class: "muted", text: "Polymarket has no order book for this outcome right now. Nobody can buy or sell it at the moment." })); return; }
       const max = Math.max(1, ...b.bids.map((x) => x.size), ...b.asks.map((x) => x.size));
       const col = (title, rows, cls) => el("div", null, el("h3", { text: title }), rows.length ? rows.slice(0, 6).map((l) =>
         el("div", { class: `lvl ${cls}` }, el("i", { style: `width:${(l.size / max) * 100}%` }), el("span", { text: pct(l.price, 1) }), el("span", { text: `${Math.round(l.size).toLocaleString()} shares` }))) : el("p", { class: "muted small", text: "No orders" }));
@@ -452,6 +455,7 @@ async function mountTicket(box, ctx) {
   function drawPreview() {
     if (bookErr) { preview.replaceChildren(el("p", { class: "status err", text: bookErr })); return; }
     if (!book) { preview.replaceChildren(el("p", { class: "muted small", text: "Loading the live order book…" })); return; }
+    if (book.available === false) { preview.replaceChildren(el("p", { class: "tk-warn block", text: "This outcome has no order book on Polymarket right now, so it can't be traded. Pick another question above." })); return; }
     const r = T.previewBuy({
       mode, asks: book.asks, bestBid: book.bids[0]?.price ?? null,
       spend: Number(spend.value), shares: Number(shares.value), limitPrice: Number(limitPrice.value) / 100,
@@ -480,12 +484,12 @@ async function mountTicket(box, ctx) {
     const loc = geo.state === "ok" ? item("ok", "Location", "can place orders")
       : geo.state === "blocked" ? item("bad", "Location", `Polymarket doesn't allow new orders from ${[geo.region, geo.country].filter(Boolean).join(", ") || "your location"}`)
       : item("todo", "Location", "couldn't be checked, so trading stays off");
-    geoBox.replaceChildren(
+    geoBox.replaceChildren(...kids(
       el("ul", { class: "checklist" }, loc,
         item("todo", "Wallet", "connect an Ethereum wallet · coming next"),
         item("todo", "Polymarket account", "created for you on first trade · coming next"),
         item("todo", "Funds", "pUSD on Polygon · coming next")),
-      geo.state === "blocked" ? el("p", { class: "muted small", style: "margin-top:8px", text: "You can still research, forecast and preview. Clue doesn't help get around location limits." }) : null);
+      geo.state === "blocked" ? el("p", { class: "muted small", style: "margin-top:8px", text: "You can still research, forecast and preview. Clue doesn't help get around location limits." }) : null));
   }
 
   function draw() { drawFields(); drawPreview(); }
@@ -597,7 +601,7 @@ function mountWorkspace(container, ctx) {
 
   function showReport(r) {
     const text = el("div", { class: "report-text clamp" });
-    linkify(text, r.content);
+    linkify(text, r.content, r.sources || []);
     const more = el("button", { class: "btn small ghost", type: "button", text: "Read full research", onclick: () => { const c = text.classList.toggle("clamp"); more.textContent = c ? "Read full research" : "Show less"; } });
     reportBox.replaceChildren(
       el("span", { class: "label" }, "AI-generated · check the sources"),
@@ -613,7 +617,7 @@ function mountWorkspace(container, ctx) {
     researchBtn.disabled = true; rStatus.className = "status"; rStatus.textContent = "Searching sources. This can take up to a minute…";
     try {
       const d = await post("/api/research", { question, market: marketRef && marketRef.question ? { question: marketRef.question, rules: marketRef.rules || null } : null });
-      state.report = { question, market: marketRef, content: d.content, sources: d.sources, model: d.model, retrievedAt: d.retrievedAt };
+      state.report = { question, market: marketRef, content: d.content, sources: d.sources, model: d.model, retrievedAt: d.retrievedAt, researchId: d.researchId };
       showReport(state.report); markDone();
       rStatus.className = "status ok"; rStatus.textContent = "Research complete. Save it with your forecast below.";
       if (state.threadId) { try { await ensureThread(true); } catch { /* user can save manually */ } }
@@ -623,14 +627,10 @@ function mountWorkspace(container, ctx) {
 
   async function ensureThread(newRevision = false) {
     const r = state.report;
-    const body = {
-      threadId: state.threadId || undefined,
-      question: (r?.question || q.value.trim() || defaultQ).slice(0, 2000),
-      content: r?.content || "Started from a forecast. No research has been run yet.",
-      sources: r?.sources || [], model: r?.model || "none", retrievedAt: r?.retrievedAt || new Date().toISOString(),
-      market: marketRef || null,
-    };
-    if (body.question.length < 5) throw new Error("Write your question first (at least 5 characters).");
+    const body = r?.researchId
+      ? { threadId: state.threadId || undefined, researchId: r.researchId }
+      : { threadId: state.threadId || undefined, question: (q.value.trim() || defaultQ).slice(0, 2000), content: "Started from a forecast. No research has been run yet.", sources: [], model: "none", market: marketRef || null };
+    if (!body.researchId && body.question.length < 5) throw new Error("Write your question first (at least 5 characters).");
     if (state.threadId && !newRevision) return state.threadId;
     const d = await post("/api/threads", body);
     state.threadId = d.id;
@@ -743,7 +743,7 @@ async function savedThread(id, stale) {
     app.replaceChildren(
       el("a", { class: "crumb", href: "#/saved", text: "← My research" }),
       el("h1", { style: "font-size:26px;letter-spacing:-.03em;margin-bottom:6px", text: d.thread.question }),
-      market && el("p", { class: "muted", text: `Connected market: ${market.question}` }),
+      ...(market ? [el("p", { class: "muted", text: `Connected market: ${market.question}` })] : []),
       actions, msg, shares, el("div", { style: "margin-top:20px", class: "ask-page" }, holder), older);
   } catch (e) { if (!stale()) app.replaceChildren(el("a", { class: "crumb", href: "#/saved", text: "← My research" }), errBox("Couldn’t open this research", e.message, route)); }
 }
@@ -753,7 +753,7 @@ async function sharedView(shareId) {
   setNav("ask");
   try {
     const d = await api(`/api/public/${encodeURIComponent(shareId)}`);
-    const text = el("div", { class: "report-text" }); linkify(text, d.snapshot.content);
+    const text = el("div", { class: "report-text" }); linkify(text, d.snapshot.content, d.snapshot.sources || []);
     app.replaceChildren(el("div", { class: "ask-page" },
       el("p", { class: "muted small", text: `Shared research snapshot · ${when(d.publishedAt)}` }),
       el("h1", { text: d.snapshot.question }),

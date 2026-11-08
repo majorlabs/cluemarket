@@ -40,7 +40,13 @@ const schema = `CREATE TABLE IF NOT EXISTS research_threads (
  id TEXT PRIMARY KEY, thread_id TEXT NOT NULL, probability REAL NOT NULL,
  reasoning TEXT NOT NULL, change_condition TEXT NOT NULL, created_at TEXT NOT NULL,
  FOREIGN KEY(thread_id) REFERENCES research_threads(id) ON DELETE CASCADE
-); CREATE TABLE IF NOT EXISTS public_reports (id TEXT PRIMARY KEY, thread_id TEXT NOT NULL, user_id TEXT NOT NULL, snapshot TEXT NOT NULL, created_at TEXT NOT NULL, FOREIGN KEY(thread_id) REFERENCES research_threads(id) ON DELETE CASCADE, FOREIGN KEY(user_id) REFERENCES "user"(id) ON DELETE CASCADE); CREATE INDEX IF NOT EXISTS public_reports_owner ON public_reports(user_id, thread_id); CREATE INDEX IF NOT EXISTS forecast_thread ON forecast_revisions(thread_id, created_at); CREATE INDEX IF NOT EXISTS research_threads_owner ON research_threads(user_id, updated_at); CREATE INDEX IF NOT EXISTS research_revisions_thread ON research_revisions(thread_id, created_at);`;
+); CREATE TABLE IF NOT EXISTS public_reports (id TEXT PRIMARY KEY, thread_id TEXT NOT NULL, user_id TEXT NOT NULL, snapshot TEXT NOT NULL, created_at TEXT NOT NULL, FOREIGN KEY(thread_id) REFERENCES research_threads(id) ON DELETE CASCADE, FOREIGN KEY(user_id) REFERENCES "user"(id) ON DELETE CASCADE); CREATE INDEX IF NOT EXISTS public_reports_owner ON public_reports(user_id, thread_id); CREATE INDEX IF NOT EXISTS forecast_thread ON forecast_revisions(thread_id, created_at); CREATE INDEX IF NOT EXISTS research_threads_owner ON research_threads(user_id, updated_at); CREATE INDEX IF NOT EXISTS research_revisions_thread ON research_revisions(thread_id, created_at);;
+CREATE TABLE IF NOT EXISTS research_results (
+ id TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at TEXT NOT NULL,
+ question TEXT NOT NULL, content TEXT NOT NULL, sources TEXT NOT NULL,
+ market TEXT, model TEXT NOT NULL, retrieved_at TEXT NOT NULL,
+ FOREIGN KEY(user_id) REFERENCES "user"(id) ON DELETE CASCADE
+)`;
 if (isPostgres) await database.query(schema); else database.exec(schema);
 if (isPostgres) await database.query('ALTER TABLE forecast_revisions ADD COLUMN IF NOT EXISTS market_snapshot TEXT'); else if (!database.prepare('PRAGMA table_info(forecast_revisions)').all().some(x => x.name === 'market_snapshot')) database.exec('ALTER TABLE forecast_revisions ADD COLUMN market_snapshot TEXT');
 for (const column of ['supporting_evidence','opposing_evidence']) { if (isPostgres) await database.query(`ALTER TABLE forecast_revisions ADD COLUMN IF NOT EXISTS ${column} TEXT NOT NULL DEFAULT ''`); else if (!database.prepare('PRAGMA table_info(forecast_revisions)').all().some(x => x.name === column)) database.exec(`ALTER TABLE forecast_revisions ADD COLUMN ${column} TEXT NOT NULL DEFAULT ''`); }
