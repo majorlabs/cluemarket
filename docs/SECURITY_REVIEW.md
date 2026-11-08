@@ -35,7 +35,7 @@ All tests: 22 pass, 1 skipped without a key (the live red team, which passed wit
 - **The hourly overall budget resets on restart** and is per server instance. The free allowance and the daily dollar cap are now stored in the database and do not reset (see below).
 - **No per-IP limit.** Behind Vercel the client IP is hard to trust, so only per-account and overall limits exist.
 - **The live site's other security headers.** Vercel serves the page without a full Content-Security-Policy (only `frame-ancestors`). A full policy needs testing with Privy and the NEAR wallet scripts.
-- **NEAR wallet sign-in with a real wallet app.** The server side is now tested end to end on a real local NEAR chain (`tests/near-sandbox.test.mjs`), but a sign-in through a real wallet app on mainnet has not been recorded.
+- **NEAR wallet sign-in with a real wallet app.** The signature and key checks are tested, but a sign-in through a real wallet app on mainnet has not been recorded.
 - **Trading and funding** are not built yet (preview only), so no money paths exist to attack. They will need their own review before real orders.
 - **Keys in chat.** The Privy secret, the Polymarket builder key and two NEAR AI keys were shared in the build conversation. They are kept only in Railway variables, never in the repo, but they should be rotated.
 
@@ -60,7 +60,3 @@ Found by signing in on the live site with a real email code. Privy returns its p
 ## Wallets for email sign-ins (8 Nov)
 
 Privy is now asked to create an Ethereum wallet for people who sign in without one (`createOnLogin: 'users-without-wallets'`); anyone who already has a wallet is left alone. The "Add money" panel shows the address from `GET /api/privy/wallet`, which asks Privy's API (with the app secret, on the server) which wallet belongs to the signed-in account. The browser never supplies the address, NEAR-wallet accounts are never looked up, and only a plain 0x Ethereum address is returned. The wallet belongs to the user (Privy's non-custodial user wallets); Clue holds no keys. Tests: `tests/privy-wallet.test.mjs`. Not verified until live: whether the Privy dashboard's own embedded-wallet setting (currently reported as off, mode `user-controlled-server-wallets-only`) allows creation; this needs a real sign-in on the live site.
-
-## NEAR wallet sign-in on a local chain (8 Nov)
-
-`tests/near-sandbox.test.mjs` starts a real local NEAR chain (near-kit sandbox), creates accounts and keys on it, and signs in through the real server the way a wallet would. Accepted: the account's full-access key, and a key added later once it is on the chain. Refused: a valid signature from a key the account does not have, a function-call-only key, a missing account, a tampered signature, one account's name with another account's key, and a replayed answer. The key check's address is now configurable (`NEAR_RPC_URL`), defaulting to NEAR mainnet; it is set only by whoever runs the server. The tests skip, with the reason, where the chain cannot start (it asks for a 65,535 open-file limit; some containers cap it lower). The chain finalizes a few blocks behind, so a brand-new key may take a few seconds to be accepted on a real chain too.
