@@ -303,7 +303,9 @@ async function eventView(slug, marketId, stale) {
   const stage = el("div", { id: "stage" });
   const workspaceBox = el("section", { class: "card" });
   const ticketBox = el("section", { class: "card ticket", "aria-label": "Trade ticket" });
-  const rightCol = el("aside", { class: "rightcol" }, ticketBox, workspaceBox);
+  const fundBox = el("section", { class: "card pad fund", "aria-label": "Fund your Polymarket account" });
+  mountFunding(fundBox);
+  const rightCol = el("aside", { class: "rightcol" }, ticketBox, fundBox, workspaceBox);
   const left = el("div", null, stage);
 
   const header = el("div", { class: "ev-head" }, thumb(ev),
@@ -704,6 +706,43 @@ async function askView(qs, stale) {
   remount();
 }
 
+
+
+/* ---------- funding: price a move from another chain into pUSD on Polygon (quote only, nothing is sent) ---------- */
+async function mountFunding(box) {
+  const head = el("h2", { text: "Fund your account" });
+  const intro = el("p", { class: "muted small", text: "Polymarket trades in pUSD on Polygon. See what it would cost to bring money from another chain. This only shows a price. Nothing is sent or signed." });
+  if (!user) { box.replaceChildren(head, intro, el("button", { class: "btn small", type: "button", text: "Sign in to see a price", onclick: () => openAccountDialog("Sign in to see funding prices.") })); return; }
+  let options;
+  try { options = await api("/api/fund/options"); } catch { box.replaceChildren(head, el("p", { class: "muted small", text: "Funding prices are unavailable right now." })); return; }
+  const source = el("select", { id: "fund-source", "aria-label": "Pay from" }, options.sources.map((o) => el("option", { value: o.id, text: o.label })));
+  const amount = el("input", { id: "fund-amount", type: "text", inputmode: "decimal", autocomplete: "off", placeholder: "25", value: "25", "aria-label": "Amount in dollars" });
+  const address = el("input", { id: "fund-address", type: "text", autocomplete: "off", spellcheck: "false", placeholder: "0x… your Polygon address", "aria-label": "Your Polygon address" });
+  try { address.value = localStorage.getItem("clue.fundAddress") || ""; } catch { /* storage may be blocked */ }
+  const out = el("div", { class: "fund-out", role: "status", "aria-live": "polite" });
+  const go = el("button", { class: "btn dark", type: "button", text: "Get a price", onclick: async () => {
+    go.disabled = true; out.replaceChildren(el("p", { class: "muted small", text: "Asking for a price…" }));
+    try {
+      try { localStorage.setItem("clue.fundAddress", address.value.trim()); } catch { /* ignore */ }
+      const q = await api(`/api/fund/quote?${new URLSearchParams({ source: source.value, amount: amount.value.trim(), address: address.value.trim() })}`);
+      const usd = (n) => `$${n.toFixed(n < 1 ? 4 : 2)}`;
+      out.replaceChildren(
+        el("div", { class: "fund-row main" }, el("span", { text: "You receive about" }), el("b", { class: "num", text: `${q.receive.toFixed(2)} pUSD` })),
+        el("div", { class: "fund-row" }, el("span", { text: "Guaranteed at least" }), el("b", { class: "num", text: `${q.minimumReceive.toFixed(2)} pUSD` })),
+        el("div", { class: "fund-row" }, el("span", { text: "Route cost" }), el("b", { class: "num", text: usd(q.costUsd) })),
+        q.networkFeeUsd != null ? el("div", { class: "fund-row" }, el("span", { text: `Network fee (paid in ${q.networkFeeToken})` }), el("b", { class: "num", text: `about ${usd(q.networkFeeUsd)}` })) : null,
+        q.seconds != null ? el("div", { class: "fund-row" }, el("span", { text: "Time" }), el("b", { class: "num", text: `about ${q.seconds}s` })) : null,
+        el("p", { class: "muted small", text: `${q.source.label} to ${q.destination} via ${q.route}. ${q.note}` }));
+    } catch (e) { out.replaceChildren(el("p", { class: "status err", text: e.message })); }
+    finally { go.disabled = false; }
+  } });
+  box.replaceChildren(head, intro,
+    el("label", { class: "field" }, el("span", { text: "Pay from" }), source),
+    el("label", { class: "field" }, el("span", { text: "Amount (USD)" }), amount),
+    el("label", { class: "field" }, el("span", { text: "Your Polygon address" }), address),
+    el("div", { class: "actions" }, go), out,
+    el("p", { class: "muted small", style: "margin-top:10px", text: "Prices come from Rhea’s cross-chain routing, which can use NEAR Intents among other routes. Sending money is not built yet." }));
+}
 
 /* ---------- journal: the memory loop ---------- */
 const signed = (n, unit = "") => `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n)}${unit}`;
