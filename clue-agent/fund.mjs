@@ -22,7 +22,7 @@ export const fromUnits = (units, decimals) => Number(units) / 10 ** decimals;
 export function checkRequest({ source, amount, address }) {
   const src = SOURCES.find(s => s.id === source);
   if (!src) return { error: 'Choose one of the listed sources.' };
-  if (typeof address !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(address)) return { error: 'Enter your Polygon address: 0x followed by 40 letters or numbers.' };
+  if (typeof address !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(address)) return { error: 'Enter your wallet address: 0x followed by 40 letters or numbers.' };
   const units = toUnits(amount, src.decimals);
   if (units === null) return { error: 'Enter an amount like 25 or 25.5.' };
   if (units < BigInt(MIN_USD) * 10n ** BigInt(src.decimals)) return { error: `The smallest amount is $${MIN_USD}.` };
