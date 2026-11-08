@@ -3,7 +3,7 @@
 //
 // Orders and Polymarket requests go from this browser straight to Polymarket, so Polymarket sees the user's real location.
 // The only thing our server does is sign the builder paperwork for the relayer (/api/pm/sign); the builder secret never reaches here.
-import { createSecureClient, remoteBuilderSigning, OrderSide, OrderType } from '@polymarket/client';
+import { createSecureClient, remoteBuilderSigning, forkEnvironmentConfig, production, OrderSide, OrderType } from '@polymarket/client';
 import { fetchBalanceAllowance } from '@polymarket/client/actions';
 import { signerFrom } from '@polymarket/client/viem';
 import { createWalletClient, custom } from 'viem';
@@ -12,11 +12,17 @@ import { polygon } from 'viem/chains';
 const builderSigning = remoteBuilderSigning({ url: '/api/pm/sign', credentials: 'include' });
 const dollars = (units) => Number(BigInt(units || '0')) / 1e6;     // pUSD has 6 decimals
 
-async function openClient() {
+// Polymarket's software reads the chain through one free public server. Its built-in choice refused the permission check
+// (status 400) on a real phone, so we name a server that accepts it, and keep the old one as a backup.
+const RPCS = ['https://polygon-bor-rpc.publicnode.com', 'https://polygon.drpc.org'];
+const chainServerFailed = (e) => /JSON-RPC|status (4|5)\d\d/i.test(String((e && e.message) || e || ''));
+
+async function openClient(rpc = RPCS[0]) {
   const { provider, address } = await window.cluePrivy.provider();
   const walletClient = createWalletClient({ account: address, chain: polygon, transport: custom(provider) });
+  const environment = forkEnvironmentConfig({ name: 'production', rpc }, production);
   // Creating the client signs in to Polymarket and, the first time, creates the user's trading wallet (gasless).
-  return createSecureClient({ signer: signerFrom(walletClient), apiKey: builderSigning });
+  return createSecureClient({ signer: signerFrom(walletClient), apiKey: builderSigning, environment });
 }
 
 const friendly = (e) => {
@@ -39,9 +45,9 @@ window.clueTrading = {
   async setup(onStep = () => {}) {
     let step = 'start';
     const report = (s) => { step = s; onStep(s); };
-    try {
+    const run = async (rpc) => {
       report('wallet');
-      const client = await openClient();
+      const client = await openClient(rpc);
       const account = client.account;
       report('permissions');
       const state = await client.fetchTradingApprovalsState();
@@ -52,6 +58,10 @@ window.clueTrading = {
       report('balance');
       const balance = await fetchBalanceAllowance(client, { assetType: 'COLLATERAL' });
       return { ok: true, signer: account.signer, wallet: account.wallet, approved: true, balance: dollars(balance.balance) };
+    };
+    try {
+      try { return await run(RPCS[0]); }
+      catch (e) { if (!chainServerFailed(e)) throw e; console.warn('chain server failed, trying the backup', e); return await run(RPCS[1]); }
     } catch (e) {
       console.error('trading setup failed at', step, e);
       return { ok: false, error: friendly(e), detail: describe(step, e) };
