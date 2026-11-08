@@ -38,8 +38,12 @@ function Bridge() {
       authenticated: () => ref.current.authenticated,
       // The user's own wallet (the one made for them, else one they connected), as a standard provider that signs.
       async wallet() {
-        const w = ref.current.wallets.find((x) => x.walletClientType === 'privy') || ref.current.wallets[0];
-        if (!w) throw new Error('No wallet found for this account.');
+        // After a page reload Privy restores the sign-in first and connects the wallet a moment later, so wait for it.
+        const pick = () => ref.current.wallets.find((x) => x.walletClientType === 'privy') || ref.current.wallets[0];
+        const end = Date.now() + 15000;
+        while (!pick() && Date.now() < end) await new Promise((r) => setTimeout(r, 200));
+        const w = pick();
+        if (!w) throw new Error('Your wallet is still loading. Wait a few seconds and try again.');
         try { await w.switchChain(137); } catch { /* signing does not depend on it */ }
         return { provider: await w.getEthereumProvider(), address: w.address };
       },
