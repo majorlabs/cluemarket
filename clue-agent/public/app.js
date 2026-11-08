@@ -171,11 +171,16 @@ function accountLabel() {
   if (String(user.id).startsWith("privy:")) return myWallet ? shortName(myWallet.address) : "Account";
   return shortName(user.name || "Account");
 }
+// Signed out: a "Sign in" button. Signed in: just a round profile icon. The address and the sign-out are inside the menu behind it.
+const PROFILE_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>';
 function drawAccountButton() {
   const b = $("account-open");
-  if (!user) { b.replaceChildren("Sign in"); b.title = ""; return; }
-  b.replaceChildren(el("i", { class: "avatar", style: `background:${avatarColor(myWallet ? myWallet.address : user.id)}`, "aria-hidden": "true" }), accountLabel());
-  b.title = "Your account";
+  if (!user) { b.classList.remove("profile-btn"); b.style.background = ""; b.replaceChildren("Sign in"); b.removeAttribute("aria-label"); b.title = ""; return; }
+  b.classList.add("profile-btn");
+  b.style.background = avatarColor(myWallet ? myWallet.address : user.id);
+  const icon = el("span", { class: "profile-icon", "aria-hidden": "true" }); icon.innerHTML = PROFILE_ICON;
+  b.replaceChildren(icon);
+  b.setAttribute("aria-label", "Your account"); b.title = "Your account";
 }
 function openAccountMenu() {
   const addr = myWallet ? myWallet.address : (String(user.id).startsWith("near:") ? user.name : null);
@@ -185,7 +190,7 @@ function openAccountMenu() {
       el("button", { class: "btn small", type: "button", text: "Copy", onclick: async (ev) => { try { await navigator.clipboard.writeText(addr); ev.currentTarget.textContent = "Copied"; } catch { ev.currentTarget.textContent = "Select and copy"; } } })) : null,
     el("div", { class: "actions", style: "flex-direction:column;align-items:stretch;margin-top:14px" },
       el("a", { class: "btn", href: "#/saved", text: "Journal", onclick: () => dialog.close() }),
-      el("button", { class: "btn", type: "button", style: "color:var(--no)", text: "Sign out", onclick: signOut }),
+      el("button", { class: "btn", type: "button", style: "color:var(--no)", text: "Disconnect", onclick: signOut }),
       el("button", { class: "btn ghost", type: "button", text: "Close", onclick: () => dialog.close() })));
   if (!dialog.open) dialog.showModal();
 }

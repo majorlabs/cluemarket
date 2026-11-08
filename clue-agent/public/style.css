@@ -382,3 +382,8 @@ html[data-theme="light"] .fund{background:radial-gradient(120% 90% at 100% 0%,rg
 .acct-addr .label{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--brand-text)}
 .acct-addr code{font-family:var(--mono);font-size:12.5px;word-break:break-all}
 .acct-addr .btn{justify-self:start}
+
+/* the signed-in header button: only a round profile icon */
+#account-open.profile-btn{width:40px;height:40px;padding:0;border-radius:50%;border:2px solid var(--line-strong);justify-content:center;color:#fff}
+#account-open.profile-btn:hover{filter:brightness(1.1)}
+.profile-icon{display:grid;place-items:center;filter:drop-shadow(0 1px 1px rgba(0,0,0,.35))}
