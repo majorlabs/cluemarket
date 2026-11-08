@@ -583,7 +583,17 @@ function mountWorkspace(container, ctx) {
     if (!user) { openAccountDialog("Sign in to run research. It keeps your work private to you."); return; }
     researchBtn.disabled = true; rStatus.className = "status"; rStatus.textContent = "Searching sources. This can take up to a minute…";
     try {
-      const d = await post("/api/research", { question, market: marketRef && marketRef.id ? { id: marketRef.id } : null });
+      const start = await post("/api/research", { question, market: marketRef && marketRef.id ? { id: marketRef.id } : null });
+      let d = null, hiccups = 0;
+      for (let i = 0; i < 100 && !d; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        try {
+          const j = await api(`/api/research/${encodeURIComponent(start.researchId)}`);
+          if (j.status === "done") d = j;
+          else if (j.status === "failed") throw Object.assign(new Error(j.error || "Research failed. Please try again."), { final: true });
+        } catch (e) { if (e.final || ++hiccups > 5) throw e; }
+      }
+      if (!d) throw new Error("This is taking longer than expected. Check your Journal in a minute.");
       state.report = { question, market: marketRef, content: d.content, sources: d.sources, model: d.model, retrievedAt: d.retrievedAt, researchId: d.researchId };
       showReport(state.report); markDone(); showAllowance(d.allowance);
       rStatus.className = "status ok"; rStatus.textContent = "Research complete. Save it with your forecast below.";

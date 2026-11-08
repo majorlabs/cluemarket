@@ -32,6 +32,16 @@ after(async () => { server.kill(); await new Promise(r => server.once('exit', r)
 async function ready() { for (let i = 0; i < 100; i++) { try { if ((await fetch(base)).ok) return; } catch {} await new Promise(r => setTimeout(r, 100)); } throw new Error('server failed to start'); }
 async function request(path, { cookie, body } = {}) {
   const res = await fetch(base + path, { method: body ? 'POST' : 'GET', headers: { Origin: base, ...(body ? { 'Content-Type': 'application/json' } : {}), ...(cookie ? { Cookie: cookie } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
+  if (path === '/api/research' && body && res.status === 202) {
+    const { researchId } = await res.json();
+    for (let i = 0; i < 200; i++) {
+      const j = await (await fetch(base + '/api/research/' + researchId, { headers: { ...(cookie ? { Cookie: cookie } : {}) } })).json();
+      if (j.status === 'done') return { status: 200, body: j };
+      if (j.status === 'failed') return { status: j.code, body: { error: j.error } };
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    throw new Error('research never finished');
+  }
   return { status: res.status, body: await res.json().catch(() => null) };
 }
 const signup = name => {
