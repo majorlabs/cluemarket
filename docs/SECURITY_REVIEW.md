@@ -63,3 +63,7 @@ Privy is now asked to create an Ethereum wallet for people who sign in without o
 ## Market text now comes from Polymarket (8 Nov)
 
 Research and saved threads used to take the market's question and rules from the browser and keep no market id, so the Journal could not find the market to compare with, and a user could attach invented market text to research they then published. The browser now sends only the market's numeric id; the server reads the question, rules and outcomes from Polymarket and stores those. Text sent with no id names no market. A malformed id is refused (400) and an unknown market (502), both before any AI is used or any free research is counted. Tests: `tests/market-link.test.mjs`.
+
+## Trading: builder signing (8 Nov)
+
+`POST /api/pm/sign` signs Polymarket relayer requests with the builder secret so the browser never holds it. It signs only four relayer requests (deployed check, transaction parameters, transaction status, submit); a submit is signed only when its `from` is the signed-in user's own Privy wallet, looked up by the server; NEAR accounts and accounts without a wallet get nothing; each user is limited to 300 per hour; the origin check applies. Orders do not pass through the server: they go from the user's browser to Polymarket, so Polymarket sees the user's real location. The signature scheme is tested against Polymarket's own package.

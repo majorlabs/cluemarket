@@ -11,6 +11,7 @@ import {HourlyBudget} from './budget.mjs';
 import {journalFor,marketFacts,watchFor,marketRecord} from './journal.mjs';
 import {reserve,settle,release,allowance} from './aispend.mjs';
 import {fundingQuote,SOURCES,DEST} from './fund.mjs';
+import {builderHeaders,checkSignRequest} from './pm-sign.mjs';
 await initWalletAuth();
 
 const port = Number(process.env.PORT || 3000);
@@ -20,6 +21,7 @@ const publicOrigin=hosted ? new URL(process.env.BETTER_AUTH_URL).origin : `http:
 const publicOrigins=hosted ? allowedOrigins(publicOrigin) : [];
 const allowedHosts=hosted ? [...publicOrigins.map(o=>new URL(o).host),process.env.CLUE_SERVICE_HOST].filter(Boolean) : ['127.0.0.1:'+port,'localhost:'+port];
 if(hosted && (!publicOrigin.startsWith('https://') || !process.env.CLUE_SERVICE_HOST || !process.env.CLUE_SIGNUP_TOKEN || process.env.CLUE_SIGNUP_TOKEN.length < 32)) throw new Error('Hosted preview requires HTTPS, CLUE_SERVICE_HOST and a strong CLUE_SIGNUP_TOKEN.');
+const signUser=new HourlyBudget(300);
 const fundUser=new HourlyBudget(30);
 const fundGlobal=new HourlyBudget(300);
 const researchGlobal=new HourlyBudget(Math.max(1,Number(process.env.CLUE_RESEARCH_GLOBAL_PER_HOUR)||60));
@@ -76,6 +78,17 @@ const app=http.createServer(async(req,res)=>{ try {
  if(url.pathname.startsWith('/api/auth/'))return json(res,410,{error:'Use your NEAR wallet to connect.'});
  const publicMatch=url.pathname.match(/^\/api\/public\/([a-f0-9-]+)$/);
  if(req.method==='GET' && publicMatch){const item=await store.get('SELECT snapshot, created_at FROM public_reports WHERE id=?',publicMatch[1]);if(!item)return json(res,404,{error:'Shared report unavailable.'}); return json(res,200,{snapshot:JSON.parse(item.snapshot),publishedAt:item.created_at});}
+ if(req.method==='POST' && url.pathname==='/api/pm/sign') {
+  const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in to trade.'});
+  const b=await getBody(req);
+  const mine=await privyWalletRoute(session.user.id);
+  const check=checkSignRequest(b,mine.wallet?.address);
+  if(!check.ok) return json(res,check.status,{error:check.error});
+  if(!signUser.take(session.user.id)) return json(res,429,{error:'Too many requests. Try again in a little while.'});
+  const key=process.env.POLYMARKET_BUILDER_API_KEY,secret=process.env.POLYMARKET_BUILDER_SECRET,passphrase=process.env.POLYMARKET_BUILDER_PASSPHRASE;
+  if(!key||!secret||!passphrase) return json(res,503,{error:'Trading is not switched on yet.'});
+  return json(res,200,builderHeaders(check,{key,secret,passphrase}));
+ }
  if(req.method==='GET' && url.pathname==='/api/fund/options') return json(res,200,{destination:{symbol:DEST.symbol,chain:'Polygon'},sources:SOURCES.map(({id,label})=>({id,label}))});
  if(req.method==='GET' && url.pathname==='/api/fund/quote') {
   const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in to get a funding quote.'});
