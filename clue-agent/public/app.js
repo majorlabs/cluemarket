@@ -644,11 +644,11 @@ function mountWorkspace(container, ctx) {
     fStatus.className = "status"; fStatus.textContent = "Saving…";
     try {
       const id = await ensureThread();
-      await post(`/api/threads/${encodeURIComponent(id)}/forecasts`, { probability: Number(range.value), reasoning: why.value, supportingEvidence: pro.value, opposingEvidence: con.value, changeCondition: flip.value });
+      await post(`/api/threads/${encodeURIComponent(id)}/forecasts`, { probability: Number(range.value), outcomeIndex: ctx.outcomeIdx ? ctx.outcomeIdx() : 0, reasoning: why.value, supportingEvidence: pro.value, opposingEvidence: con.value, changeCondition: flip.value });
       const d = await api(`/api/threads/${encodeURIComponent(id)}`);
       renderForecasts(d.forecasts);
       why.value = ""; pro.value = ""; con.value = "";
-      fStatus.className = "status ok"; fStatus.textContent = "Saved privately. Each save adds a dated revision; older ones are kept.";
+      fStatus.className = "status ok"; fStatus.textContent = market ? "Saved privately. Clue will compare it with the market in your Journal." : "Saved privately. Each save adds a dated revision; older ones are kept.";
     } catch (e) { fStatus.className = "status err"; fStatus.textContent = e.message; }
   }
 
@@ -661,6 +661,7 @@ function mountWorkspace(container, ctx) {
       el("p", { text: f.reasoning || "No reasoning recorded" }),
       f.change_condition && el("p", { class: "muted small", text: `Would change my mind: ${f.change_condition}` })));
   }
+  state.recheck = (text) => { q.value = text.slice(0, 2000); q.scrollIntoView({ behavior: "smooth", block: "center" }); return runResearch(); };
   container.__state = state;
   return state;
 }
@@ -700,6 +701,109 @@ async function askView(qs, stale) {
   remount();
 }
 
+
+/* ---------- journal: the memory loop ---------- */
+const signed = (n, unit = "") => `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n)}${unit}`;
+const pts = (p) => (p == null ? "—" : `${Math.round(p * 100)}%`);
+const FLAG_TEXT = {
+  moved: (w) => `Market moved ${signed(w.movePoints, " pts")} since you forecast`,
+  gap: (w) => `You are ${Math.abs(w.gapPoints)} pts ${w.gapPoints > 0 ? "above" : "below"} the market`,
+  "closing-soon": (w) => `Closes in ${Math.max(0, Math.ceil(w.daysToClose))} day${Math.ceil(w.daysToClose) === 1 ? "" : "s"}`,
+  "awaiting-resolution": () => "Closed, waiting for Polymarket to resolve it",
+  resolved: (w) => (w.happened ? "Resolved: it happened" : "Resolved: it did not happen"),
+};
+function flagChips(w) {
+  if (!w) return [];
+  return (w.flags || []).filter((f) => FLAG_TEXT[f]).map((f) => el("span", { class: `jchip ${f}`, text: FLAG_TEXT[f](w) }));
+}
+function scoreLine(w) {
+  if (w?.state !== "resolved") return null;
+  const mine = (w.score.you).toFixed(2);
+  if (w.score.market == null) return `Your score ${mine} (lower is better). No market price was recorded when you forecast.`;
+  return `Your score ${mine} vs the market's ${w.score.market.toFixed(2)} (lower is better). ${w.score.beatMarket ? "You were closer than the market." : "The market was closer."}`;
+}
+function trackRecord(s) {
+  const lines = {
+    none: "Your track record starts when a market you forecast resolves.",
+    "too-few": `${s.resolved} resolved so far. That is too few to say how good your forecasts are. Clue starts to compare you with the market at 5.`,
+    "no-market": `${s.resolved} resolved. No market prices were recorded for them, so there is nothing to compare against.`,
+    better: `Across ${s.resolved} resolved forecasts you were closer to what happened than the market's price at the time.`,
+    worse: `Across ${s.resolved} resolved forecasts the market's price at the time was closer than you. That is useful to know.`,
+    same: `Across ${s.resolved} resolved forecasts you and the market did about equally well.`,
+  };
+  const stat = (n, label) => el("div", { class: "jstat" }, el("b", { class: "num", text: n }), el("span", { text: label }));
+  return el("section", { class: "card pad track", "aria-label": "Your track record" },
+    el("div", { class: "jstats" },
+      stat(String(s.resolved), "resolved"), stat(String(s.open), "still open"),
+      stat(s.resolved ? `${s.rightSide}/${s.resolved}` : "—", "on the right side of 50%"),
+      stat(s.brier == null ? "—" : s.brier.toFixed(2), "your score"),
+      stat(s.marketBrier == null ? "—" : s.marketBrier.toFixed(2), "market's score")),
+    el("p", { class: "muted", text: lines[s.verdict] }),
+    el("p", { class: "muted small", text: "Score is the squared gap between a forecast and what happened, averaged. Lower is better; always saying 50% scores 0.25. The market's score uses its price when you saved the forecast." }));
+}
+function journalRow(e) {
+  const w = e.watch, f = e.forecast;
+  const now = w && w.marketNow != null ? `Market now ${pts(w.marketNow)}${w.marketAtForecast != null ? ` (was ${pts(w.marketAtForecast)})` : ""}` : w && !w.reachable ? "Market unavailable right now" : "No market connected";
+  return el("a", { class: "card jrow", href: `#/saved/${e.thread.id}` },
+    el("strong", { text: e.thread.question }),
+    el("div", { class: "jmeta" },
+      el("span", { class: "num", text: `You ${f.probability}%` }), el("span", { class: "muted", text: now }),
+      el("span", { class: "muted small", text: `saved ${day(f.created_at)}${f.revisions > 1 ? ` · ${f.revisions} revisions` : ""}` })),
+    el("div", { class: "jchips" }, flagChips(w)));
+}
+const needsAttention = (e) => e.watch && (e.watch.flags || []).some((f) => ["moved", "closing-soon", "awaiting-resolution"].includes(f) || (f === "resolved" && !e.thread.lesson));
+
+async function journalView(stale) {
+  app.replaceChildren(el("p", { class: "loading", role: "status", text: "Checking your markets…" }));
+  try {
+    const d = await api("/api/journal");
+    if (stale()) return;
+    const attention = d.entries.filter(needsAttention), rest = d.entries.filter((e) => !needsAttention(e));
+    const head = el("div", { class: "section-head" }, el("h1", { style: "font-size:28px;letter-spacing:-.03em", text: "Your journal" }), el("a", { class: "btn primary", href: "#/ask", text: "New research" }));
+    const empty = !d.entries.length && !d.withoutForecast.length;
+    app.replaceChildren(...kids(head,
+      el("p", { class: "muted", style: "margin-top:6px;max-width:62ch", text: "Private to you. Clue remembers why you made each forecast, compares it with the market every time you visit, and scores it when the market resolves." }),
+      empty ? el("div", { class: "card empty" }, el("h2", { text: "Nothing here yet" }), el("p", { class: "muted", text: "Pick a market, research it, and save a forecast with what would change your mind." }), el("a", { class: "btn primary", style: "margin-top:16px", href: "#/", text: "Browse markets" })) : trackRecord(d.summary),
+      attention.length ? el("h2", { class: "jhead", text: "Worth a look" }) : null, attention.length ? el("div", { class: "saved-list" }, attention.map(journalRow)) : null,
+      rest.length ? el("h2", { class: "jhead", text: attention.length ? "Everything else" : "Your forecasts" }) : null, rest.length ? el("div", { class: "saved-list" }, rest.map(journalRow)) : null,
+      d.withoutForecast.length ? el("h2", { class: "jhead", text: "Research without a forecast yet" }) : null,
+      d.withoutForecast.length ? el("div", { class: "saved-list" }, d.withoutForecast.map((t) => el("a", { class: "card saved-row", href: `#/saved/${t.id}` }, el("strong", { text: t.question }), el("span", { class: "muted small", text: `Updated ${when(t.updated_at)}` })))) : null));
+  } catch (e) { if (!stale()) app.replaceChildren(errBox("Couldn’t load your journal", e.message, route)); }
+}
+
+// Shown at the top of a saved thread: what has happened to the market since the forecast, and what to do about it.
+function watchCard(d, state) {
+  const f = d.forecasts[0], w = d.watch;
+  if (!f) return null;
+  const box = el("section", { class: "card pad watch", "aria-label": "Since you forecast" });
+  box.append(el("h2", { text: w?.state === "resolved" ? "What happened" : "Since you forecast" }));
+  box.append(el("p", {}, "You said ", el("b", { class: "num", text: `${f.probability}%` }), el("span", { class: "muted", text: ` on ${day(f.created_at)}${f.outcome_label ? ` for “${f.outcome_label}”` : ""}.` })));
+  if (!w) { box.append(el("p", { class: "muted", text: "No market is connected to this forecast, so there is nothing to compare it with. Connect a market on the Ask page next time to have Clue watch it." })); }
+  else if (!w.reachable) { box.append(el("p", { class: "muted", text: "Clue couldn’t reach Polymarket just now. Your forecast is safe; open this page again in a minute." })); }
+  else {
+    box.append(el("p", { class: "muted", text: `Market then ${pts(w.marketAtForecast)}, now ${pts(w.marketNow)}${w.movePoints != null ? ` (${signed(w.movePoints, " pts")})` : ""}.${w.marketAtForecast == null ? " The market’s price wasn’t recorded when this was saved." : ""}` }));
+    const chips = flagChips(w); if (chips.length) box.append(el("div", { class: "jchips" }, chips));
+    const sl = scoreLine(w); if (sl) box.append(el("p", { text: sl }));
+  }
+  if (f.change_condition) box.append(el("p", { class: "mind" }, el("span", { class: "label", text: "You said this would change your mind" }), el("span", { text: f.change_condition })));
+  if (w?.state !== "resolved") {
+    box.append(el("div", { class: "actions" }, el("button", { class: "btn", type: "button", text: "Check what’s new", onclick: (ev) => {
+      ev.currentTarget.disabled = true;
+      state.recheck(`What has changed since ${day(f.created_at)} on this question: ${d.thread.question} In particular: ${f.change_condition}`).finally(() => { ev.currentTarget.disabled = false; });
+    } })));
+  } else {
+    const note = el("textarea", { rows: 3, maxlength: 2000, placeholder: "What did you miss, or get right for the wrong reason? One honest line helps most.", "aria-label": "What you learned" }); note.value = d.thread.lesson || "";
+    const st = el("p", { class: "status", role: "status", "aria-live": "polite" });
+    box.append(el("label", { class: "field" }, el("span", { text: "What you learned" }), note),
+      el("div", { class: "actions" }, el("button", { class: "btn primary", type: "button", text: "Save note", onclick: async () => {
+        st.className = "status"; st.textContent = "Saving…";
+        try { await api(`/api/threads/${encodeURIComponent(d.thread.id)}/lesson`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lesson: note.value }) }); st.className = "status ok"; st.textContent = "Saved."; }
+        catch (e) { st.className = "status err"; st.textContent = e.message; }
+      } })), st);
+  }
+  return box;
+}
+
 /* ---------- saved ---------- */
 async function savedView(id, stale) {
   if (!user) {
@@ -708,15 +812,7 @@ async function savedView(id, stale) {
     return;
   }
   if (id) return savedThread(id, stale);
-  app.replaceChildren(el("p", { class: "loading", role: "status", text: "Loading your research…" }));
-  try {
-    const d = await api("/api/threads");
-    if (stale()) return;
-    app.replaceChildren(
-      el("div", { class: "section-head" }, el("h1", { style: "font-size:28px;letter-spacing:-.03em", text: "My research" }), el("a", { class: "btn primary", href: "#/ask", text: "New research" })),
-      d.threads.length ? el("div", { class: "saved-list" }, d.threads.map((t) => el("a", { class: "card saved-row", href: `#/saved/${t.id}` }, el("strong", { text: t.question }), el("span", { class: "muted small", text: `Updated ${when(t.updated_at)}` }))))
-        : el("div", { class: "card empty" }, el("h2", { text: "Nothing saved yet" }), el("p", { class: "muted", text: "Research a question or forecast a market and it will appear here, with every revision." }), el("a", { class: "btn primary", style: "margin-top:16px", href: "#/", text: "Browse markets" })));
-  } catch (e) { if (!stale()) app.replaceChildren(errBox("Couldn’t load your research", e.message, route)); }
+  return journalView(stale);
 }
 
 async function savedThread(id, stale) {
@@ -741,11 +837,11 @@ async function savedThread(id, stale) {
       el("button", { class: "btn", type: "button", style: "color:var(--no)", text: "Delete", onclick: async () => { if (!confirm("Delete this research and all its revisions?")) return; try { await api(`/api/threads/${encodeURIComponent(id)}`, { method: "DELETE" }); location.hash = "#/saved"; } catch (e) { msg.className = "status err"; msg.textContent = e.message; } } }));
     const older = d.revisions.slice(1).map((r) => el("details", { class: "card pad", style: "margin-top:10px" }, el("summary", { text: `Earlier research · ${when(r.created_at)}` }), el("p", { class: "report-text", text: r.content })));
     app.replaceChildren(
-      el("a", { class: "crumb", href: "#/saved", text: "← My research" }),
+      el("a", { class: "crumb", href: "#/saved", text: "← Journal" }),
       el("h1", { style: "font-size:26px;letter-spacing:-.03em;margin-bottom:6px", text: d.thread.question }),
       ...(market ? [el("p", { class: "muted", text: `Connected market: ${market.question}` })] : []),
-      actions, msg, shares, el("div", { style: "margin-top:20px", class: "ask-page" }, holder), older);
-  } catch (e) { if (!stale()) app.replaceChildren(el("a", { class: "crumb", href: "#/saved", text: "← My research" }), errBox("Couldn’t open this research", e.message, route)); }
+      actions, msg, shares, watchCard(d, state), el("div", { style: "margin-top:20px", class: "ask-page" }, holder), older);
+  } catch (e) { if (!stale()) app.replaceChildren(el("a", { class: "crumb", href: "#/saved", text: "← Journal" }), errBox("Couldn’t open this research", e.message, route)); }
 }
 
 /* ---------- public shared snapshot ---------- */

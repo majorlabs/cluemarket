@@ -314,3 +314,23 @@ dialog .actions{margin-top:8px}
 /* logo: cream mark on dark theme, ink mark on light theme */
 html:not([data-theme="light"]) .brand .mk-light{display:none}
 html[data-theme="light"] .brand .mk-dark{display:none}
+
+/* journal */
+.jhead{font-size:15px;letter-spacing:-.01em;margin:30px 0 -6px;color:var(--muted);font-weight:600}
+.track{margin-top:22px;display:grid;gap:10px}
+.jstats{display:flex;flex-wrap:wrap;gap:10px 28px}
+.jstat{display:grid;gap:2px;min-width:84px}.jstat b{font-size:24px;line-height:1.1}.jstat span{font-size:12.5px;color:var(--muted)}
+.jrow{display:grid;gap:8px;padding:16px 20px;text-decoration:none}
+.jrow:hover{border-color:var(--line-strong)}
+.jmeta{display:flex;flex-wrap:wrap;gap:4px 16px;align-items:baseline;font-size:14px}
+.jchips{display:flex;flex-wrap:wrap;gap:6px}
+.jchips:empty{display:none}
+.jchip{font-size:12.5px;font-weight:600;border-radius:999px;padding:3px 10px;background:var(--bg);border:1px solid var(--line-strong);color:var(--muted)}
+.jchip.moved,.jchip.closing-soon{color:var(--brand-text);border-color:var(--brand);background:var(--brand-wash)}
+.jchip.resolved{color:var(--ink);border-color:var(--ink)}
+.watch{margin-top:20px;display:grid;gap:10px}
+.watch h2{font-size:18px;letter-spacing:-.02em}
+.watch .mind{display:grid;gap:2px;border-left:2px solid var(--brand);padding-left:12px}
+.watch .mind .label{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--brand-text)}
+.watch textarea{width:100%}
+@media (max-width:640px){.jstats{gap:10px 20px}.jstat{min-width:70px}.jrow{padding:14px 16px}}
