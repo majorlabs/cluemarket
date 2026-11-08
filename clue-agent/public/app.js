@@ -728,8 +728,28 @@ async function mountFunding(box) {
   const quick = [10, 25, 100].map((n) => el("button", { type: "button", class: "quick", text: `$${n}`, onclick: () => { amount.value = String(n); } }));
   const address = el("input", { id: "fund-address", type: "text", autocomplete: "off", spellcheck: "false", placeholder: "0x…", "aria-label": "Your Polymarket address" });
   try { address.value = localStorage.getItem("clue.fundAddress") || ""; } catch { /* storage may be blocked */ }
-  const emailNote = user.id && !String(user.id).startsWith("near:")
-    ? el("p", { class: "fund-hint", text: "You signed in with email, so you don’t have a wallet in Clue yet. A built-in wallet is the next thing we’re adding. For now, paste the address of a wallet you own." }) : null;
+  const isPrivy = user.id && String(user.id).startsWith("privy:");
+  const walletBox = el("div", { class: "mywallet", hidden: true });
+  const emailNote = el("p", { class: "fund-hint", hidden: true, text: "We couldn’t set up a wallet for you just now. You can paste the address of a wallet you own instead." });
+  const showWallet = (w) => {
+    walletBox.hidden = false;
+    walletBox.replaceChildren(
+      el("span", { class: "label", text: w.madeForYou ? "Your Clue wallet" : "Your connected wallet" }),
+      el("code", { class: "addr", text: w.address }),
+      el("button", { type: "button", class: "btn small", text: "Copy", onclick: async (ev) => { try { await navigator.clipboard.writeText(w.address); ev.currentTarget.textContent = "Copied"; } catch { ev.currentTarget.textContent = "Select and copy"; } } }),
+      el("small", { text: w.madeForYou ? "Made for you when you signed in. It belongs to you, and Clue never holds its keys." : "This is the wallet you signed in with." }));
+    if (!address.value.trim()) address.value = w.address;
+  };
+  if (isPrivy) {
+    walletBox.hidden = false; walletBox.replaceChildren(el("span", { class: "fund-wait", text: "Setting up your wallet…" }));
+    (async () => {
+      for (let i = 0; i < 10; i++) {
+        try { const d = await api("/api/privy/wallet"); if (d.wallet) return showWallet(d.wallet); } catch { /* try again */ }
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+      walletBox.hidden = true; emailNote.hidden = false;
+    })();
+  }
   const out = el("div", { class: "fund-out", role: "status", "aria-live": "polite" });
   const go = el("button", { class: "btn primary fund-go", type: "button", text: "See what I’d get", onclick: async () => {
     go.disabled = true; out.replaceChildren(el("p", { class: "fund-wait", text: "Checking the best way to move your money…" }));
@@ -757,7 +777,7 @@ async function mountFunding(box) {
     el("div", { class: "fund-step" }, el("span", { class: "fund-n", text: "2" }), el("b", { text: "How much?" })),
     el("div", { class: "amt" }, el("span", { text: "$" }), amount), el("div", { class: "quicks" }, quick),
     el("div", { class: "fund-step" }, el("span", { class: "fund-n", text: "3" }), el("b", { text: "Your Polymarket address" })),
-    address, el("p", { class: "fund-hint", text: "It starts with 0x. This is where the money would arrive." }), emailNote,
+    walletBox, address, el("p", { class: "fund-hint", text: "It starts with 0x. This is where the money would arrive." }), emailNote,
     go, out));
 }
 

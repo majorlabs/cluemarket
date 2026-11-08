@@ -66,6 +66,33 @@ async function label(appId, did) {
   return fallback;
 }
 
+// The Ethereum wallet Privy holds for this person: the one made for them, else a wallet they connected.
+export function pickWallet(accounts) {
+  const wallets = (Array.isArray(accounts) ? accounts : []).filter((a) => a && a.type === 'wallet' && /^0x[0-9a-fA-F]{40}$/.test(String(a.address)) && (!a.chain_type || a.chain_type === 'ethereum'));
+  const made = wallets.find((a) => a.wallet_client_type === 'privy' || a.connector_type === 'embedded' || a.wallet_client === 'privy');
+  const chosen = made || wallets[0];
+  return chosen ? { address: chosen.address, madeForYou: Boolean(made) } : null;
+}
+
+async function walletOf(appId, did) {
+  const secret = process.env.PRIVY_APP_SECRET;
+  if (!secret) return null;
+  try {
+    const r = await fetch(`https://auth.privy.io/api/v1/users/${encodeURIComponent(did)}`, {
+      headers: { 'privy-app-id': appId, Authorization: 'Basic ' + Buffer.from(`${appId}:${secret}`).toString('base64') },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!r.ok) return null;
+    return pickWallet((await r.json()).linked_accounts);
+  } catch { return null; }
+}
+
+export async function privyWalletRoute(userId) {
+  const appId = process.env.PRIVY_APP_ID;
+  if (!appId || typeof userId !== 'string' || !userId.startsWith('privy:did:privy:')) return { wallet: null, reason: 'not-privy' };
+  return { wallet: await walletOf(appId, userId.slice('privy:'.length)) };
+}
+
 export async function privyRoute(req, res, path, body, origin) {
   const appId = process.env.PRIVY_APP_ID;
   if (path === '/api/privy/config' && req.method === 'GET') return { enabled: Boolean(appId), appId: appId || null };
