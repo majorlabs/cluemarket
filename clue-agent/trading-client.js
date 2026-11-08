@@ -27,25 +27,34 @@ const friendly = (e) => {
   return 'Trading setup did not finish. Nothing was changed. Try again in a minute.';
 };
 
+// A short, safe description of what failed and at which step, shown under the plain message so a screenshot says what went wrong.
+const describe = (step, e) => {
+  const name = (e && e.name) || 'Error';
+  const text = String((e && e.message) || e || '').replace(/\s+/g, ' ').slice(0, 180);
+  return `${step}: ${name}${text ? ` - ${text}` : ''}`;
+};
+
 window.clueTrading = {
   // Steps reported to the page: 'wallet' (sign in and create the trading wallet), 'permissions', 'balance'.
   async setup(onStep = () => {}) {
+    let step = 'start';
+    const report = (s) => { step = s; onStep(s); };
     try {
-      onStep('wallet');
+      report('wallet');
       const client = await openClient();
       const account = client.account;
-      onStep('permissions');
+      report('permissions');
       const state = await client.fetchTradingApprovalsState();
       if (!state.isFullyApproved) {
         const handle = await client.setupTradingApprovals();
         if (handle && typeof handle.wait === 'function') await handle.wait();
       }
-      onStep('balance');
+      report('balance');
       const balance = await fetchBalanceAllowance(client, { assetType: 'COLLATERAL' });
       return { ok: true, signer: account.signer, wallet: account.wallet, approved: true, balance: dollars(balance.balance) };
     } catch (e) {
-      console.error('trading setup failed', e);
-      return { ok: false, error: friendly(e) };
+      console.error('trading setup failed at', step, e);
+      return { ok: false, error: friendly(e), detail: describe(step, e) };
     }
   },
 };
