@@ -158,19 +158,48 @@ async function connectPrivy() {
 }
 async function refreshAccount() {
   try { user = (await api("/api/wallet/session"))?.user || null; } catch { user = null; }
-  const b = $("account-open");
-  b.textContent = user ? shortName(user.name || user.email) : "Sign in";
-  b.title = user ? "Click to disconnect" : "";
+  drawAccountButton();
   document.dispatchEvent(new CustomEvent("clue:account"));
+  if (user && String(user.id).startsWith("privy:")) { try { const d = await api("/api/privy/wallet"); if (d.wallet) { myWallet = d.wallet; drawAccountButton(); } } catch { /* the button says Account until it is known */ } }
+  if (!user) myWallet = null;
 }
-const shortName = (s = "") => (s.length > 18 ? `${s.slice(0, 8)}…${s.slice(-6)}` : s);
-$("account-open").addEventListener("click", async () => {
-  if (!user) return openAccountDialog();
-  if (!confirm("Disconnect this wallet from Clue?")) return;
+// What the header shows for a signed-in person: a small avatar and a short address. Never an email.
+let myWallet = null;
+const avatarColor = (s) => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) % 360; return `linear-gradient(135deg, hsl(${h} 80% 60%), hsl(${(h + 50) % 360} 80% 45%))`; };
+function accountLabel() {
+  if (!user) return "Sign in";
+  if (String(user.id).startsWith("privy:")) return myWallet ? shortName(myWallet.address) : "Account";
+  return shortName(user.name || "Account");
+}
+function drawAccountButton() {
+  const b = $("account-open");
+  if (!user) { b.replaceChildren("Sign in"); b.title = ""; return; }
+  b.replaceChildren(el("i", { class: "avatar", style: `background:${avatarColor(myWallet ? myWallet.address : user.id)}`, "aria-hidden": "true" }), accountLabel());
+  b.title = "Your account";
+}
+function openAccountMenu() {
+  const addr = myWallet ? myWallet.address : (String(user.id).startsWith("near:") ? user.name : null);
+  dialog.replaceChildren(
+    el("h2", { text: "Your account" }),
+    addr ? el("div", { class: "acct-addr" }, el("span", { class: "label", text: String(user.id).startsWith("near:") ? "NEAR account" : myWallet?.madeForYou ? "Your Clue wallet" : "Your wallet" }), el("code", { text: addr }),
+      el("button", { class: "btn small", type: "button", text: "Copy", onclick: async (ev) => { try { await navigator.clipboard.writeText(addr); ev.currentTarget.textContent = "Copied"; } catch { ev.currentTarget.textContent = "Select and copy"; } } })) : null,
+    el("div", { class: "actions", style: "flex-direction:column;align-items:stretch;margin-top:14px" },
+      el("a", { class: "btn", href: "#/saved", text: "Journal", onclick: () => dialog.close() }),
+      el("button", { class: "btn", type: "button", style: "color:var(--no)", text: "Sign out", onclick: signOut }),
+      el("button", { class: "btn ghost", type: "button", text: "Close", onclick: () => dialog.close() })));
+  if (!dialog.open) dialog.showModal();
+}
+async function signOut() {
+  dialog.close();
   try { await post("/api/wallet/disconnect", {}); } catch { /* session may already be gone */ }
   try { await window.cluePrivy?.logout(); } catch { /* not signed in with Privy */ }
   await refreshAccount();
   if (location.hash.startsWith("#/saved")) route();
+}
+const shortName = (s = "") => (s.length > 18 ? `${s.slice(0, 8)}…${s.slice(-6)}` : s);
+$("account-open").addEventListener("click", async () => {
+  if (!user) return openAccountDialog();
+  openAccountMenu();
 });
 window.installClueTheme?.();
 

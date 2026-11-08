@@ -48,7 +48,7 @@ async function publicKey(appId) {
 
 // Friendly label (email or wallet) via Privy's API. Needs the app secret; falls back to a short id.
 async function label(appId, did) {
-  const fallback = 'privy:' + did.slice(-8);
+  const fallback = 'Account';     // never the email: it is private and has no place in the interface
   const secret = process.env.PRIVY_APP_SECRET;
   if (!secret) return fallback;
   try {
@@ -58,8 +58,6 @@ async function label(appId, did) {
     });
     if (!r.ok) return fallback;
     const accounts = (await r.json()).linked_accounts || [];
-    const email = accounts.find((a) => a.type === 'email')?.address;
-    if (email) return String(email).slice(0, 64);
     const w = accounts.find((a) => a.type === 'wallet')?.address;
     if (w) return `${w.slice(0, 6)}…${w.slice(-4)}`;
   } catch { /* use fallback */ }

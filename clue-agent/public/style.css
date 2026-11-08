@@ -374,3 +374,11 @@ html[data-theme="light"] .fund{background:radial-gradient(120% 90% at 100% 0%,rg
 /* trading setup */
 .geo .btn{margin-top:10px}
 .geo .status{margin-top:8px}
+
+/* account button and menu */
+#account-open{display:inline-flex;align-items:center;gap:8px}
+.avatar{width:20px;height:20px;border-radius:50%;display:inline-block;flex:none}
+.acct-addr{display:grid;gap:6px;border:1px solid var(--line-strong);border-radius:12px;padding:12px 14px;margin-top:12px}
+.acct-addr .label{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--brand-text)}
+.acct-addr code{font-family:var(--mono);font-size:12.5px;word-break:break-all}
+.acct-addr .btn{justify-self:start}
