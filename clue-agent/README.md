@@ -18,7 +18,8 @@ Run the tests from this folder: one of them starts `server.mjs` by relative path
 | --- | --- |
 | `server.mjs` | HTTP server: market and order-book proxy, research, saved threads, sharing, sign-in routes |
 | `auth.mjs`, `wallet-auth.mjs`, `privy-auth.mjs` | Accounts, NEAR wallet sign-in (signed message), Privy sign-in (token check) |
-| `rhea.mjs` | Read-only rNEAR data through `@rhea-finance/rnear-sdk` |
+| `fund.mjs` | Prices for adding money from another chain, through Rhea's cross-chain service (quotes only) |
+| `journal.mjs`, `memory.mjs`, `aispend.mjs` | The Journal (watching markets, scoring forecasts) and the free-research limits |
 | `answer-links.mjs`, `origins.mjs`, `budget.mjs` | Removing links that did not come from the web search, the approved-origin check, the research budgets |
 | `public/` | The site: `app.js`, `ticket.js` (trade preview maths), `style.css`, assets, fonts |
 | `privy-client.jsx` | Source of `public/privy.js`. Rebuild with `npm run build:privy` |

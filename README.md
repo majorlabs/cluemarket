@@ -24,7 +24,7 @@
   <a href="https://nearhackathon.com"><img src="https://img.shields.io/badge/NEAR%20Hackathon-2026-orange.svg" alt="NEAR Hackathon 2026"></a>
 </p>
 
-<p align="center"><img src="docs/images/home.png" alt="The Clue Markets home page: an ask box, the most traded markets, and the rNEAR staking card" width="880"></p>
+<p align="center"><img src="docs/images/home.png" alt="The Clue Markets home page: an ask box and the most traded markets" width="880"></p>
 
 ## What is Clue?
 
@@ -43,7 +43,7 @@ Clue shows live Polymarket data and previews trades against the real order book.
 | **Research with sources** | Ask any question, with or without a market. AI running on NEAR AI Cloud searches the web and returns an answer with its source links. Only links the search actually returned are kept. Answers are labelled AI-generated and may be wrong. |
 | **Forecast privately** | Set your probability, write why, list evidence for and against, and say what would change your mind. Each save is a dated revision, and earlier ones are kept. |
 | **Preview a trade** | A trade ticket walks the live order book and shows the shares you would get, the average price, the estimated Polymarket fee, and what you would win or lose. It warns about thin books, minimum size and slippage. It checks your location first. **It cannot place an order.** |
-| **See NEAR staking** | A read-only card with rNEAR (Rhea Finance) rates from NEAR mainnet. NEAR wallet users also see their own rNEAR balance. |
+| **Add money** | On a market page, see what it would cost to bring USDC from Ethereum, Base or Optimism into the dollars Polymarket trades with. People who sign in with just an email get a wallet made for them. Prices come from Rhea's cross-chain service. A price check only: nothing is sent yet. |
 | **Revisit and share** | Saved research and forecasts live under **Journal**. Export a thread, delete it, or publish a snapshot of the research alone (never your private forecast). |
 | **Free research, capped** | Each account gets 2 free researches a day on NEAR AI's cheapest model, and all free research together stops at a daily dollar cap (default $0.25), so it cannot drain the account that pays for it. |
 | **Funding prices** | On a market page, see what it would cost to bring USDC from Ethereum, Base or Optimism into pUSD on Polygon, the money Polymarket trades with. Prices come from Rhea's cross-chain API. Quote only: nothing is sent yet. |
@@ -60,7 +60,7 @@ This table separates what has been run from what has not. Nothing here is claime
 | Trade ticket preview and location check | **Verified**: matches an independent calculation from the raw order book; 7 tests |
 | AI research with sources (NEAR AI Cloud) | **Verified** by API call and in a browser; needs a `NEAR_AI_API_KEY` on the server |
 | Private forecast journal, saving, sharing, deleting | **Verified** in tests and a browser; accounts cannot see each other's data (tested) |
-| rNEAR staking card (Rhea Finance SDK) | **Verified** read-only against NEAR mainnet |
+| Add money price check (Rhea cross-chain prices) | **Verified** against Rhea's live service: 25 USDC from Ethereum or Base gave about 24.95; no money moves |
 | Security review and red team | **Done**: 6 findings fixed with tests, see [docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md); open items are listed there |
 | NEAR wallet sign-in | **Partly verified**: the signed-message check is unit-tested and the challenge works on the live site; a complete sign-in with a real wallet has not been recorded |
 | Privy sign-in | **Partly verified**: the sign-in window opens and token checks are tested; a complete sign-in with a real email or wallet has not been recorded |
@@ -79,7 +79,7 @@ Open **https://clue-markets.vercel.app**. Nothing needs signing in until step 5.
 5. **Sign in.** Click **Sign in** and choose the NEAR wallet or Privy.
 6. **Research.** Open **Ask Clue**, type a question such as *Will the Fed cut rates in December?* and click **Research with sources**. *You should see* a report with source links that you can open. (This step needs the server to have a NEAR AI key.)
 7. **Forecast.** Set your probability, write your reasoning and what would change your mind, and click **Save forecast**. *You should see* it under **Journal** with its date. Save again to add a revision.
-8. **Check the staking card.** On the home page, scroll the right column. *You should see* rNEAR APY, price and total staked. Signed in with a NEAR wallet, you also see your own balance.
+8. **Check the prices for adding money.** On a market page, find **Add money**, pick where your money is, and click **See what I'd get**. *You should see* what you would receive, the fees and the time. Nothing is sent.
 
 <table>
   <tr>
@@ -102,7 +102,7 @@ npm install
 npm run preview            # http://127.0.0.1:3000
 ```
 
-With no keys set, the markets, charts, order books, trade preview and staking card all work. Research needs `NEAR_AI_API_KEY`. Sign-in needs a wallet. Data is stored in a local SQLite file under `.clue-data/` (not encrypted; use only test data).
+With no keys set, the markets, charts, order books, trade preview and the Add money price check all work. Research needs `NEAR_AI_API_KEY`. Sign-in needs a wallet. Data is stored in a local SQLite file under `.clue-data/` (not encrypted; use only test data).
 
 Run the tests from the `clue-agent` folder:
 
@@ -129,7 +129,8 @@ flowchart LR
   U[Browser: Clue site] -->|/api| S[Clue server on Railway]
   S --> P[Polymarket: markets and order books]
   S --> N[NEAR AI Cloud: private AI with web search]
-  S --> R[NEAR mainnet: rNEAR rates, wallet key checks]
+  S --> R[NEAR mainnet: wallet key checks]
+  S --> H[Rhea: cross-chain prices]
   U -->|location check| G[Polymarket geoblock]
   U -->|sign in| W[NEAR wallet or Privy]
   S --- D[(Postgres: your private research and forecasts)]
@@ -143,7 +144,7 @@ The site is plain HTML, CSS and JavaScript served from Vercel. It talks to one N
 | --- | --- |
 | **NEAR AI Cloud** | Runs the research model with web search. The question and, if chosen, the market's rules are sent to it. |
 | **NEAR wallet sign-in** | You sign one message with your own wallet key. The server checks the signature and asks NEAR mainnet that the key is a full-access key for that account. No transaction, no funds move. |
-| **Rhea / rNEAR** | Reads the official rNEAR contract on NEAR mainnet through Rhea Finance's `@rhea-finance/rnear-sdk`, read-only. |
+| **Rhea** | Gives prices for moving USDC from another chain into pUSD on Polygon (`/api/v2/swap/quote`). Quotes only; the key stays on the server. |
 | **NEAR Intents** | **Planned, not built**: funding a Polymarket account from other chains. See [docs/TRADING_PLAN.md](docs/TRADING_PLAN.md). Clue does not claim NEAR Intents supplies Polymarket's liquidity: orders match on Polymarket's own order book. |
 
 ## Built with
