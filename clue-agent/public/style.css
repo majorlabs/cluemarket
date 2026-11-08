@@ -177,7 +177,7 @@ dl.facts dt{font-size:12px;color:var(--faint);margin-bottom:2px}dl.facts dd{marg
 .status.err{color:var(--no)}.status.ok{color:var(--yes)}
 .report{margin-top:14px;border-top:1px solid var(--line);padding-top:14px}
 .report .label{display:inline-flex;gap:6px;align-items:center;font-size:11.5px;font-weight:700;letter-spacing:.05em;color:var(--brand-text);text-transform:uppercase}
-.report-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7;font-size:14.5px;margin-top:8px}
+.report-text{overflow-wrap:anywhere;line-height:1.7;font-size:14.5px;margin-top:8px}
 .report-text.clamp{max-height:230px;overflow:hidden;-webkit-mask-image:linear-gradient(#000 70%,transparent);mask-image:linear-gradient(#000 70%,transparent)}
 .report-text a,.rules a{color:var(--brand-text)}
 .sources{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
@@ -387,3 +387,10 @@ html[data-theme="light"] .fund{background:radial-gradient(120% 90% at 100% 0%,rg
 #account-open.profile-btn{width:40px;height:40px;padding:0;border-radius:50%;border:2px solid var(--line-strong);justify-content:center;color:#fff}
 #account-open.profile-btn:hover{filter:brightness(1.1)}
 .profile-icon{display:grid;place-items:center;filter:drop-shadow(0 1px 1px rgba(0,0,0,.35))}
+
+/* the AI's answer, formatted */
+.report-text p{margin:0 0 10px}
+.report-text .ans-h{font-size:15px;letter-spacing:-.01em;margin:14px 0 6px}
+.report-text .ans-h:first-child{margin-top:2px}
+.report-text .ans-list{margin:0 0 10px;padding-left:22px}
+.report-text .ans-list li{margin:3px 0}

@@ -52,9 +52,32 @@ function thumb(m, cls = "") {
   if (src) { const i = el("img", { class: `thumb ${cls}`, src, alt: "", loading: "lazy", width: 44, height: 44 }); i.onerror = () => i.replaceWith(el("div", { class: `thumb ph ${cls}`, text: (m.title || m.question || "?")[0] })); return i; }
   return el("div", { class: `thumb ph ${cls}`, text: (m.title || m.question || "?")[0] });
 }
-function linkify(target, text, allowed) {
-  const ok = allowed ? new Set(allowed.map((u) => { try { const x = new URL(u); return (x.origin + x.pathname.replace(/\/+$/, '')).toLowerCase(); } catch { return ''; } })) : null;
+// The AI's answer arrives with light formatting marks (## headings, **bold**, - lists). Show them as formatting.
+// Everything is built from text nodes and a few fixed elements: nothing the AI writes can become HTML, and only links the search returned are clickable.
+function renderAnswer(target, text, allowed) {
   target.replaceChildren();
+  const inline = (parent, line) => {
+    line.split(/\*\*([^*\n]+)\*\*/).forEach((part, i) => {
+      if (!part) return;
+      if (i % 2) { const b = el("strong"); appendLinked(b, part, allowed); parent.append(b); } else appendLinked(parent, part, allowed);
+    });
+  };
+  let para = [], list = null;
+  const flushPara = () => { if (para.length) { const p = el("p"); inline(p, para.join(" ")); target.append(p); para = []; } };
+  const flushList = () => { if (list) { target.append(list.node); list = null; } };
+  for (const raw of String(text).replace(/\r/g, "").split("\n")) {
+    const line = raw.trim();
+    const heading = /^#{1,6}\s+(.*)$/.exec(line), item = /^([-*•]|\d+[.)])\s+(.*)$/.exec(line);
+    if (!line) { flushPara(); flushList(); }
+    else if (heading) { flushPara(); flushList(); const h = el("h4", { class: "ans-h" }); inline(h, heading[1].replace(/\*\*/g, "")); target.append(h); }
+    else if (item) { flushPara(); const ordered = /\d/.test(item[1]); if (list && list.ordered !== ordered) flushList(); if (!list) list = { ordered, node: el(ordered ? "ol" : "ul", { class: "ans-list" }) }; const li = el("li"); inline(li, item[2]); list.node.append(li); }
+    else { flushList(); para.push(line); }
+  }
+  flushPara(); flushList();
+}
+function linkify(target, text, allowed) { target.replaceChildren(); appendLinked(target, text, allowed); }
+function appendLinked(target, text, allowed) {
+  const ok = allowed ? new Set(allowed.map((u) => { try { const x = new URL(u); return (x.origin + x.pathname.replace(/\/+$/, '')).toLowerCase(); } catch { return ''; } })) : null;
   let last = 0;
   for (const m of text.matchAll(/https?:\/\/[^\s<>)\]"']+/g)) {
     target.append(text.slice(last, m.index));
@@ -632,7 +655,7 @@ function mountWorkspace(container, ctx) {
 
   function showReport(r) {
     const text = el("div", { class: "report-text clamp" });
-    linkify(text, r.content, r.sources || []);
+    renderAnswer(text, r.content, r.sources || []);
     const more = el("button", { class: "btn small ghost", type: "button", text: "Read full research", onclick: () => { const c = text.classList.toggle("clamp"); more.textContent = c ? "Read full research" : "Show less"; } });
     reportBox.replaceChildren(
       el("span", { class: "label" }, "AI-generated · check the sources"),
@@ -964,7 +987,7 @@ async function sharedView(shareId) {
   setNav("ask");
   try {
     const d = await api(`/api/public/${encodeURIComponent(shareId)}`);
-    const text = el("div", { class: "report-text" }); linkify(text, d.snapshot.content, d.snapshot.sources || []);
+    const text = el("div", { class: "report-text" }); renderAnswer(text, d.snapshot.content, d.snapshot.sources || []);
     app.replaceChildren(el("div", { class: "ask-page" },
       el("p", { class: "muted small", text: `Shared research · ${when(d.publishedAt)}` }),
       el("h1", { text: d.snapshot.question }),
