@@ -30,11 +30,16 @@ export function checkRequest({ source, amount, address }) {
   return { src, units, address };
 }
 
+const recent = new Map();   // key -> { at, quote }
+const REMEMBER_MS = 30_000;
+
 export async function fundingQuote(input, { fetchImpl = fetch, key = process.env.RHEA_API_KEY, base = process.env.RHEA_API_BASE || 'https://api.rhea.finance' } = {}) {
   const checked = checkRequest(input);
   if (checked.error) throw Object.assign(new Error(checked.error), { status: 400 });
   if (!key) throw Object.assign(new Error('Funding quotes are not set up on this server.'), { status: 503 });
   const { src, units, address } = checked;
+  const key2 = `${src.id}|${units}|${address.toLowerCase()}`, hit = recent.get(key2);
+  if (hit && Date.now() - hit.at < REMEMBER_MS) return hit.quote;
   let body;
   try {
     const response = await fetchImpl(`${base}/api/v2/swap/quote`, {
@@ -46,13 +51,15 @@ export async function fundingQuote(input, { fetchImpl = fetch, key = process.env
   const best = body?.code === 0 ? body.data?.bestQuote : null;
   if (!best?.router || !/^\d+$/.test(String(best.amountOut)) || !/^\d+$/.test(String(best.minAmountOut))) {
     // The provider's own error text is long and technical; users get one plain sentence.
+    // The provider's own text is long and technical. Only whether it is rate-limiting us changes what we tell the user.
+    if (body?.code !== 0 && /\b429\b|too many requests|rate.?limit/i.test(String(body?.msg || ''))) throw Object.assign(new Error('The price service is busy right now. Try again in a minute.'), { status: 503 });
     throw Object.assign(new Error('No route is available for that amount right now. Try a different amount or source.'), { status: 502 });
   }
   const pay = Number(amountText(input.amount));
   const receive = fromUnits(best.amountOut, DEST.decimals), min = fromUnits(best.minAmountOut, DEST.decimals);
   const gas = (Array.isArray(best.fee) ? best.fee : []).find(f => f?.expenseType === 'FROM_SOURCE_WALLET' && f.token);
   const gasUsd = gas && Number.isFinite(Number(gas.token.usdPrice)) && /^\d+$/.test(String(gas.amount)) ? Number(gas.amount) / 10 ** (gas.token.decimals || 18) * Number(gas.token.usdPrice) : null;
-  return {
+  const quote = {
     source: { id: src.id, label: src.label }, destination: DEST.symbol + ' on Polygon', address,
     pay, receive, minimumReceive: min,
     costUsd: Math.round((pay - receive) * 1e4) / 1e4,      // what the route takes, before gas; both sides are dollar-priced
@@ -63,5 +70,9 @@ export async function fundingQuote(input, { fetchImpl = fetch, key = process.env
     retrievedAt: new Date().toISOString(),
     note: 'A price only. Nothing has been sent. The final amount can differ by up to the minimum shown.',
   };
+  if (recent.size > 200) recent.clear();
+  recent.set(key2, { at: Date.now(), quote });
+  return quote;
 }
+export const forgetRecentQuotes = () => recent.clear();
 const amountText = a => (typeof a === 'string' ? a : '0');
