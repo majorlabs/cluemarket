@@ -611,7 +611,7 @@ async function mountTicket(box, ctx) {
         const words = { wallet: "Setting up your trading account…", permissions: "Setting permission to trade…", balance: "Checking your balance…" };
         try { await loadTrading(); } catch (e) { status.className = "status err"; status.textContent = e.message; go.disabled = false; return; }
         const r = await window.clueTrading.setup((step) => { status.textContent = `${words[step]} Approve it in your wallet if it asks.`; });
-        if (r.ok) { tradingSetup = r; drawChecklist(geo); } else { status.className = "status err"; status.textContent = r.error; go.disabled = false; }
+        if (r.ok) { tradingSetup = r; drawChecklist(geo); } else { status.className = "status err"; status.replaceChildren(r.error, r.detail ? el("small", { class: "err-detail", text: ` (${r.detail})` }) : ""); go.disabled = false; }
       } });
       action = go;
     }

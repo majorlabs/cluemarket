@@ -406,3 +406,5 @@ html[data-theme="light"] .fund{background:radial-gradient(120% 90% at 100% 0%,rg
 .deposit{margin:10px 0;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
 .deposit .acct-addr{width:100%}
 .deposit .acct-addr code{overflow-wrap:anywhere;word-break:break-all}
+
+.err-detail{display:block;margin-top:4px;opacity:.75;word-break:break-word}
