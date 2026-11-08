@@ -115,6 +115,18 @@ async function connectWallet() {
   finally { $("account-open").disabled = false; }
 }
 let privyLoading = null;
+let tradingLoading = null, tradingSetup = null;   // tradingSetup: what the last setup found, for this page load
+function loadTrading() {
+  tradingLoading ||= (async () => {
+    await loadPrivy();
+    await new Promise((resolve, reject) => {
+      const s = el("script", { src: "/trading.js" });
+      s.onload = resolve; s.onerror = () => reject(new Error("Could not load trading. Check your connection and try again."));
+      document.head.append(s);
+    });
+  })().catch((e) => { tradingLoading = null; throw e; });
+  return tradingLoading;
+}
 function loadPrivy() {
   // The Privy bundle is large, so it loads only when someone chooses Privy.
   privyLoading ||= (async () => {
@@ -448,11 +460,29 @@ async function mountTicket(box, ctx) {
     const loc = geo.state === "ok" ? item("ok", "Location", "can place orders")
       : geo.state === "blocked" ? item("bad", "Location", `Polymarket doesn't allow new orders from ${[geo.region, geo.country].filter(Boolean).join(", ") || "your location"}`)
       : item("todo", "Location", "couldn't be checked, so trading stays off");
+    const isPrivy = user && String(user.id || "").startsWith("privy:"), isNear = user && String(user.id || "").startsWith("near:");
+    const t = tradingSetup, short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+    const rows = t
+      ? [item("ok", "Your wallet", short(t.signer)), item("ok", "Your Polymarket account", short(t.wallet)), item("ok", "Permission to trade", "set"),
+         t.balance > 0 ? item("ok", "Money in your account", `$${t.balance.toFixed(2)}`) : item("todo", "Money in your account", "$0.00. Use Add money to put some in.")]
+      : [item("todo", "Your wallet", isPrivy ? "ready to use" : "needs an email or Ethereum wallet sign-in"), item("todo", "Your Polymarket account", "created when you set up trading"), item("todo", "Permission to trade", "set when you set up trading"), item("todo", "Money in your account", "after setup")];
+    const status = el("p", { class: "status", role: "status", "aria-live": "polite" });
+    let action = null;
+    if (!user) action = el("button", { class: "btn small", type: "button", text: "Sign in to set up trading", onclick: () => openAccountDialog("Sign in to set up trading.") });
+    else if (isNear) action = el("p", { class: "muted small", text: "Trading needs an email or Ethereum wallet sign-in for now. NEAR wallet accounts can research, forecast and preview." });
+    else if (isPrivy && !t) {
+      const go = el("button", { class: "btn primary small", type: "button", text: "Set up trading", disabled: geo.state !== "ok", title: geo.state !== "ok" ? "Trading is off where you are." : "", onclick: async () => {
+        go.disabled = true; status.className = "status";
+        const words = { wallet: "Signing in to Polymarket and creating your trading account…", permissions: "Setting permission to trade…", balance: "Checking your balance…" };
+        try { await loadTrading(); } catch (e) { status.className = "status err"; status.textContent = e.message; go.disabled = false; return; }
+        const r = await window.clueTrading.setup((step) => { status.textContent = `${words[step]} Approve it in your wallet if it asks.`; });
+        if (r.ok) { tradingSetup = r; drawChecklist(geo); } else { status.className = "status err"; status.textContent = r.error; go.disabled = false; }
+      } });
+      action = go;
+    }
     geoBox.replaceChildren(...kids(
-      el("ul", { class: "checklist" }, loc,
-        item("todo", "Your wallet", "connect it · coming next"),
-        item("todo", "Your Polymarket account", "set up at your first trade · coming next"),
-        item("todo", "Money in your account", "coming next")),
+      el("ul", { class: "checklist" }, loc, ...rows),
+      action, status,
       geo.state === "blocked" ? el("p", { class: "muted small", style: "margin-top:8px", text: "You can still research, forecast and preview. Clue doesn't help get around location limits." }) : null));
   }
 
