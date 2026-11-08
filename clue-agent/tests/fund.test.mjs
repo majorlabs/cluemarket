@@ -7,7 +7,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
-import { toUnits, checkRequest, fundingQuote, SOURCES } from '../fund.mjs';
+import { toUnits, checkRequest, fundingQuote, forgetRecentQuotes, SOURCES } from '../fund.mjs';
 
 const ADDR = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045';
 const goodBody = { code: 0, msg: 'success', data: { bestQuote: { router: 'rango', routerName: 'Rango', amountOut: '24950394', minAmountOut: '24825642', timeEstimate: 30, fee: [{ expenseType: 'FROM_SOURCE_WALLET', amount: '1112832000000', token: { symbol: 'ETH', decimals: 18, usdPrice: 2236.11 } }] } } };
@@ -30,6 +30,7 @@ test('requests: source must be listed, address well formed, amount in range', ()
 });
 
 test('a good quote is reported with cost, minimum, gas in dollars and no key', async () => {
+  forgetRecentQuotes();
   let seen;
   const fetchImpl = async (url, init) => { seen = { url, init }; return { json: async () => goodBody }; };
   const q = await fundingQuote({ source: 'base-usdc', amount: '25', address: ADDR }, { fetchImpl, key: 'secret-key', base: 'https://rhea.test' });
@@ -44,11 +45,37 @@ test('a good quote is reported with cost, minimum, gas in dollars and no key', a
 });
 
 test('provider failures become one plain sentence, never the provider text', async () => {
+  forgetRecentQuotes();
   const fail = { code: -1, msg: 'Cross-chain quote failed: stableflow: StableFlow HTTP 403 ... 非法请求 ... 1click.chaindefuser.com' };
   await assert.rejects(fundingQuote({ source: 'base-usdc', amount: '25', address: ADDR }, { fetchImpl: async () => ({ json: async () => fail }), key: 'k' }), e => e.status === 502 && !/chaindefuser|stableflow|403/i.test(e.message));
   await assert.rejects(fundingQuote({ source: 'base-usdc', amount: '25', address: ADDR }, { fetchImpl: async () => { throw new Error('ECONNRESET secret-key'); }, key: 'k' }), e => e.status === 502 && !/ECONN|secret/.test(e.message));
   await assert.rejects(fundingQuote({ source: 'base-usdc', amount: '25', address: ADDR }, { fetchImpl: async () => ({ json: async () => ({ code: 0, data: { bestQuote: { router: 'x', amountOut: 'NaN', minAmountOut: '1' } } }) }), key: 'k' }), e => e.status === 502);
   await assert.rejects(fundingQuote({ source: 'base-usdc', amount: '25', address: ADDR }, { fetchImpl: async () => ({}), key: '' }), e => e.status === 503);
+});
+
+test('a partner that is rate-limiting us gets a plain "busy" message, not "no route"', async () => {
+  forgetRecentQuotes();
+  const busy = { code: -1, msg: 'Cross-chain quote failed: rango: Rango HTTP 429: <!doctype html><html>Too Many Requests</html>' };
+  await assert.rejects(fundingQuote({ source: 'base-usdc', amount: '25', address: ADDR }, { fetchImpl: async () => ({ json: async () => busy }), key: 'k' }),
+    (e) => e.status === 503 && /busy right now/.test(e.message) && !/rango|429|html/i.test(e.message));
+});
+
+test('an identical price asked again within 30 seconds is remembered; a different amount is asked afresh', async () => {
+  forgetRecentQuotes();
+  let calls = 0;
+  const fetchImpl = async () => { calls++; return { json: async () => goodBody }; };
+  const ask = (amount) => fundingQuote({ source: 'ethereum-usdc', amount, address: ADDR }, { fetchImpl, key: 'k' });
+  const a = await ask('25'), b = await ask('25');
+  assert.equal(calls, 1); assert.deepEqual(a, b);
+  await ask('26'); assert.equal(calls, 2);
+  forgetRecentQuotes();
+  await ask('25'); assert.equal(calls, 3);
+  // a failure is never remembered: the next ask goes to the provider again
+  forgetRecentQuotes(); calls = 0;
+  const failing = async () => { calls++; return { json: async () => ({ code: -1, msg: 'x' }) }; };
+  await assert.rejects(fundingQuote({ source: 'optimism-usdc', amount: '25', address: ADDR }, { fetchImpl: failing, key: 'k' }));
+  await assert.rejects(fundingQuote({ source: 'optimism-usdc', amount: '25', address: ADDR }, { fetchImpl: failing, key: 'k' }));
+  assert.equal(calls, 2);
 });
 
 // ---- through the real server, with a stand-in for Rhea ----
