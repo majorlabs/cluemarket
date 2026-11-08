@@ -1,7 +1,7 @@
 # Prediction product: product and build brief
 
 **Product name:** Clue.  
-**Status:** Strategy and engineering research; no application or trading integration has been built or verified.  
+**Status:** A working prototype exists (live market pages, AI research with sources, a private forecast journal, a trade preview). Real-order trading and NEAR Intents funding are not built. The README's "What works today" table is the source of truth.  
 **Scope:** General prediction, knowledge and decisions across many subjects. Memecoins are optional topics, not the product focus.
 
 ## 1. Vision

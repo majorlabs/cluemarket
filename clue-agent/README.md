@@ -1,19 +1,30 @@
-# Clue — local research preview
+# clue-agent
 
-A local early prototype for exploring a broad question or connecting it to a real Polymarket question. The repository-wide product documents are in the parent directory. This preview is not a deployed or authenticated product.
+The Clue Markets app: a plain-JavaScript front end (`public/`) served by one Node server (`server.mjs`). The product overview, status and screenshots are in the [root README](../README.md).
 
 ## Run
 
-Requires Node.js 24. In this directory run `npm install`, then `npm run preview` and open http://127.0.0.1:3000. The server binds to loopback only. The preview command enables Node's environment proxy support where configured.
+```sh
+npm install
+npm run preview        # http://127.0.0.1:3000 (loopback only)
+node --test tests/*.mjs
+```
 
-Market discovery uses Polymarket's public Gamma API. Search results display retrieval time and venue rules where provided. Search results are not necessarily active or resolved, and price fields are not executable order quotes.
+Run the tests from this folder: one of them starts `server.mjs` by relative path. The live red-team test (`tests/redteam.live.test.mjs`) runs only when `NEARAI_API_KEY` is set and spends a little NEAR AI credit.
 
-For AI research, obtain an API key from [NEAR AI Cloud](https://cloud.near.ai/). Set `NEAR_AI_API_KEY` in your shell or secret manager before starting the server; do not put it in source control or the browser. `NEAR_AI_MODEL` can optionally override the default `z-ai/glm-5.3-flash`. A research request sends the question and, if selected, the market question and rules to NEAR AI. Its documented server-side web search may incur provider charges. Do not enter private notes without understanding that transmission. Provider capabilities, citations and output must be checked; an AI response is not settlement authority.
+## Layout
 
-Without a key, research reports that it is unavailable while market search continues to work. The local preview supports email/password accounts, private per-user threads, research revisions and forecast revisions stored in a SQLite database under `.clue-data/` (or `CLUE_DATA_DIR`). Users can export or delete a thread, save forecasts with supporting and opposing evidence, and explicitly share an individual research snapshot. Shared snapshots exclude private forecast fields. This local storage is not encrypted and exists only on the machine running the preview; use only data suitable for local development. The server is loopback-only and is not suitable for public hosting or production data. Public profiles, discussion, trading, automatic monitoring and NEAR Intents funding are not implemented. Local sharing links only work on the same machine. NEAR AI authenticated inference and web search have returned a sourced answer for a broad question. Both broad and market-connected research have returned source URLs in API tests; provider calls can still fail or return no sources, and errors are shown. Browser-level testing, secure hosted persistence, and the full production journey remain unverified.
+| Path | What it is |
+| --- | --- |
+| `server.mjs` | HTTP server: market and order-book proxy, research, saved threads, sharing, sign-in routes |
+| `auth.mjs`, `wallet-auth.mjs`, `privy-auth.mjs` | Accounts, NEAR wallet sign-in (signed message), Privy sign-in (token check) |
+| `rhea.mjs` | Read-only rNEAR data through `@rhea-finance/rnear-sdk` |
+| `answer-links.mjs`, `origins.mjs`, `budget.mjs` | Removing links that did not come from the web search, the approved-origin check, the research budgets |
+| `public/` | The site: `app.js`, `ticket.js` (trade preview maths), `style.css`, assets, fonts |
+| `privy-client.jsx` | Source of `public/privy.js`. Rebuild with `npm run build:privy` |
+| `tests/` | Node tests (`node:test`) |
+| `agent/` | An early, unused eve agent scaffold. Do not deploy it without adding authentication and reviewing its tools |
 
-`agent/` contains an early separate eve agent scaffold and Polymarket tool; the preview server does not yet use it. Do not deploy the scaffold without implementing authentication and reviewing the available tools and data boundaries.
+## Deploy
 
-## Database development
-
-The local preview uses SQLite by default. When `DATABASE_URL`, `BETTER_AUTH_SECRET`, and `BETTER_AUTH_URL` are supplied, it uses Postgres; the current HTTP server remains restricted to loopback and is not yet configured for hosting. Run `node --test tests/private-workspace.test.mjs` to verify user isolation, revisions, forecasts and explicit sharing with a temporary local SQLite database.
+The static site (`public/`) is served from Vercel with `/api` rewritten to the Railway service; `vercel.json` holds the rewrite and security headers. The Railway service runs `node server.mjs` with the settings listed in the root README. Secrets go in the host's variables, never in the repository.
