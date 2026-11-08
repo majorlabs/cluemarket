@@ -3,14 +3,15 @@
 // chooses Privy sign-in, so it does not slow the normal page.
 import React, { useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
-import { PrivyProvider, usePrivy, useLogin } from '@privy-io/react-auth';
+import { PrivyProvider, usePrivy, useLogin, useWallets } from '@privy-io/react-auth';
 
 const state = { api: null, waiting: null };
 
 function Bridge() {
   const { ready, authenticated, logout, getAccessToken } = usePrivy();
+  const { wallets } = useWallets();
   const ref = useRef({});
-  ref.current = { ready, authenticated, logout, getAccessToken };
+  ref.current = { ready, authenticated, logout, getAccessToken, wallets };
   const { login } = useLogin({
     onComplete: async () => {
       const w = state.waiting;
@@ -34,6 +35,14 @@ function Bridge() {
         return new Promise((resolve, reject) => { state.waiting = { resolve, reject }; login(); });
       },
       async logout() { if (ref.current.authenticated) await ref.current.logout(); },
+      authenticated: () => ref.current.authenticated,
+      // The user's own wallet (the one made for them, else one they connected), as a standard provider that signs.
+      async wallet() {
+        const w = ref.current.wallets.find((x) => x.walletClientType === 'privy') || ref.current.wallets[0];
+        if (!w) throw new Error('No wallet found for this account.');
+        try { await w.switchChain(137); } catch { /* signing does not depend on it */ }
+        return { provider: await w.getEthereumProvider(), address: w.address };
+      },
     };
   }, [login]);
   return null;
@@ -69,4 +78,11 @@ window.cluePrivy = {
     return state.api.login();
   },
   async logout() { if (state.api) await state.api.logout(); },
+  // Waits for Privy to restore the person's sign-in, then returns their wallet. Used when setting up trading.
+  async provider() {
+    const until = (test, ms) => new Promise((resolve) => { const end = Date.now() + ms; const tick = () => (test() || Date.now() > end ? resolve(test()) : setTimeout(tick, 150)); tick(); });
+    if (!(await until(() => state.api && state.api.ready(), 25000))) throw new Error('Privy is taking too long to start. Check your connection and try again.');
+    if (!(await until(() => state.api.authenticated(), 8000))) throw new Error('Sign in again to set up trading.');
+    return state.api.wallet();
+  },
 };
