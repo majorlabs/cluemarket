@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { generateKeyPairSync, createSign } from 'node:crypto';
 process.env.CLUE_DATA_DIR = mkdtempSync(join(tmpdir(), 'clue-privy-test-'));
-const { verifyPrivyToken } = await import('../privy-auth.mjs');
+const { verifyPrivyToken, normalizePem } = await import('../privy-auth.mjs');
 
 const APP = 'cmtestapp000000000000000';
 const DID = 'did:privy:cmuser123';
@@ -41,4 +41,18 @@ test('rejects tampered, wrongly signed, wrong-app, expired and wrong-algorithm t
   assert.throws(() => check(`${h2}.${b2}.AAAA`), /could not be verified/, 'short fake signature must not leak crypto errors');
   assert.throws(() => check('a.b'), /Invalid/, 'malformed');
   assert.throws(() => check(undefined), /Invalid/, 'missing');
+});
+
+test('accepts the public key exactly as Privy delivers it: one line, no line breaks', () => {
+  // This is the form https://auth.privy.io/api/v1/apps/<id> returns. Node cannot read it as is.
+  const oneLine = publicKeyPem.replace(/\s+/g, '').replace('-----BEGINPUBLICKEY-----', '-----BEGIN PUBLIC KEY-----').replace('-----ENDPUBLICKEY-----', '-----END PUBLIC KEY-----');
+  assert.ok(!oneLine.includes('\n'));
+  const token = sign(good());
+  assert.equal(verifyPrivyToken(token, { appId: APP, publicKeyPem: oneLine }).did, DID);
+  // and a wrong key in that same form is still refused
+  const wrong = other.publicKey.export({ type: 'spki', format: 'pem' }).replace(/\n/g, '');
+  assert.throws(() => verifyPrivyToken(token, { appId: APP, publicKeyPem: wrong }), /could not be verified/);
+  // text that is not a key is left alone and refused, never accepted
+  assert.equal(normalizePem('not a key'), 'not a key');
+  assert.throws(() => verifyPrivyToken(token, { appId: APP, publicKeyPem: 'not a key' }), /could not be verified/);
 });

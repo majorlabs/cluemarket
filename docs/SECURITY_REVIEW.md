@@ -52,3 +52,7 @@ Not covered: the web search tool may have a cost beyond tokens; check the first 
 ## Funding quotes (8 Nov)
 
 `/api/fund/quote` asks Rhea's cross-chain API for a price to move USDC from Ethereum, Base or Optimism into pUSD on Polygon. It builds, signs and sends nothing. Checks: sign-in required; the source must be on a fixed list; the address must be 0x plus 40 hex characters; the amount a plain decimal between $1 and $10,000; bad requests are refused before Rhea is called. 30 quotes per user per hour and 300 overall protect the Rhea quota. The Rhea key (`RHEA_API_KEY`) stays on the server and is never returned; Rhea's own error text is replaced by one plain sentence. Tests: `tests/fund.test.mjs`. Not covered: building or sending the transfer, which will need its own review. NEAR as a source is not offered: Rhea's NEAR Intents route did not accept pUSD as a destination and timed out when tested.
+
+## Privy sign-in was rejecting every real login (8 Nov)
+
+Found by signing in on the live site with a real email code. Privy returns its public key as one line with no line breaks; Node cannot read that form, so every Privy token failed with "Sign-in could not be verified". The earlier test used a locally generated key that had line breaks, which is why it passed. Fixed by rebuilding the standard layout before use (`normalizePem` in `privy-auth.mjs`), with a test using the key in Privy's one-line form. Verified against a real token from a real sign-in and Privy's real key. Text that is not a key is still refused.
