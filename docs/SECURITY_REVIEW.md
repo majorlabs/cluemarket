@@ -32,7 +32,7 @@ All tests: 22 pass, 1 skipped without a key (the live red team, which passed wit
 
 - **Misleading text without links.** A prompt injection can still make the answer *say* misleading things (for example "official place to claim winnings") even though the link is removed. Answers are labelled AI-generated with a warning, but the words are not filtered.
 - **Market text in shared pages.** The market question and rules attached to research come from the browser. A user could attach invented market text to their own research and publish it. Fix: look the market up on Polymarket by id on the server.
-- **Budgets reset on restart** and are per server instance. Fine for one Railway instance; move to the database if the service scales out.
+- **The hourly overall budget resets on restart** and is per server instance. The free allowance and the daily dollar cap are now stored in the database and do not reset (see below).
 - **No per-IP limit.** Behind Vercel the client IP is hard to trust, so only per-account and overall limits exist.
 - **The live site's other security headers.** Vercel serves the page without a full Content-Security-Policy (only `frame-ancestors`). A full policy needs testing with Privy and the NEAR wallet scripts.
 - **NEAR wallet sign-in end to end.** The local NEAR sandbox needs 65,535 open files and this machine allows 20,000, so the wallet login was not run against a real chain. Its signature checks are covered by the existing unit test; the account-key check calls mainnet RPC and is mocked in tests.
@@ -42,3 +42,9 @@ All tests: 22 pass, 1 skipped without a key (the live red team, which passed wit
 ## Memory loop (added 8 Nov)
 
 The Journal adds one new outbound call (Polymarket's public market endpoint, by numeric id only), a note field, and four new fields on a forecast. What was checked: the market id must be digits before it goes into a URL; the market price and outcome are read by the server, never accepted from the browser; notes are text up to 2,000 characters, saved only to the owner's thread; one user cannot read another's journal or write their notes (tested in `tests/journal.test.mjs`); live prices are cached for a minute and the journal looks up at most 100 forecasts, five at a time. Not covered: a background watcher. The Journal compares with the market when you open it, it does not message you.
+
+## Free research and spending cap (8 Nov)
+
+Free research is limited two ways, both stored in the database (`ai_usage`) so a restart cannot reset them: each account gets 2 free researches per UTC day (`CLUE_FREE_RESEARCH_PER_DAY`), and all free research together may not cost more than a daily dollar cap (`CLUE_AI_DAILY_USD`, default $0.25). A run reserves a worst-case cost (`CLUE_AI_RUN_ESTIMATE_USD`, default $0.01) before it starts, so parallel requests cannot overshoot; the real cost is then taken from the token usage NEAR AI reports (prices in `NEAR_AI_PRICE_IN` / `NEAR_AI_PRICE_OUT`, USD per 1M tokens). If NEAR AI reports no usage, the run is charged the estimate. A failed provider call releases its reservation and does not use up the free run. Past the cap, research says it is paused and no provider call is made. Tests: `tests/free-tier.test.mjs`.
+
+Not covered: the web search tool may have a cost beyond tokens; check the first real runs in the NEAR AI dashboard and raise `CLUE_AI_RUN_ESTIMATE_USD` if needed. As a second wall independent of Clue's code, give the key Clue uses its own spend cap in NEAR AI Cloud.
