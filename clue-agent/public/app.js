@@ -583,7 +583,7 @@ function mountWorkspace(container, ctx) {
     if (!user) { openAccountDialog("Sign in to run research. It keeps your work private to you."); return; }
     researchBtn.disabled = true; rStatus.className = "status"; rStatus.textContent = "Searching sources. This can take up to a minute…";
     try {
-      const d = await post("/api/research", { question, market: marketRef && marketRef.question ? { question: marketRef.question, rules: marketRef.rules || null } : null });
+      const d = await post("/api/research", { question, market: marketRef && marketRef.id ? { id: marketRef.id } : null });
       state.report = { question, market: marketRef, content: d.content, sources: d.sources, model: d.model, retrievedAt: d.retrievedAt, researchId: d.researchId };
       showReport(state.report); markDone(); showAllowance(d.allowance);
       rStatus.className = "status ok"; rStatus.textContent = "Research complete. Save it with your forecast below.";
