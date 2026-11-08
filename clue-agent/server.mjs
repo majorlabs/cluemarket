@@ -9,6 +9,7 @@ import {allowedOrigins,checkOrigin} from './origins.mjs';
 import {cleanAnswer} from './answer-links.mjs';
 import {HourlyBudget} from './budget.mjs';
 import {rnearSummary,rnearPosition} from './rhea.mjs';
+import {journalFor,marketFacts,watchFor} from './journal.mjs';
 await initWalletAuth();
 
 const port = Number(process.env.PORT || 3000);
@@ -55,6 +56,12 @@ const app=http.createServer(async(req,res)=>{ try {
  if(url.pathname.startsWith('/api/auth/'))return json(res,410,{error:'Use your NEAR wallet to connect.'});
  const publicMatch=url.pathname.match(/^\/api\/public\/([a-f0-9-]+)$/);
  if(req.method==='GET' && publicMatch){const item=await store.get('SELECT snapshot, created_at FROM public_reports WHERE id=?',publicMatch[1]);if(!item)return json(res,404,{error:'Shared report unavailable.'}); return json(res,200,{snapshot:JSON.parse(item.snapshot),publishedAt:item.created_at});}
+ if(url.pathname==='/api/journal') {
+  if(req.method!=='GET') return json(res,405,{error:'Method not allowed.'});
+  const session=await walletSession(req);
+  if(!session?.user?.id) return json(res,401,{error:'Sign in to see your forecast journal.'});
+  return json(res,200,{...await journalFor(session.user.id),retrievedAt:new Date().toISOString()});
+ }
  if(url.pathname.startsWith('/api/threads')) {
   const session=await walletSession(req);
   if(!session?.user?.id) return json(res,401,{error:'Connect your NEAR wallet to access your research.'});
@@ -62,20 +69,22 @@ const app=http.createServer(async(req,res)=>{ try {
   if(req.method==='GET' && url.pathname==='/api/threads') return json(res,200,{threads:await store.all('SELECT id, question, created_at, updated_at FROM research_threads WHERE user_id = ? ORDER BY updated_at DESC LIMIT 100',owner)});
   const match=url.pathname.match(/^\/api\/threads\/([a-f0-9-]+)$/);
   if(req.method==='GET' && match) {
-   const thread=await store.get('SELECT id, question, created_at, updated_at FROM research_threads WHERE id = ? AND user_id = ?',match[1],owner);
+   const thread=await store.get('SELECT id, question, created_at, updated_at, lesson FROM research_threads WHERE id = ? AND user_id = ?',match[1],owner);
    if(!thread) return json(res,404,{error:'Research thread not found.'});
    const revisions=(await store.all('SELECT id, question, content, sources, market, model, retrieved_at, created_at FROM research_revisions WHERE thread_id = ? ORDER BY created_at DESC',thread.id)).map(r=>({...r,sources:JSON.parse(r.sources),market:r.market?JSON.parse(r.market):null}));
-   const forecasts=await store.all('SELECT id, probability, reasoning, change_condition, created_at, market_snapshot, supporting_evidence, opposing_evidence FROM forecast_revisions WHERE thread_id=? ORDER BY created_at DESC',thread.id); const publications=await store.all('SELECT id, created_at FROM public_reports WHERE thread_id=? AND user_id=? ORDER BY created_at DESC',thread.id,owner); return json(res,200,{thread,revisions,forecasts,publications});
+   const forecasts=await store.all('SELECT id, probability, reasoning, change_condition, created_at, market_snapshot, supporting_evidence, opposing_evidence, market_id, outcome_index, market_price, market_question, outcome_label FROM forecast_revisions WHERE thread_id=? ORDER BY created_at DESC',thread.id); const publications=await store.all('SELECT id, created_at FROM public_reports WHERE thread_id=? AND user_id=? ORDER BY created_at DESC',thread.id,owner); const watch=forecasts.length?await watchFor(forecasts[0]):null; return json(res,200,{thread,revisions,forecasts,publications,watch});
   }
   const publishMatch=url.pathname.match(/^\/api\/threads\/([a-f0-9-]+)\/publish$/);
   if(req.method==='POST' && publishMatch){const thread=await store.get('SELECT id, question FROM research_threads WHERE id=? AND user_id=?',publishMatch[1],owner);if(!thread)return json(res,404,{error:'Research thread not found.'});const revision=await store.get('SELECT question, content, sources, market, model, retrieved_at FROM research_revisions WHERE thread_id=? ORDER BY created_at DESC LIMIT 1',thread.id);if(!revision||revision.model==='none')return json(res,400,{error:'No research available to share. Run research first.'});const id=randomUUID(),now=new Date().toISOString();const snapshot={question:revision.question,content:revision.content,sources:JSON.parse(revision.sources),market:revision.market?JSON.parse(revision.market):null,model:revision.model,retrievedAt:revision.retrieved_at};await store.run('INSERT INTO public_reports VALUES (?,?,?,?,?)',id,thread.id,owner,JSON.stringify(snapshot),now);return json(res,201,{id});}
   const unpublishMatch=url.pathname.match(/^\/api\/threads\/([a-f0-9-]+)\/publications\/([a-f0-9-]+)$/);
   if(req.method==='DELETE'&&unpublishMatch){const removed=await store.run('DELETE FROM public_reports WHERE id=? AND thread_id=? AND user_id=?',unpublishMatch[2],unpublishMatch[1],owner);return removed.changes?json(res,200,{deleted:true}):json(res,404,{error:'Publication not found.'});}
+  const lessonMatch=url.pathname.match(/^\/api\/threads\/([a-f0-9-]+)\/lesson$/);
+  if(req.method==='PUT' && lessonMatch){const b=await getBody(req);if(typeof b.lesson!=='string'||b.lesson.length>2000)return json(res,400,{error:'The note must be text of at most 2000 characters.'});const r=await store.run('UPDATE research_threads SET lesson=? WHERE id=? AND user_id=?',b.lesson.trim(),lessonMatch[1],owner);return r.changes?json(res,200,{saved:true}):json(res,404,{error:'Research thread not found.'});}
   const forecastMatch=url.pathname.match(/^\/api\/threads\/([a-f0-9-]+)\/forecasts$/);
   if(req.method==='POST' && forecastMatch) {
    const thread=await store.get('SELECT id FROM research_threads WHERE id=? AND user_id=?',forecastMatch[1],owner); if(!thread)return json(res,404,{error:'Research thread not found.'});
    const b=await getBody(req); if(typeof b.probability!=='number'||!Number.isFinite(b.probability)||b.probability<0||b.probability>100||typeof b.reasoning!=='string'||b.reasoning.length>5000||typeof b.changeCondition!=='string'||b.changeCondition.length>5000||typeof (b.supportingEvidence ?? '')!=='string'||(b.supportingEvidence ?? '').length>5000||typeof (b.opposingEvidence ?? '')!=='string'||(b.opposingEvidence ?? '').length>5000) return json(res,400,{error:'Forecast data is invalid.'});
-   const now=new Date().toISOString();const latest=await store.get('SELECT market FROM research_revisions WHERE thread_id=? ORDER BY created_at DESC LIMIT 1',thread.id); await store.run('INSERT INTO forecast_revisions (id,thread_id,probability,reasoning,change_condition,created_at,market_snapshot,supporting_evidence,opposing_evidence) VALUES (?,?,?,?,?,?,?,?,?)',randomUUID(),thread.id,b.probability,b.reasoning,b.changeCondition,now,latest?.market || null,b.supportingEvidence || '',b.opposingEvidence || '');await store.run('UPDATE research_threads SET updated_at=? WHERE id=? AND user_id=?',now,thread.id,owner);return json(res,201,{createdAt:now});
+   const now=new Date().toISOString();const latest=await store.get('SELECT market FROM research_revisions WHERE thread_id=? ORDER BY created_at DESC LIMIT 1',thread.id); const facts=await marketFacts(latest?.market || null, b.outcomeIndex); await store.run('INSERT INTO forecast_revisions (id,thread_id,probability,reasoning,change_condition,created_at,market_snapshot,supporting_evidence,opposing_evidence,market_id,outcome_index,market_price,market_question,outcome_label) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)',randomUUID(),thread.id,b.probability,b.reasoning,b.changeCondition,now,latest?.market || null,b.supportingEvidence || '',b.opposingEvidence || '',facts.id,facts.index,facts.price,facts.question,facts.label);await store.run('UPDATE research_threads SET updated_at=? WHERE id=? AND user_id=?',now,thread.id,owner);return json(res,201,{createdAt:now});
   }
   if(req.method==='POST' && url.pathname==='/api/threads') {
    const b=await getBody(req); let question=typeof b.question==='string'?b.question.trim():''; let content,sources,model,retrievedAt,market=null;
@@ -90,7 +99,7 @@ const app=http.createServer(async(req,res)=>{ try {
    }
    if(question.length<5||question.length>2000) return json(res,400,{error:'Research data is invalid.'});
    const now=new Date().toISOString(); const id=typeof b.threadId==='string'?b.threadId:randomUUID();
-   const saved=await store.transaction(async tx=>{const existing=await tx.get('SELECT id FROM research_threads WHERE id = ? AND user_id = ?',id,owner); if(b.threadId&&!existing) return false; if(!existing) await tx.run('INSERT INTO research_threads VALUES (?,?,?,?,?)',id,owner,question,now,now); else await tx.run('UPDATE research_threads SET question=?, updated_at=? WHERE id=? AND user_id=?',question,now,id,owner); await tx.run('INSERT INTO research_revisions VALUES (?,?,?,?,?,?,?,?,?)',randomUUID(),id,now,question,content,JSON.stringify(sources),market?JSON.stringify(market):null,model,retrievedAt); return true;});
+   const saved=await store.transaction(async tx=>{const existing=await tx.get('SELECT id FROM research_threads WHERE id = ? AND user_id = ?',id,owner); if(b.threadId&&!existing) return false; if(!existing) await tx.run('INSERT INTO research_threads (id,user_id,question,created_at,updated_at) VALUES (?,?,?,?,?)',id,owner,question,now,now); else await tx.run('UPDATE research_threads SET question=?, updated_at=? WHERE id=? AND user_id=?',question,now,id,owner); await tx.run('INSERT INTO research_revisions VALUES (?,?,?,?,?,?,?,?,?)',randomUUID(),id,now,question,content,JSON.stringify(sources),market?JSON.stringify(market):null,model,retrievedAt); return true;});
    if(!saved) return json(res,404,{error:'Research thread not found.'}); return json(res,201,{id});
   }
   if(req.method==='DELETE' && match){const result=await store.run('DELETE FROM research_threads WHERE id=? AND user_id=?',match[1],owner);return result.changes?json(res,200,{deleted:true}):json(res,404,{error:'Research thread not found.'});}

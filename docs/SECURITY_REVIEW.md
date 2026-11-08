@@ -38,3 +38,7 @@ All tests: 22 pass, 1 skipped without a key (the live red team, which passed wit
 - **NEAR wallet sign-in end to end.** The local NEAR sandbox needs 65,535 open files and this machine allows 20,000, so the wallet login was not run against a real chain. Its signature checks are covered by the existing unit test; the account-key check calls mainnet RPC and is mocked in tests.
 - **Trading and funding** are not built yet (preview only), so no money paths exist to attack. They will need their own review before real orders.
 - **Keys in chat.** The Privy secret, the Polymarket builder key and two NEAR AI keys were shared in the build conversation. They are kept only in Railway variables, never in the repo, but they should be rotated.
+
+## Memory loop (added 8 Nov)
+
+The Journal adds one new outbound call (Polymarket's public market endpoint, by numeric id only), a note field, and four new fields on a forecast. What was checked: the market id must be digits before it goes into a URL; the market price and outcome are read by the server, never accepted from the browser; notes are text up to 2,000 characters, saved only to the owner's thread; one user cannot read another's journal or write their notes (tested in `tests/journal.test.mjs`); live prices are cached for a minute and the journal looks up at most 100 forecasts, five at a time. Not covered: a background watcher. The Journal compares with the market when you open it, it does not message you.

@@ -44,7 +44,8 @@ Clue shows live Polymarket data and previews trades against the real order book.
 | **Forecast privately** | Set your probability, write why, list evidence for and against, and say what would change your mind. Each save is a dated revision, and earlier ones are kept. |
 | **Preview a trade** | A trade ticket walks the live order book and shows the shares you would get, the average price, the estimated Polymarket fee, and what you would win or lose. It warns about thin books, minimum size and slippage. It checks your location first. **It cannot place an order.** |
 | **See NEAR staking** | A read-only card with rNEAR (Rhea Finance) rates from NEAR mainnet. NEAR wallet users also see their own rNEAR balance. |
-| **Revisit and share** | Saved research and forecasts live under **My research**. Export a thread, delete it, or publish a snapshot of the research alone (never your private forecast). |
+| **Revisit and share** | Saved research and forecasts live under **Journal**. Export a thread, delete it, or publish a snapshot of the research alone (never your private forecast). |
+| **Memory loop** | Each forecast records the market's price at that moment (read by the server, not the browser) and which outcome you meant. The **Journal** compares it with the market every time you open it: price moves, gaps, closing dates, and resolution. When a market resolves, Clue scores your forecast against the market's price at the time and asks what you learned. It will not claim you are good or bad until at least 5 forecasts have resolved. |
 | **Sign in your way** | A NEAR wallet (a signed message, no transaction) or Privy (email or an Ethereum wallet). |
 
 ## What works today
@@ -75,7 +76,7 @@ Open **https://clue-markets.vercel.app**. Nothing needs signing in until step 5.
 4. **Preview a trade.** In the **Trade** card enter an amount. *You should see* shares, average price, estimated fee and win/lose amounts from the live book. The button says "not available yet" on purpose. The card also shows whether Polymarket allows orders from your location.
 5. **Sign in.** Click **Sign in** and choose the NEAR wallet or Privy.
 6. **Research.** Open **Ask Clue**, type a question such as *Will the Fed cut rates in December?* and click **Research with sources**. *You should see* a report with source links that you can open. (This step needs the server to have a NEAR AI key.)
-7. **Forecast.** Set your probability, write your reasoning and what would change your mind, and click **Save forecast**. *You should see* it under **My research** with its date. Save again to add a revision.
+7. **Forecast.** Set your probability, write your reasoning and what would change your mind, and click **Save forecast**. *You should see* it under **Journal** with its date. Save again to add a revision.
 8. **Check the staking card.** On the home page, scroll the right column. *You should see* rNEAR APY, price and total staked. Signed in with a NEAR wallet, you also see your own balance.
 
 <table>
