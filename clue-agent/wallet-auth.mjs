@@ -1,6 +1,8 @@
 import {randomBytes,createHash} from 'node:crypto';
 import {PublicKey} from '@near-js/crypto';
 import {store,auth} from './auth.mjs';
+// Where the account-key check is sent. NEAR mainnet unless the operator points it elsewhere (tests use a local chain).
+const NEAR_RPC=process.env.NEAR_RPC_URL||'https://rpc.mainnet.near.org';
 const hash=x=>createHash('sha256').update(x).digest('hex');
 const cookie=(req,name)=>String(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(name+'='))?.slice(name.length+1);
 const str=x=>{const b=Buffer.from(x);const n=Buffer.alloc(4);n.writeUInt32LE(b.length);return Buffer.concat([n,b])};
@@ -28,7 +30,7 @@ export async function walletRoute(req,res,path,body,origin){
   const c=await store.get('SELECT * FROM wallet_challenges WHERE id=? AND expires>?',id,Date.now());
   if(!c||c.binding!==hash(cookie(req,'clue_challenge')||''))throw Object.assign(Error('Wallet request expired. Connect again.'),{status:401});
   if(!PublicKey.fromString(publicKey).verify(messageDigest(c.message,c.nonce,c.recipient),Buffer.from(signature,'base64')))throw Object.assign(Error('Wallet signature could not be verified.'),{status:401});
-  const r=await fetch('https://rpc.mainnet.near.org',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:'clue',method:'query',params:{request_type:'view_access_key',finality:'final',account_id:accountId,public_key:publicKey}}),signal:AbortSignal.timeout(15000)});
+  const r=await fetch(NEAR_RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:'clue',method:'query',params:{request_type:'view_access_key',finality:'final',account_id:accountId,public_key:publicKey}}),signal:AbortSignal.timeout(15000)});
   const result=await r.json();if(!r.ok||result.result?.permission!=='FullAccess')throw Object.assign(Error('This key is not a full-access key for that NEAR account.'),{status:401});
   const consumed=await store.run('DELETE FROM wallet_challenges WHERE id=? AND binding=?',id,c.binding);if(!consumed.changes)throw Object.assign(Error('Wallet request already used.'),{status:401});
   const userId='near:'+accountId;

@@ -62,8 +62,8 @@ This table separates what has been run from what has not. Nothing here is claime
 | Private forecast journal, saving, sharing, deleting | **Verified** in tests and a browser; accounts cannot see each other's data (tested) |
 | Add money price check (Rhea cross-chain prices) | **Verified** against Rhea's live service: 25 USDC from Ethereum or Base gave about 24.95; no money moves |
 | Security review and red team | **Done**: 6 findings fixed with tests, see [docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md); open items are listed there |
-| NEAR wallet sign-in | **Partly verified**: the signed-message check is unit-tested and the challenge works on the live site; a complete sign-in with a real wallet has not been recorded |
-| Privy sign-in | **Partly verified**: the sign-in window opens and token checks are tested; a complete sign-in with a real email or wallet has not been recorded |
+| NEAR wallet sign-in | **Verified on a real local NEAR chain** (near-kit sandbox): a full-access key signs in; a wrong key, a limited key, an unknown account, a tampered signature and a replayed answer are all refused. **Not yet recorded** with a real wallet app on mainnet |
+| Email sign-in (Privy) and the wallet made for email users | **Verified on the live site** with a real email code: signed in, got a wallet, address shown in Add money |
 | Placing real orders on Polymarket | **Not built.** Planned in [docs/TRADING_PLAN.md](docs/TRADING_PLAN.md); it can only be proven with a funded test wallet |
 | Funding from other chains with NEAR Intents | **Not built** |
 | Alerts when evidence changes, replay and scoring after resolution, public profiles | **Not built** |
