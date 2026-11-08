@@ -102,7 +102,7 @@ function openAccountDialog(message) {
     el("p", { id: "account-status", class: "status err", role: "status" }),
     el("div", { class: "actions", style: "flex-direction:column;align-items:stretch" },
       el("button", { class: "btn primary", id: "wallet-connect", type: "button", text: "Continue with NEAR wallet", onclick: connectWallet }),
-      el("button", { class: "btn", id: "privy-connect", type: "button", text: "Continue with email or wallet (Privy)", onclick: connectPrivy }),
+      el("button", { class: "btn", id: "privy-connect", type: "button", text: "Continue with email or wallet", onclick: connectPrivy }),
       el("button", { class: "btn ghost", type: "button", text: "Not now", onclick: () => dialog.close() })),
   );
   if (!dialog.open) dialog.showModal();
@@ -221,51 +221,14 @@ function askHero() {
     el("div", { class: "chips" }, EXAMPLES.map((q) => el("a", { class: "chip", href: `#/ask?q=${encodeURIComponent(q)}`, text: q }))));
 }
 
-/* rNEAR (Rhea Finance liquid staking). Read-only: Clue never stakes or moves funds. */
-async function loadRhea(box) {
-  try {
-    const r = await api("/api/rnear/summary");
-    const row = (k, v) => el("div", { class: "rhea-row" }, el("span", { class: "muted", text: k }), el("b", { class: "num", text: v }));
-    box.replaceChildren(
-      el("div", { class: "rhea-head" }, el("h2", { text: "rNEAR staking" }), el("a", { class: "small", href: "https://www.rhea.finance", target: "_blank", rel: "noopener noreferrer", text: "Rhea Finance ↗" })),
-      el("div", { class: "rhea-apy" }, el("b", { class: "num", text: r.apyPercent == null ? "—" : `${r.apyPercent.toFixed(2)}%` }), el("span", { class: "muted small", text: "APY" })),
-      row("1 rNEAR =", r.nearPerRNear == null ? "—" : `${r.nearPerRNear.toFixed(4)} NEAR`),
-      row("Total staked", r.totalStakedNear == null ? "—" : `${Math.round(r.totalStakedNear).toLocaleString()} NEAR`),
-      row("Validators", String(r.validators)),
-      row("Unstake wait", `~${r.unstakeWaitHours}h`),
-      el("div", { id: "rhea-me" }),
-      el("p", { class: "muted small", style: "margin-top:8px", text: `Read-only from NEAR mainnet at ${new Date(r.retrievedAt).toLocaleTimeString()}. APY is variable and not a promise. Staking happens on Rhea; Clue does not move your funds.` }));
-    loadRheaMe();
-  } catch (e) {
-    box.replaceChildren(el("p", { class: "muted small", text: "rNEAR data is unavailable right now." }));
-  }
-}
-async function loadRheaMe() {
-  const slot = $("rhea-me");
-  if (!slot || !user) return;
-  try {
-    const d = await api("/api/rnear/me");
-    if (!d.linked) { slot.replaceChildren(el("p", { class: "muted small", style: "margin-top:8px", text: d.reason })); return; }
-    const p = d.position;
-    slot.replaceChildren(el("div", { class: "rhea-me" },
-      el("strong", { text: "Your position" }),
-      el("div", { class: "rhea-row" }, el("span", { class: "muted", text: "rNEAR balance" }), el("b", { class: "num", text: p.rNearBalance == null ? "—" : p.rNearBalance.toFixed(4) })),
-      el("div", { class: "rhea-row" }, el("span", { class: "muted", text: "Worth" }), el("b", { class: "num", text: p.stakedValueNear == null ? "—" : `${p.stakedValueNear.toFixed(4)} NEAR` })),
-      p.pendingUnstakeNear > 0 ? el("div", { class: "rhea-row" }, el("span", { class: "muted", text: "Unstaking" }), el("b", { class: "num", text: `${p.pendingUnstakeNear.toFixed(4)} NEAR` })) : null));
-  } catch (e) { slot.replaceChildren(el("p", { class: "muted small", text: `Could not load your position: ${e.message}` })); }
-}
-document.addEventListener("clue:account", () => loadRheaMe());
-
 const SORTS = [["Trending", "trending"], ["Volume", "volume"], ["New", "new"], ["Ending soon", "ending"]];
 async function boardView(tag, q, stale, sort = "trending") {
   const head = el("div", { class: "section-head" }, el("h2", { text: q ? `Results for “${q}”` : tag ? CATEGORIES.find((c) => c[1] === tag)?.[0] || "Markets" : "Trending markets" }), el("span", { class: "live", id: "board-meta" }));
   const sortbar = q ? null : el("nav", { class: "sortbar", "aria-label": "Sort markets" }, SORTS.map(([label, v]) => el("a", { class: "chipb", href: `#/?${tag ? "tag=" + tag + "&" : ""}sort=${v}`, "aria-current": String(v === sort), text: label })));
   const grid = el("div", { class: "grid-board", "aria-busy": "true" }, Array.from({ length: 8 }, () => el("div", { class: "skeleton" })));
-  const rhea = el("div", { class: "rhea", id: "rhea-box" }, el("p", { class: "muted small", text: "Loading rNEAR…" }));
-  const rail = el("aside", { class: "card rail" }, el("h2", { text: "Most traded today" }), el("ol", { id: "rail-list" }), rhea);
+  const rail = el("aside", { class: "card rail" }, el("h2", { text: "Most traded today" }), el("ol", { id: "rail-list" }));
   const top = !q && !tag ? el("div", { class: "hero" }, askHero(), rail) : null;
   app.replaceChildren(...[top, head, sortbar, grid].filter(Boolean));
-  if (top) loadRhea(rhea);
   try {
     const d = await api(`/api/events?${q ? "q=" + encodeURIComponent(q) : "tag=" + encodeURIComponent(tag) + "&sort=" + sort}`);
     if (stale()) return;
@@ -351,7 +314,7 @@ async function eventView(slug, marketId, stale) {
     const outcomeSeg = outcomes.length > 1 ? el("div", { class: "seg", role: "group", "aria-label": "Outcome" }, outcomes.slice(0, 4).map((o, i) =>
       el("button", { type: "button", "aria-pressed": String(i === outcomeIdx), text: `${o} ${pct(sel.outcomePrices[i])}`, onclick: () => { outcomeIdx = i; renderStage(); } }))) : null;
 
-    const tabs = ["Rules", "Order book"];
+    const tabs = ["Rules", "Live orders"];
     let tab = "Rules";
     const panel = el("div", { class: "tabpanel", role: "tabpanel" });
     const tabBar = el("div", { class: "tabs", role: "tablist" });
@@ -386,24 +349,23 @@ async function eventView(slug, marketId, stale) {
     const text = el("div", { class: "rules" });
     linkify(text, rules || "Polymarket published no resolution text for this market.");
     box.append(...kids(
-      el("p", { class: "muted small", style: "margin-bottom:10px", text: "This is the venue’s own wording. It decides how the market settles. Nothing on Clue overrides it." }),
+      el("p", { class: "muted small", style: "margin-bottom:10px", text: "These are Polymarket’s own rules. They decide how this question is settled. Clue can’t change them." }),
       text,
       rules && rules.length > 700 ? el("button", { class: "btn small ghost", type: "button", text: "Show all", onclick: (e) => { text.classList.toggle("open"); e.target.textContent = text.classList.contains("open") ? "Show less" : "Show all"; } }) : null,
       el("dl", { class: "facts" },
-        fact("Resolution source", sel.resolutionSource || ev.resolutionSource || "Not stated"),
-        fact("Resolution status", sel.resolutionStatus || "Not resolved yet"),
-        fact("Market closes", when(sel.endDate)),
-        fact("Market ID", sel.conditionId || "unavailable"))));
+        fact("Decided by", sel.resolutionSource || ev.resolutionSource || "Not stated"),
+        fact("Status", sel.resolutionStatus || "Not decided yet"),
+        fact("Closes", when(sel.endDate)))));
   }
   const fact = (k, v) => el("div", null, el("dt", { text: k }), el("dd", { text: v }));
 
   async function drawBook(box, token, name) {
-    if (!token) { box.append(el("p", { class: "muted", text: "No order book is available for this outcome." })); return; }
-    box.append(el("p", { class: "muted", role: "status", text: "Loading live order book…" }));
+    if (!token) { box.append(el("p", { class: "muted", text: "No live orders are available for this outcome." })); return; }
+    box.append(el("p", { class: "muted", role: "status", text: "Loading live orders…" }));
     try {
       const b = await api(`/api/book?token=${encodeURIComponent(token)}`);
       if (!box.isConnected) return;
-      if (b.available === false) { box.replaceChildren(el("p", { class: "muted", text: "Polymarket has no order book for this outcome right now. Nobody can buy or sell it at the moment." })); return; }
+      if (b.available === false) { box.replaceChildren(el("p", { class: "muted", text: "Nobody is buying or selling this outcome right now." })); return; }
       const max = Math.max(1, ...b.bids.map((x) => x.size), ...b.asks.map((x) => x.size));
       const col = (title, rows, cls) => el("div", null, el("h3", { text: title }), rows.length ? rows.slice(0, 6).map((l) =>
         el("div", { class: `lvl ${cls}` }, el("i", { style: `width:${(l.size / max) * 100}%` }), el("span", { text: pct(l.price, 1) }), el("span", { text: `${Math.round(l.size).toLocaleString()} shares` }))) : el("p", { class: "muted small", text: "No orders" }));
@@ -411,7 +373,7 @@ async function eventView(slug, marketId, stale) {
       box.replaceChildren(
         el("div", { class: "book" }, col(`Buyers · ${name}`, b.bids, "b"), col(`Sellers · ${name}`, b.asks, "a")),
         el("p", { class: "muted small", style: "margin-top:12px", text: `Spread ${spread == null ? "unavailable" : (spread * 100).toFixed(1) + " pts"}. This is the resting order book, not trading volume. Book time ${when(b.bookTime)}.` }));
-    } catch (e) { box.replaceChildren(errBox("Order book unavailable", e.message)); }
+    } catch (e) { box.replaceChildren(errBox("Live orders unavailable", e.message)); }
   }
 
   async function drawChart(box, token, iv) {
@@ -437,7 +399,7 @@ async function mountTicket(box, ctx) {
   let mode = "market", book = null, bookErr = "";
   const usd = (n) => `$${Number.isFinite(n) ? n.toFixed(2) : "0.00"}`;
   const cents = (p) => (p == null ? "—" : `${(p * 100).toFixed(1)}¢`);
-  const spend = el("input", { type: "number", min: "0", step: "1", value: "50", inputmode: "decimal", "aria-label": "Amount to spend in pUSD" });
+  const spend = el("input", { type: "number", min: "0", step: "1", value: "50", inputmode: "decimal", "aria-label": "Amount to spend in dollars" });
   const limitPrice = el("input", { type: "number", min: "0", max: "100", step: "0.1", inputmode: "decimal", "aria-label": "Limit price in cents" });
   const shares = el("input", { type: "number", min: "0", step: "1", value: "10", inputmode: "decimal", "aria-label": "Number of shares" });
   const geoBox = el("div", { class: "geo", role: "status" }, el("span", { class: "muted small", text: "Checking your location…" }));
@@ -450,14 +412,14 @@ async function mountTicket(box, ctx) {
     seg.querySelectorAll("button").forEach((b, i) => b.setAttribute("aria-pressed", String(["market", "limit"][i] === mode)));
     const f = (label, input, hint) => el("label", { class: "field" }, el("span", { text: label }), hint && el("small", { text: hint }), input);
     fields.replaceChildren(...(mode === "market"
-      ? [f("Amount to spend (pUSD)", spend, "Fills from the cheapest sellers upward.")]
+      ? [f("Amount to spend ($)", spend, "Buys from the cheapest sellers first.")]
       : [f("Limit price (¢ per share)", limitPrice, `Most you'll pay. Steps of ${m.tickSize ? +(m.tickSize * 100).toFixed(2) : 1}¢.`), f("Shares", shares, `Minimum ${m.minOrderSize || 5} shares.`)]));
   }
 
   function drawPreview() {
     if (bookErr) { preview.replaceChildren(el("p", { class: "status err", text: bookErr })); return; }
-    if (!book) { preview.replaceChildren(el("p", { class: "muted small", text: "Loading the live order book…" })); return; }
-    if (book.available === false) { preview.replaceChildren(el("p", { class: "tk-warn block", text: "This outcome has no order book on Polymarket right now, so it can't be traded. Pick another question above." })); return; }
+    if (!book) { preview.replaceChildren(el("p", { class: "muted small", text: "Loading live orders…" })); return; }
+    if (book.available === false) { preview.replaceChildren(el("p", { class: "tk-warn block", text: "Nobody is buying or selling this outcome on Polymarket right now, so it can’t be traded. Pick another question above." })); return; }
     const r = T.previewBuy({
       mode, asks: book.asks, bestBid: book.bids[0]?.price ?? null,
       spend: Number(spend.value), shares: Number(shares.value), limitPrice: Number(limitPrice.value) / 100,
@@ -467,17 +429,17 @@ async function mountTicket(box, ctx) {
     const total = r.sharesFilled + r.restingShares;
     preview.replaceChildren(...[
       ...(total > 0 ? [
-        r.sharesFilled > 0 ? row("You'd get now", `${r.sharesFilled.toFixed(2)} shares @ ${cents(r.avgPrice)} avg`) : null,
-        r.restingShares > 0 ? row("Waiting on the book", `${r.restingShares.toFixed(2)} shares @ ${cents(r.restingPrice)}`) : null,
+        r.sharesFilled > 0 ? row("You'd get", `${r.sharesFilled.toFixed(2)} shares · ${cents(r.avgPrice)} each`) : null,
+        r.restingShares > 0 ? row("Waiting for a seller", `${r.restingShares.toFixed(2)} shares at ${cents(r.restingPrice)}`) : null,
         row("You pay", usd(r.cost)),
-        row("Polymarket fee (est.)", m.feesEnabled ? usd(r.platformFee) : "none on this market"),
+        row("Polymarket fee (estimate)", m.feesEnabled ? usd(r.platformFee) : "none on this market"),
         row("Clue fee", "none"),
         el("div", { class: "tk-outcomes" },
           el("div", { class: "tk-win" }, el("small", { text: `If "${ctx.outcome}" happens` }), el("b", { class: "num", text: `+${usd(r.profitIfWin ?? 0)}` }), el("small", { text: `you receive ${usd(total)}` })),
           el("div", { class: "tk-lose" }, el("small", { text: "If it doesn't" }), el("b", { class: "num", text: `−${usd(r.cost + r.platformFee)}` }), el("small", { text: "you lose what you paid" }))),
       ] : []),
       ...r.warnings.map((w) => el("p", { class: `tk-warn ${w.level}`, text: w.text })),
-      el("p", { class: "muted small", style: "margin-top:8px", text: `From the live book${book.bookTime ? ` at ${new Date(book.bookTime).toLocaleTimeString()}` : ""}. Fills can differ if the book moves. The fee is estimated from Polymarket's published formula; Polymarket sets the real fee.` }),
+      el("p", { class: "muted small", style: "margin-top:8px", text: `Based on live orders${book.bookTime ? ` at ${new Date(book.bookTime).toLocaleTimeString()}` : ""}. The real price can change if orders change. Polymarket sets the final fee.` }),
     ].filter(Boolean));
   }
 
@@ -488,31 +450,31 @@ async function mountTicket(box, ctx) {
       : item("todo", "Location", "couldn't be checked, so trading stays off");
     geoBox.replaceChildren(...kids(
       el("ul", { class: "checklist" }, loc,
-        item("todo", "Wallet", "connect an Ethereum wallet · coming next"),
-        item("todo", "Polymarket account", "created for you on first trade · coming next"),
-        item("todo", "Funds", "pUSD on Polygon · coming next")),
+        item("todo", "Your wallet", "connect it · coming next"),
+        item("todo", "Your Polymarket account", "set up at your first trade · coming next"),
+        item("todo", "Money in your account", "coming next")),
       geo.state === "blocked" ? el("p", { class: "muted small", style: "margin-top:8px", text: "You can still research, forecast and preview. Clue doesn't help get around location limits." }) : null));
   }
 
   function draw() { drawFields(); drawPreview(); }
   box.replaceChildren(
-    el("div", { class: "panel-head tk-head" }, el("h2", { text: "Trade" }), el("span", { class: "tag", text: "Preview only" })),
+    el("div", { class: "panel-head tk-head" }, el("h2", { text: "Trade" }), el("span", { class: "tag", text: "Preview" })),
     el("div", { class: "pad" },
       el("p", { class: "small" }, el("b", { text: `Buy "${ctx.outcome}"` }), el("span", { class: "muted", text: ` · ${m.groupItemTitle || m.question}` })),
       el("div", { style: "margin:10px 0" }, seg), fields, preview,
       el("button", { class: "btn dark tk-submit", type: "button", disabled: true, title: "Trading isn't switched on yet.", text: "Place order — not available yet" }),
-      el("p", { class: "muted small", style: "margin-top:6px", text: "Orders will be signed by your own wallet and matched on Polymarket's order book. Clue never holds your funds." }),
+      el("p", { class: "muted small", style: "margin-top:6px", text: "You will approve every order with your own wallet. Clue never holds your money." }),
       geoBox));
   [spend, limitPrice, shares].forEach((i) => i.addEventListener("input", drawPreview));
   draw();
   geoOnce().then(drawChecklist);
-  if (!ctx.token) { bookErr = "No order book for this outcome."; drawPreview(); return; }
+  if (!ctx.token) { bookErr = "No live orders for this outcome."; drawPreview(); return; }
   try {
     book = await api(`/api/book?token=${encodeURIComponent(ctx.token)}&depth=60`);
     if (!box.isConnected) return;
     if (!limitPrice.value && book.asks[0]) limitPrice.value = (book.asks[0].price * 100).toFixed(1);
     draw();
-  } catch (e) { bookErr = `Couldn't load the order book: ${e.message}`; drawPreview(); }
+  } catch (e) { bookErr = `Couldn't load live orders: ${e.message}`; drawPreview(); }
 }
 
 /* SVG line chart with hover read-out */
@@ -611,7 +573,7 @@ function mountWorkspace(container, ctx) {
     reportBox.replaceChildren(
       el("span", { class: "label" }, "AI-generated · check the sources"),
       sourceChips(r.sources || []), text, more,
-      el("p", { class: "muted small", style: "margin-top:8px", text: `${r.model} · ${when(r.retrievedAt)}. AI can be wrong or out of date. It is not a source of truth about outcomes.` }));
+      el("p", { class: "muted small", style: "margin-top:8px", title: `Written by ${r.model}`, text: `Written by AI · ${when(r.retrievedAt)}. It can be wrong or out of date, so check the sources. It does not decide how a market settles.` }));
     reportBox.hidden = false;
   }
 
@@ -766,7 +728,7 @@ async function mountFunding(box) {
         el("dl", { class: "rc-list" },
           el("dt", { text: "Worst case you get" }), el("dd", { class: "num", text: dollars(q.minimumReceive) }),
           el("dt", { text: "Fee for moving it" }), el("dd", { class: "num", text: dollars(q.costUsd) }),
-          q.networkFeeUsd != null ? el("dt", { text: "Network fee" }) : null, q.networkFeeUsd != null ? el("dd", { class: "num", text: `about ${dollars(q.networkFeeUsd)}, paid in ${q.networkFeeToken}` }) : null,
+          q.networkFeeUsd != null ? el("dt", { text: "Blockchain fee" }) : null, q.networkFeeUsd != null ? el("dd", { class: "num", text: `about ${dollars(q.networkFeeUsd)}, paid in ${q.networkFeeToken}` }) : null,
           q.seconds != null ? el("dt", { text: "Takes" }) : null, q.seconds != null ? el("dd", { class: "num", text: `about ${q.seconds} seconds` }) : null),
         el("p", { class: "fund-foot", text: "This is a price check only. Nothing has been sent and your money hasn’t moved. Sending is the next thing we’re adding." })));
     } catch (e) { out.replaceChildren(el("p", { class: "status err", text: e.message })); }
@@ -827,7 +789,7 @@ function journalRow(e) {
     el("strong", { text: e.thread.question }),
     el("div", { class: "jmeta" },
       el("span", { class: "num", text: `You ${f.probability}%` }), el("span", { class: "muted", text: now }),
-      el("span", { class: "muted small", text: `saved ${day(f.created_at)}${f.revisions > 1 ? ` · ${f.revisions} revisions` : ""}` })),
+      el("span", { class: "muted small", text: `saved ${day(f.created_at)}${f.revisions > 1 ? ` · updated ${f.revisions - 1} time${f.revisions > 2 ? "s" : ""}` : ""}` })),
     el("div", { class: "jchips" }, flagChips(w)));
 }
 const needsAttention = (e) => e.watch && (e.watch.flags || []).some((f) => ["moved", "closing-soon", "awaiting-resolution"].includes(f) || (f === "resolved" && !e.thread.lesson));
@@ -908,12 +870,12 @@ async function savedThread(id, stale) {
     });
     const msg = el("p", { class: "status", role: "status" });
     const shares = el("div");
-    const drawShares = (items) => shares.replaceChildren(...(items || []).map((p) => el("p", { class: "small" }, el("a", { href: `/?share=${encodeURIComponent(p.id)}`, target: "_blank", rel: "noopener", text: `Shared snapshot · ${day(p.created_at)}` }), " · ", el("button", { class: "btn small ghost", type: "button", text: "Remove", onclick: async () => { if (!confirm("Remove this shared snapshot?")) return; try { await api(`/api/threads/${encodeURIComponent(id)}/publications/${encodeURIComponent(p.id)}`, { method: "DELETE" }); drawShares((await api(`/api/threads/${encodeURIComponent(id)}`)).publications); } catch (e) { msg.className = "status err"; msg.textContent = e.message; } } }))));
+    const drawShares = (items) => shares.replaceChildren(...(items || []).map((p) => el("p", { class: "small" }, el("a", { href: `/?share=${encodeURIComponent(p.id)}`, target: "_blank", rel: "noopener", text: `Shared research · ${day(p.created_at)}` }), " · ", el("button", { class: "btn small ghost", type: "button", text: "Remove", onclick: async () => { if (!confirm("Remove this shared snapshot?")) return; try { await api(`/api/threads/${encodeURIComponent(id)}/publications/${encodeURIComponent(p.id)}`, { method: "DELETE" }); drawShares((await api(`/api/threads/${encodeURIComponent(id)}`)).publications); } catch (e) { msg.className = "status err"; msg.textContent = e.message; } } }))));
     drawShares(d.publications);
     const actions = el("div", { class: "actions" },
       el("button", { class: "btn", type: "button", text: "Export", onclick: async () => { const full = await api(`/api/threads/${encodeURIComponent(id)}`); const a = el("a", { href: URL.createObjectURL(new Blob([JSON.stringify(full, null, 2)], { type: "application/json" })), download: "clue-research.json" }); a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); } }),
-      el("button", { class: "btn", type: "button", text: "Share snapshot", onclick: async () => { if (!confirm("Publish the latest saved question, answer, sources and connected market? Your private forecast and notes are NOT included.")) return; try { await post(`/api/threads/${encodeURIComponent(id)}/publish`, {}); drawShares((await api(`/api/threads/${encodeURIComponent(id)}`)).publications); msg.className = "status ok"; msg.textContent = "Shared. This is a snapshot, not a full track record."; } catch (e) { msg.className = "status err"; msg.textContent = e.message; } } }),
-      el("button", { class: "btn", type: "button", style: "color:var(--no)", text: "Delete", onclick: async () => { if (!confirm("Delete this research and all its revisions?")) return; try { await api(`/api/threads/${encodeURIComponent(id)}`, { method: "DELETE" }); location.hash = "#/saved"; } catch (e) { msg.className = "status err"; msg.textContent = e.message; } } }));
+      el("button", { class: "btn", type: "button", text: "Share this research", onclick: async () => { if (!confirm("Publish the latest saved question, answer, sources and connected market? Your private forecast and notes are NOT included.")) return; try { await post(`/api/threads/${encodeURIComponent(id)}/publish`, {}); drawShares((await api(`/api/threads/${encodeURIComponent(id)}`)).publications); msg.className = "status ok"; msg.textContent = "Shared. This is a snapshot, not a full track record."; } catch (e) { msg.className = "status err"; msg.textContent = e.message; } } }),
+      el("button", { class: "btn", type: "button", style: "color:var(--no)", text: "Delete", onclick: async () => { if (!confirm("Delete this research and everything saved with it?")) return; try { await api(`/api/threads/${encodeURIComponent(id)}`, { method: "DELETE" }); location.hash = "#/saved"; } catch (e) { msg.className = "status err"; msg.textContent = e.message; } } }));
     const older = d.revisions.slice(1).map((r) => el("details", { class: "card pad", style: "margin-top:10px" }, el("summary", { text: `Earlier research · ${when(r.created_at)}` }), el("p", { class: "report-text", text: r.content })));
     app.replaceChildren(
       el("a", { class: "crumb", href: "#/saved", text: "← Journal" }),
@@ -930,10 +892,10 @@ async function sharedView(shareId) {
     const d = await api(`/api/public/${encodeURIComponent(shareId)}`);
     const text = el("div", { class: "report-text" }); linkify(text, d.snapshot.content, d.snapshot.sources || []);
     app.replaceChildren(el("div", { class: "ask-page" },
-      el("p", { class: "muted small", text: `Shared research snapshot · ${when(d.publishedAt)}` }),
+      el("p", { class: "muted small", text: `Shared research · ${when(d.publishedAt)}` }),
       el("h1", { text: d.snapshot.question }),
       el("div", { class: "card pad", style: "margin-top:20px" }, el("span", { class: "label", style: "color:var(--brand-text);font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase", text: "AI-generated · check the sources" }), sourceChips(d.snapshot.sources || []), text),
-      el("p", { class: "note", text: "This is a one-time snapshot chosen by its author. It is not a complete record, and the author’s private forecasts are not included." })));
+      el("p", { class: "note", text: "This is a copy that its author chose to share. It is not the full story, and their private forecasts are not included." })));
   } catch (e) { app.replaceChildren(errBox("Shared research unavailable", e.message)); }
 }
 

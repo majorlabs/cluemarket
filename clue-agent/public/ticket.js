@@ -34,7 +34,7 @@
         if (feeOn) out.platformFee += sh * o.feeRate * l.price * (1 - l.price);
       }
       out.unfilledBudget = Math.max(0, budget);
-      if (out.unfilledBudget > 0.005) warn("warn", `Only ${money(out.cost)} of your ${money(Number(o.spend))} could fill. The book doesn't have enough sellers.`);
+      if (out.unfilledBudget > 0.005) warn("warn", `Only ${money(out.cost)} of your ${money(Number(o.spend))} could fill. There aren't enough sellers.`);
     } else {
       const want = Number(o.shares) || 0, lim = Number(o.limitPrice) || 0;
       if (want <= 0 || lim <= 0 || lim >= 1) { warn("info", "Enter a price between 0 and 1 and a number of shares."); return out; }
@@ -49,7 +49,7 @@
       out.restingShares = Math.max(0, left);
       out.restingPrice = out.restingShares > 0 ? lim : null;
       if (o.tickSize && Math.abs(lim / o.tickSize - Math.round(lim / o.tickSize)) > 1e-6) warn("warn", `Price must be a multiple of ${o.tickSize}. Polymarket will reject this one.`);
-      if (out.restingShares > 0) warn("info", `${fmt(out.restingShares)} shares wouldn't fill now. They'd wait on the book at ${pct(lim)} and might never fill.`);
+      if (out.restingShares > 0) warn("info", `${fmt(out.restingShares)} shares wouldn't fill now. They'd wait for a seller at ${pct(lim)} and might never fill.`);
     }
 
     out.avgPrice = out.sharesFilled > 0 ? out.cost / out.sharesFilled : null;
@@ -58,7 +58,7 @@
     out.profitIfWin = out.sharesFilled > 0 ? out.sharesFilled - out.cost - out.platformFee - out.builderFee : null;
     if (out.avgPrice != null && out.bestAsk != null) {
       out.slippagePts = (out.avgPrice - out.bestAsk) * 100;
-      if (out.slippagePts >= 2) warn("warn", `You'd pay ${out.slippagePts.toFixed(1)} points above the best price because the order walks up the book.`);
+      if (out.slippagePts >= 2) warn("warn", `You'd pay ${out.slippagePts.toFixed(1)} points above the best price because your order uses up the cheapest sellers first.`);
     }
     if (o.bestBid != null && out.bestAsk != null && out.bestAsk - o.bestBid >= 0.1) warn("warn", `Thin market: buyers and sellers are ${((out.bestAsk - o.bestBid) * 100).toFixed(0)} points apart. Selling back later could cost a lot.`);
     const total = out.sharesFilled + out.restingShares;
