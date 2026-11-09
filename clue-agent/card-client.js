@@ -24,7 +24,34 @@ export function describe(d) {
     const now = Number(d.now), value = shares * now, pnl = value - paid;
     return { tag: 'LIVE CALL', big: pct(paid > 0 ? pnl / paid : 0), sub: `${usd(pnl)} right now`, dark: pnl < 0, stats: [['SHARES', shares.toFixed(2)], ['PAID', usd(paid)], ['WORTH NOW', usd(value)]] };
   }
-  return { tag: 'MY CALL', big: pct(ifLands), sub: `if ${d.side || 'Yes'} lands`, dark: false, stats: [['SHARES', shares.toFixed(2)], ['PAID', usd(paid)], ['PAYS IF IT LANDS', usd(shares)]] };
+  return { tag: "I'M IN", big: pct(ifLands), sub: `if ${d.side || 'Yes'} lands`, dark: false, stats: [['SHARES', shares.toFixed(2)], ['PAID', usd(paid)], ['PAYS IF IT LANDS', usd(shares)]] };
+}
+
+// The post that goes with each card. Plain paragraphs, no formatting marks, no hashtags, nothing that sounds like an advert.
+// X counts a link as 23 characters and allows 280 in all, so the question is shortened until the whole post fits.
+const X_LIMIT = 280, X_LINK = 23;
+export function postText(d, url) {
+  const entry = Number(d.entry), shares = Number(d.shares) || 0, paid = Number.isFinite(Number(d.paid)) ? Number(d.paid) : shares * entry;
+  const side = String(d.side || 'Yes'), px = cents(entry);
+  const build = (q) => {
+    const Q = `"${q}"`;
+    if (d.kind === 'won') {
+      const payout = Number.isFinite(Number(d.payout)) ? Number(d.payout) : shares;
+      return [`Called it. I said ${side} on ${Q} at ${px} and it landed.`, `${usd(paid)} in, ${usd(payout)} back. That is ${usd(payout - paid)} made.`, 'Make your own call:'];
+    }
+    if (d.kind === 'lost') return [`Missed this one. I took ${side} on ${Q} at ${px} and it went the other way.`, `${usd(paid)} gone. That is what putting real money behind a call means. On to the next one.`, 'Make your own call:'];
+    if (d.kind === 'open') {
+      const now = Number(d.now), pnl = shares * now - paid;
+      const how = pnl >= 0 ? `That is ${usd(pnl)} up on ${usd(paid)} so far.` : `That is ${usd(-pnl)} down on ${usd(paid)} so far.`;
+      return [`Checking in on my ${side} call on ${Q}. I got in at ${px} and it is at ${cents(now)} now.`, `${how} Still open, so it can go either way.`, 'Follow it here:'];
+    }
+    return [`I'm in on ${side} at ${px}: ${Q}`, `If it lands, ${usd(paid)} turns into ${usd(shares)}. If it does not, I lose the ${usd(paid)}.`, 'Make your own call:'];
+  };
+  let q = String(d.question || '').replace(/["“”]/g, '').trim();
+  const fits = (s) => s.join('\n\n').length + 1 + X_LINK <= X_LIMIT;
+  while (!fits(build(q)) && q.length > 12) q = `${q.slice(0, -2).trimEnd()}…`.replace(/……$/, '…');
+  const body = build(q).join('\n\n');
+  return { body, full: `${body}\n${url}` };
 }
 
 function wrap(ctx, text, maxWidth, maxLines) {
@@ -146,4 +173,4 @@ export async function render(d) {
 
 export const toBlob = async (d) => { const c = await render(d); return new Promise((resolve) => c.toBlob(resolve, 'image/png')); };
 
-window.ClueCard = { render, toBlob, describe };
+window.ClueCard = { render, toBlob, describe, postText };
