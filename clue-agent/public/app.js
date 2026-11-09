@@ -120,8 +120,9 @@ document.addEventListener("keydown", (e) => {
 const dialog = $("account-dialog");
 function openAccountDialog(message) {
   dialog.replaceChildren(
+    el("img", { class: "dlg-mark", src: document.documentElement.dataset.theme === "light" ? "/assets/clue-mark.svg" : "/assets/clue-mark-on-dark.svg", alt: "" }),
     el("h2", { text: "Sign in to Clue" }),
-    el("p", { text: message || "Signing in keeps your research and forecasts private to you. Clue never holds your keys and never places trades." }),
+    el("p", { text: message || "Sign in to research, keep a private forecast journal and trade, all in one place. Your keys stay yours." }),
     el("p", { id: "account-status", class: "status err", role: "status" }),
     el("div", { class: "actions", style: "flex-direction:column;align-items:stretch" },
       el("button", { class: "btn primary", id: "wallet-connect", type: "button", text: "Continue with NEAR wallet", onclick: connectWallet }),
@@ -265,6 +266,8 @@ $("account-open").addEventListener("click", async () => {
   openAccountMenu();
 });
 window.installClueTheme?.();
+const topBar = document.querySelector(".top");
+addEventListener("scroll", () => topBar.classList.toggle("scrolled", scrollY > 8), { passive: true });
 
 /* ---------- router ---------- */
 function parse() {
@@ -602,7 +605,8 @@ function askHero() {
   const form = el("form", { onsubmit: (e) => { e.preventDefault(); const q = input.value.trim(); if (q.length >= 5) location.hash = `#/ask?q=${encodeURIComponent(q)}`; else input.focus(); } },
     input, el("button", { class: "btn primary", type: "submit", text: "Research it" }));
   return el("section", { class: "ask-hero" },
-    el("h1", { text: "A clearer view of what comes next." }),
+    el("span", { class: "hero-kicker", text: "Live markets · real evidence" }),
+    el("h1", null, "A clearer view of ", el("em", { text: "what comes next." })),
     el("p", { text: "Ask any question. Clue finds sources for and against, shows where real markets stand, and keeps your own forecast so you can learn from what happens." }),
     form,
     el("div", { class: "chips" }, EXAMPLES.map((q) => el("a", { class: "chip", href: `#/ask?q=${encodeURIComponent(q)}`, text: q }))));
@@ -630,7 +634,7 @@ async function boardView(tag, q, stale, sort = "trending") {
       list.append(el("li", null, el("a", { href: `#/event/${encodeURIComponent(ev.slug)}` }, el("span", { text: ev.title }), el("span", { class: "pct", text: pct(m.outcomePrices[0]) }))));
     }
   } catch (e) {
-    if (!stale()) grid.replaceWith(errBox("Couldn’t load markets", `${e.message}. Nothing is shown instead of made-up data.`, route));
+    if (!stale()) grid.replaceWith(errBox("Couldn’t load markets", e.message, route));
   }
 }
 
@@ -717,7 +721,7 @@ async function eventView(slug, marketId, stale) {
           el("div", null,
             el("p", { class: "muted small", text: sel.question }),
             el("div", { class: "big", text: pct(price) }),
-            el("p", { class: "muted small", text: `${outcomes[outcomeIdx]} · market price, not a forecast by Clue` })),
+            el("p", { class: "muted small", text: `${outcomes[outcomeIdx]} · live market price` })),
           el("div", { style: "display:grid;gap:8px;justify-items:end" }, outcomeSeg, seg)),
         chartBox),
       el("div", { class: "stats" },
@@ -735,7 +739,7 @@ async function eventView(slug, marketId, stale) {
     const text = el("div", { class: "rules" });
     linkify(text, rules || "No rules were published for this market.");
     box.append(...kids(
-      el("p", { class: "muted small", style: "margin-bottom:10px", text: "These are the market’s own rules. They decide how this question is settled. Clue can’t change them." }),
+      el("p", { class: "muted small", style: "margin-bottom:10px", text: "The market’s own rules, which decide how this question settles." }),
       text,
       rules && rules.length > 700 ? el("button", { class: "btn small ghost", type: "button", text: "Show all", onclick: (e) => { text.classList.toggle("open"); e.target.textContent = text.classList.contains("open") ? "Show less" : "Show all"; } }) : null,
       el("dl", { class: "facts" },
