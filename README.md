@@ -74,6 +74,7 @@ This table separates what has been run from what has not. Nothing here is claime
 | NEAR wallet sign-in | **Partly verified**: the signed-message and key checks are tested; a sign-in with a real wallet app on mainnet has not been recorded |
 | Trading setup (trading account and permission) | **Built**; the first run from a supported location is not yet recorded. Trading is blocked from the address the project was tested from |
 | Placing orders | **Built in test mode.** Clue re-checks the live orders, works out the worst price it will accept, and signs the order with your wallet, but sends nothing until real orders are switched on. Not yet run with real money. See [docs/TRADING_PLAN.md](docs/TRADING_PLAN.md) |
+| Share card | **Built.** After an order fills, **Share this call** draws a 16:9 picture of the call on your own phone (question, side, price, what it pays if it lands) with a code that opens the market. Win, loss and live versions are built but wait for positions, which are not built yet |
 | Putting money in your trading account | **Built, not yet run with real money.** Clue shows your account's own deposit address from Polymarket's deposit service (USDC on Solana or Polygon, minimums read live) and a Refresh balance button. Clue's own Add money price check is separate and still sends nothing |
 | Alerts when evidence changes, public profiles | **Not built** |
 
