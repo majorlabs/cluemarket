@@ -91,7 +91,9 @@
     const worst = r.fills[r.fills.length - 1].price;
     const tick = o.tickSize || 0.01, tol = o.tolerance == null ? 0.01 : o.tolerance;
     const steps = Math.ceil((worst * (1 + tol)) / tick - 1e-9);
-    const maxPrice = Math.min(0.99, Math.round(steps * tick * 1e6) / 1e6);
+    const top = Math.round((1 - tick) * 1e6) / 1e6;          // the highest price the market can take: one step below $1
+    const maxPrice = Math.min(top, Math.round(steps * tick * 1e6) / 1e6);
+    if (maxPrice < worst - 1e-9) return no("The price is too close to $1 to order safely.");
     return { ok: true, spend: Math.round(r.cost * 100) / 100, shares: r.sharesFilled, maxPrice, expectedCost: need, worstFill: worst };
   }
 

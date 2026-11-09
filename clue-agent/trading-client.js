@@ -97,7 +97,8 @@ window.clueTrading.order = async function order({ assetId, spend, maxPrice, buil
   } catch (e) {
     console.error('order failed', e);
     const text = String((e && e.message) || e || '');
-    if (/reject|denied|cancel/i.test(text)) return { ok: false, sent: false, error: 'You cancelled the request in your wallet. Nothing was sent.' };
+    if (/reject|denied|cancel/i.test(text) && !(e && e.name === 'UserInputError')) return { ok: false, sent: false, error: 'You cancelled the request in your wallet. Nothing was sent.' };
+    if (e && e.name === 'UserInputError') return { ok: false, sent: false, error: 'This market would not take that size or price. Nothing was sent. Try a slightly different amount.' };
     return { ok: false, sent: false, error: 'The order could not be placed. If you are not sure whether it went through, check your positions before trying again.' };
   }
 };

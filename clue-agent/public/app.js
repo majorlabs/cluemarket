@@ -508,7 +508,7 @@ async function mountTicket(box, ctx) {
     const r = T.previewBuy({
       mode, asks: book.asks, bestBid: book.bids[0]?.price ?? null,
       spend: Number(spend.value), shares: Number(shares.value), limitPrice: Number(limitPrice.value) / 100,
-      feesEnabled: m.feesEnabled, feeRate: m.feeRate, minSize: m.minOrderSize, tickSize: m.tickSize, accepting: m.acceptingOrders, builderFeeBps: 0,
+      feesEnabled: m.feesEnabled, feeRate: m.feeRate, ...rulesOf(book), accepting: m.acceptingOrders, builderFeeBps: 0,
     });
     lastPreview = r; syncOrder();
     const row = (k, v) => el("div", { class: "tk-row" }, el("span", { class: "muted", text: k }), el("b", { class: "num", text: v }));
@@ -529,6 +529,8 @@ async function mountTicket(box, ctx) {
   }
 
   // ---- ordering: every check is repeated on a fresh book at the moment of ordering ----
+  // Every market has its own minimum size and price step. The live book reports the real ones; the listing is only a fallback.
+  const rulesOf = (b) => ({ minSize: Number(b && b.minOrderSize) || m.minOrderSize, tickSize: Number(b && b.tickSize) || m.tickSize });
   const orderOut = el("div", { class: "order-out", role: "status", "aria-live": "polite" });
   const orderNote = el("p", { class: "order-note muted small" });
   const placeBtn = el("button", { class: "btn dark tk-submit", type: "button", disabled: true, text: "Review my order", onclick: () => submitOrder() });
@@ -540,9 +542,9 @@ async function mountTicket(box, ctx) {
   };
   const planFor = (preview) => T.orderPlan({
     preview: mode === "market" ? preview : null, signedIn: Boolean(user), geo: lastGeo, setUp: Boolean(tradingSetup), balance: tradingSetup ? (tradingSetup.balance == null ? Number.MAX_SAFE_INTEGER : tradingSetup.balance) : null,
-    accepting: m.acceptingOrders, minSize: m.minOrderSize, tickSize: m.tickSize,
+    accepting: m.acceptingOrders, ...rulesOf(book),
   });
-  const previewOn = (b) => T.previewBuy({ mode: "market", asks: b.asks, bestBid: b.bids[0]?.price ?? null, spend: Number(spend.value), feesEnabled: m.feesEnabled, feeRate: m.feeRate, minSize: m.minOrderSize, tickSize: m.tickSize, accepting: m.acceptingOrders, builderFeeBps: 0 });
+  const previewOn = (b) => T.previewBuy({ mode: "market", asks: b.asks, bestBid: b.bids[0]?.price ?? null, spend: Number(spend.value), feesEnabled: m.feesEnabled, feeRate: m.feeRate, ...rulesOf(b), accepting: m.acceptingOrders, builderFeeBps: 0 });
   async function syncOrder() {
     const cfg = await ordersConfig();
     placeBtn.textContent = cfg.ordersLive ? "Place order" : "Review my order";

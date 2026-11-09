@@ -110,3 +110,35 @@ test('only well-formed deposit addresses are ever shown', () => {
   assert.equal(validDepositAddress('btc', 'bc1q0uv3ke7j7ljshjcj2k9s2jnrmqy0typqtc0p28'), false);   // not offered
   assert.equal(validDepositAddress('evm', undefined), false);
 });
+
+// ---- The same checks must hold for every market, whatever its own rules are ----
+const marketWith = (rules, book) => orderPlan({ ...ready, ...rules, preview: previewBuy({ mode: 'market', asks: book, spend: rules.spend, feesEnabled: false, minSize: rules.minSize, tickSize: rules.tickSize, accepting: true }) });
+
+test('each market uses its own minimum size', () => {
+  const book = [{ price: 0.5, size: 1000 }];
+  assert.equal(marketWith({ spend: 3, minSize: 5, tickSize: 0.01 }, book).ok, true);          // 6 shares, minimum 5
+  assert.match(marketWith({ spend: 3, minSize: 15, tickSize: 0.01 }, book).reason, /minimum order is 15 shares/);
+  assert.equal(marketWith({ spend: 8, minSize: 15, tickSize: 0.01 }, book).ok, true);         // 16 shares
+});
+
+test('each market uses its own price step when setting the worst price', () => {
+  const book = [{ price: 0.376, size: 1000 }];
+  const fine = marketWith({ spend: 5, minSize: 5, tickSize: 0.001 }, book);
+  assert.equal(fine.maxPrice, 0.38);                      // 0.376 x 1.01 = 0.37976, up to the next 0.001 step
+  const coarse = marketWith({ spend: 5, minSize: 5, tickSize: 0.01 }, [{ price: 0.37, size: 1000 }]);
+  assert.equal(coarse.maxPrice, 0.38);                    // 0.3737 up to the next 0.01 step
+  const wide = marketWith({ spend: 5, minSize: 5, tickSize: 0.1 }, [{ price: 0.4, size: 1000 }]);
+  assert.equal(wide.maxPrice, 0.5);                       // 0.404 up to the next 0.1 step
+});
+
+test('a worst price never lands on a price the market cannot take', () => {
+  for (const tick of [0.1, 0.01, 0.001, 0.0001]) {
+    for (const price of [0.02, 0.137, 0.5, 0.876, 0.97]) {
+      const p = marketWith({ spend: 50, minSize: 5, tickSize: tick }, [{ price: Math.round(price / tick) * tick, size: 100000 }]);
+      if (!p.ok) continue;
+      const steps = p.maxPrice / tick;
+      assert.ok(Math.abs(steps - Math.round(steps)) < 1e-6, `${p.maxPrice} is not a multiple of ${tick}`);
+      assert.ok(p.maxPrice <= 1 - tick + 1e-9 && p.maxPrice >= p.worstFill - 1e-9);
+    }
+  }
+});
