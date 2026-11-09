@@ -348,12 +348,12 @@ async function portfolioView(stale) {
     try { await loadTrading(); } catch (e) { pr.fail("load"); into.append(el("p", { class: "status err", text: e.message })); return; }
     for (let i = 0; i < ids.length; i++) {
       const r = await window.clueTrading.claim({ conditionId: ids[i], onStep: (s) => pr.advance(s) });
-      if (!r.ok) { pr.fail(); into.append(el("div", { class: "ending bad" }, el("span", { class: "ending-i", "aria-hidden": "true", text: "✕" }), el("b", { text: i ? `Claimed ${i} of ${ids.length}, then stopped` : "Not claimed" })), el("p", { text: r.error }), r.detail ? el("small", { class: "err-detail", text: `(${r.detail})` }) : null); setTimeout(load, 4000); return; }
+      if (!r.ok) { pr.fail(); into.append(el("div", { class: "ending bad" }, el("span", { class: "ending-i", "aria-hidden": "true", text: "✕" }), el("b", { text: i ? `Claimed ${i} of ${ids.length}, then stopped` : "Not claimed" })), el("p", { text: r.error }), r.detail ? el("small", { class: "err-detail", text: `(${r.detail})` }) : null); return; }
       if (i < ids.length - 1) pr.advance("account");
     }
     pr.finish();
     into.append(el("div", { class: "ending ok" }, el("span", { class: "ending-i", "aria-hidden": "true", text: "✓" }), el("b", { text: `Done. ${pfUsd(total)} is in your cash.` })));
-    setTimeout(load, 5000); setTimeout(load, 20000);                                 // the data service and the chain catch up a moment later
+    setTimeout(() => load(true), 6000);                                              // the data service and the chain catch up a moment later
   }
 
   function positionRow(p) {
@@ -397,13 +397,19 @@ async function portfolioView(stale) {
     }
   }
 
-  async function load() {
+  // Something is in progress on the page (a claim running or its result, or a share panel the person opened): leave the page alone.
+  const busy = () => [...root.querySelectorAll(".claim-panel, .share-panel")].some((n) => n.childElementCount > 0);
+  let lastSig = "";
+  async function load(force) {
     failed = "";
     try {
       const [pos, act, c] = await Promise.all([dataGet(`/positions?user=${wallet}&limit=100`), dataGet(`/activity?user=${wallet}&limit=50`), readCash(wallet)]);
       if (stale() || !root.isConnected) return;
+      const sig = JSON.stringify([pos.data, act.data, c]);
+      if (!force && (sig === lastSig || busy())) return;                  // nothing new, or the person is in the middle of something
+      lastSig = sig;
       positions = pos.data || []; history = (act.data || []).filter((x) => x.type === "TRADE" || x.type === "REDEEM"); cash = c;
-    } catch (e) { if (stale()) return; failed = e.message; }
+    } catch (e) { if (stale()) return; if (!force && busy()) return; failed = e.message; }
     drawSummary(); drawBody();
   }
   const seg = el("div", { class: "seg", role: "group", "aria-label": "Portfolio sections" }, [["positions", "Positions"], ["history", "History"]].map(([id, text], i) =>
@@ -411,7 +417,10 @@ async function portfolioView(stale) {
   root.append(el("h1", { class: "pf-h1", text: "Portfolio" }), summary, claimAll, seg, body);
   app.replaceChildren(root);
   drawSummary(); drawBody(); load();
-  const timer = setInterval(() => { if (!root.isConnected || stale()) { clearInterval(timer); return; } load(); }, 30000);   // stays fresh while it is open
+  // Stays fresh while it is open, and when the person comes back to the tab. Never in the middle of something (see busy above).
+  const timer = setInterval(() => { if (!root.isConnected || stale()) { clearInterval(timer); return; } if (!busy()) load(); }, 30000);
+  const onVisible = () => { if (!root.isConnected || stale()) { document.removeEventListener("visibilitychange", onVisible); return; } if (!document.hidden && !busy()) load(); };
+  document.addEventListener("visibilitychange", onVisible);
 }
 
 /* ---------- board ---------- */
@@ -752,8 +761,15 @@ async function mountTicket(box, ctx) {
   }
 
   // Reads the balance and redraws the account line. Safe to call often: one read at a time.
-  let cashTimer = null, cashAsking = false;
-  async function refreshCash() {
+  // There is no timer. The balance is read when the card opens, after an order fills, after a deposit finishes, when the person taps the balance,
+  // and when they come back to the tab. It never reads in the background while someone is adding money.
+  let cashAsking = false;
+  const onVisible = () => {
+    if (!box.isConnected) { document.removeEventListener("visibilitychange", onVisible); return; }
+    if (!document.hidden && tradingSetup && !depositOpen) refreshCash();
+  };
+  document.addEventListener("visibilitychange", onVisible);
+  async function refreshCash(asked) {
     if (!tradingSetup || cashAsking) return;
     cashAsking = true;
     try {
@@ -1056,8 +1072,7 @@ async function mountTicket(box, ctx) {
       line = strip("Trading isn't set up yet.", go);
     } else if (t) {
       if (t.balance == null && !t.cashFailed && !cashAsking) refreshCash();
-      if (!cashTimer) cashTimer = setInterval(() => { if (!box.isConnected) { clearInterval(cashTimer); cashTimer = null; return; } if (tradingSetup) refreshCash(); }, 30000);
-      line = strip(t.balance != null ? el("span", { class: "as-text as-cash" }, el("small", { class: "muted", text: "Balance" }), el("b", { class: "num", text: `$${t.balance.toFixed(2)}` }))
+      line = strip(t.balance != null ? el("button", { class: "as-text as-cash", type: "button", title: "Tap to refresh your balance", "aria-label": `Balance $${t.balance.toFixed(2)}. Tap to refresh.`, onclick: () => refreshCash(true) }, el("small", { class: "muted", text: "Balance ↻" }), el("b", { class: "num", text: `$${t.balance.toFixed(2)}` }))
         : t.cashFailed ? "Ready to trade" : "Checking your balance…", el("button", { class: "btn small", type: "button", text: depositOpen ? "Hide" : "Add money", onclick: () => { depositOpen = !depositOpen; drawChecklist(geo); } }), "ok");
     }
     geoBox.replaceChildren(...kids(line, t && depositOpen ? depositNodeFor(geo, t.wallet) : null, status));

@@ -533,3 +533,6 @@ html[data-theme="light"] .fund{background:radial-gradient(120% 90% at 100% 0%,rg
 .coin-opt .coin-chain{box-shadow:0 0 0 2px var(--bg)}
 .coin-text{display:flex;flex-direction:column;gap:1px;min-width:0}
 .coin-text b{font-size:15px}.coin-text small{font-size:12.5px}
+
+/* the balance is a button: tap to refresh */
+button.as-cash{background:none;border:0;padding:0;color:inherit;font:inherit;text-align:left;cursor:pointer}
