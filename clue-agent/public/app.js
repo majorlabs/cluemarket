@@ -320,6 +320,7 @@ async function portfolioView(stale) {
   }
   const root = el("div", { class: "pf-root" });
   const summary = el("div", { class: "pf-summary" });
+  const claimAll = el("div", { class: "pf-claimall" }), claimAllPanel = el("div", { class: "claim-panel" });
   const body = el("div", { class: "pf-body" });
   let tab = "positions", positions = null, history = null, cash = null, failed = "";
 
@@ -332,11 +333,31 @@ async function portfolioView(stale) {
       stat("Cash", cash === null ? "…" : pfUsd(cash)),
       stat("In calls", pfUsd(t.value), "", `${t.open} open`),
       stat("Open profit", pfSigned(t.openPnl), t.openPnl > 0 ? "pos" : t.openPnl < 0 ? "neg" : ""),
-      ...(t.toClaim > 0 ? [stat("Won, to claim", pfUsd(t.toClaim), "pos")] : []));
+      ...(t.toClaim > 0 ? [stat("Waiting for you", pfUsd(t.toClaim), "pos")] : []));
+    const claimable = (positions || []).filter((p) => ["won", "partial"].includes(T.positionState(p)) && T.claimId(p));
+    claimAll.replaceChildren(...(claimable.length > 1 ? [el("button", { class: "btn primary", type: "button", text: `Claim all · ${pfUsd(claimable.reduce((s, p) => s + T.positionNumbers(p).value, 0))}`, onclick: (ev) => { ev.currentTarget.hidden = true; claimPositions(claimable, claimAllPanel); } }), claimAllPanel] : []));
+  }
+
+  // Claims one or more ended markets, one after the other, with live steps. Ends with a plain result, then the page reloads its numbers.
+  async function claimPositions(list, into) {
+    const ids = [...new Set(list.map((p) => T.claimId(p)).filter(Boolean))];
+    const total = list.reduce((sum, p) => sum + T.positionNumbers(p).value, 0);
+    if (!ids.length) { into.replaceChildren(el("p", { class: "status err", text: "That call cannot be claimed." })); return; }
+    const pr = progress([{ id: "load", label: "Getting ready" }, { id: "account", label: "Opening your trading account" }, { id: "sign", label: "Signing with your wallet" }, { id: "confirm", label: ids.length > 1 ? "Collecting your winnings…" : "Collecting your winnings" }]);
+    into.replaceChildren(pr.node); pr.advance("load");
+    try { await loadTrading(); } catch (e) { pr.fail("load"); into.append(el("p", { class: "status err", text: e.message })); return; }
+    for (let i = 0; i < ids.length; i++) {
+      const r = await window.clueTrading.claim({ conditionId: ids[i], onStep: (s) => pr.advance(s) });
+      if (!r.ok) { pr.fail(); into.append(el("div", { class: "ending bad" }, el("span", { class: "ending-i", "aria-hidden": "true", text: "✕" }), el("b", { text: i ? `Claimed ${i} of ${ids.length}, then stopped` : "Not claimed" })), el("p", { text: r.error }), r.detail ? el("small", { class: "err-detail", text: `(${r.detail})` }) : null); setTimeout(load, 4000); return; }
+      if (i < ids.length - 1) pr.advance("account");
+    }
+    pr.finish();
+    into.append(el("div", { class: "ending ok" }, el("span", { class: "ending-i", "aria-hidden": "true", text: "✓" }), el("b", { text: `Done. ${pfUsd(total)} is in your cash.` })));
+    setTimeout(load, 5000); setTimeout(load, 20000);                                 // the data service and the chain catch up a moment later
   }
 
   function positionRow(p) {
-    const s = T.positionState(p), n = T.positionNumbers(p), sharePanel = el("div", { class: "share-panel" });
+    const s = T.positionState(p), n = T.positionNumbers(p), sharePanel = el("div", { class: "share-panel" }), claimPanel = el("div", { class: "claim-panel" });
     const tone = n.pnl > 0 ? "pos" : n.pnl < 0 ? "neg" : "";
     const share = () => {
       const data = s === "won" ? { kind: "won", payout: n.value } : s === "lost" ? { kind: "lost" } : { kind: "open", now: n.now };
@@ -348,9 +369,12 @@ async function portfolioView(stale) {
         el("div", { class: "pf-title" }, el("a", { href: `#/event/${encodeURIComponent(p.event_slug || p.slug)}`, text: p.title }),
           el("div", { class: "pf-sub" }, el("span", { class: "pf-side", text: p.outcome }), el("span", { class: "muted", text: `${n.shares.toFixed(2)} shares · ${pfCents(n.avg)}${s === "open" ? ` → ${pfCents(n.now)}` : ""}` }))),
         el("div", { class: "pf-val" }, el("b", { class: "num", text: pfUsd(n.value) }), el("small", { class: `num ${tone}`, text: `${pfSigned(n.pnl)} · ${pfPct(n.pct)}` }))),
-      s !== "open" ? el("p", { class: `pf-end ${s === "won" ? "pos" : "neg"}`, text: s === "won" ? `Ended: you called it. ${pfUsd(n.value)} is waiting to be claimed. Claiming here is coming next.` : "Ended: it went the other way." }) : null,
-      el("div", { class: "pf-actions" }, el("button", { class: "btn small", type: "button", text: "Share", onclick: (ev) => { ev.currentTarget.hidden = true; share(); } }), el("a", { class: "btn small", href: `#/event/${encodeURIComponent(p.event_slug || p.slug)}`, text: "View market" })),
-      sharePanel);
+      s !== "open" ? el("p", { class: `pf-end ${s === "lost" ? "neg" : "pos"}`, text: s === "won" ? `Ended: you called it. ${pfUsd(n.value)} is waiting for you.` : s === "partial" ? `Ended: this market paid out part. ${pfUsd(n.value)} is waiting for you.` : "Ended: it went the other way." }) : null,
+      el("div", { class: "pf-actions" },
+        s === "won" || s === "partial" ? el("button", { class: "btn primary small", type: "button", text: `Claim ${pfUsd(n.value)}`, onclick: (ev) => { ev.currentTarget.hidden = true; claimPositions([p], claimPanel); } }) : null,
+        s !== "partial" ? el("button", { class: "btn small", type: "button", text: "Share", onclick: (ev) => { ev.currentTarget.hidden = true; share(); } }) : null,
+        el("a", { class: "btn small", href: `#/event/${encodeURIComponent(p.event_slug || p.slug)}`, text: "View market" })),
+      claimPanel, sharePanel);
   }
 
   function historyRow(a) {
@@ -384,7 +408,7 @@ async function portfolioView(stale) {
   }
   const seg = el("div", { class: "seg", role: "group", "aria-label": "Portfolio sections" }, [["positions", "Positions"], ["history", "History"]].map(([id, text], i) =>
     el("button", { type: "button", text, "aria-pressed": String(i === 0), onclick: (ev) => { tab = id; seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", "false")); ev.currentTarget.setAttribute("aria-pressed", "true"); drawBody(); } })));
-  root.append(el("h1", { class: "pf-h1", text: "Portfolio" }), summary, seg, body);
+  root.append(el("h1", { class: "pf-h1", text: "Portfolio" }), summary, claimAll, seg, body);
   app.replaceChildren(root);
   drawSummary(); drawBody(); load();
   const timer = setInterval(() => { if (!root.isConnected || stale()) { clearInterval(timer); return; } load(); }, 30000);   // stays fresh while it is open

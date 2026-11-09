@@ -122,6 +122,26 @@ window.clueTrading.order = async function order({ assetId, spend, maxPrice, buil
   }
 };
 
+// Collect the winnings of one ended market into the trading account's cash. Gasless: Polymarket's relayer pays the network fee.
+// onStep: 'account', 'sign' (the wallet signs and the request is sent), 'confirm' (waiting for the network to settle it).
+window.clueTrading.claim = async function claim({ conditionId, onStep = () => {} }) {
+  if (!/^0x[0-9a-fA-F]{64}$/.test(String(conditionId || ''))) return { ok: false, error: 'That call cannot be claimed.' };
+  try {
+    onStep('account');
+    const client = await openClient();
+    onStep('sign');
+    const handle = await client.redeemPositions({ conditionId });
+    onStep('confirm');
+    const outcome = await handle.wait();
+    return { ok: true, hash: (outcome && outcome.transactionHash) || handle.transactionHash || null };
+  } catch (e) {
+    console.error('claim failed', e);
+    const text = String((e && e.message) || e || '');
+    if (/reject|denied|cancel/i.test(text) && !(e && e.name === 'UserInputError')) return { ok: false, error: 'You cancelled the request in your wallet. Nothing was claimed.' };
+    return { ok: false, error: 'The claim did not finish. Nothing was taken from you. Try again in a minute, and check your cash before trying twice.', detail: describe('claim', e) };
+  }
+};
+
 // Polymarket's own deposit service gives each trading account its own address per chain. Anything sent there in a supported token
 // is turned into trading money automatically. Called straight from the browser; nothing about the user passes through Clue's server.
 window.clueTrading.depositAddresses = async function depositAddresses(wallet, builderCode) {

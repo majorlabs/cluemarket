@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const sandbox = {};
 new Function('window', readFileSync(new URL('../public/ticket.js', import.meta.url), 'utf8'))(sandbox);
-const { previewBuy, checkGeoblock, orderPlan, validDepositAddress, cashCall, cashParse, positionState, positionNumbers, portfolioTotals } = sandbox.ClueTicket;
+const { previewBuy, checkGeoblock, orderPlan, validDepositAddress, cashCall, cashParse, positionState, positionNumbers, portfolioTotals, claimId } = sandbox.ClueTicket;
 const near = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} should be within ${eps} of ${b}`);
 
 const asks = [{ price: 0.5, size: 100 }, { price: 0.52, size: 100 }, { price: 0.6, size: 1000 }];
@@ -161,8 +161,9 @@ test('a position is open, won or lost, by whether its market has ended and what 
   assert.equal(positionState(pos({})), 'open');
   assert.equal(positionState(pos({ redeemable: true, current_price: 1 })), 'won');
   assert.equal(positionState(pos({ redeemable: true, current_price: 0.995 })), 'won');
-  assert.equal(positionState(pos({ redeemable: true, current_price: 0 })), 'lost');
-  assert.equal(positionState(pos({ redeemable: true, current_price: 0.5 })), 'lost');       // ended without paying out in full
+  assert.equal(positionState(pos({ redeemable: true, current_price: 0, current_value: 0 })), 'lost');
+  assert.equal(positionState(pos({ redeemable: true, current_price: 0.5, current_value: 2.5 })), 'partial');   // ended with a part payout (a tie)
+  assert.equal(positionState(pos({ redeemable: true, current_price: 0, current_value: 0 })), 'lost');
   assert.equal(positionState(null), 'open');
 });
 
@@ -180,4 +181,12 @@ test('the totals add up open positions, open profit and what is waiting to be cl
   assert.deepEqual(portfolioTotals(list), { value: 8, openPnl: 0, toClaim: 8, open: 2 });
   assert.deepEqual(portfolioTotals([]), { value: 0, openPnl: 0, toClaim: 0, open: 0 });
   assert.deepEqual(portfolioTotals(undefined), { value: 0, openPnl: 0, toClaim: 0, open: 0 });
+});
+
+test('only a real market id can be claimed, and a part payout counts toward what is waiting', () => {
+  const id = '0x' + 'ab'.repeat(32);
+  assert.equal(claimId({ condition_id: id }), id);
+  for (const bad of [{}, null, { condition_id: '0x123' }, { condition_id: id + '0' }, { condition_id: '<script>' }, { condition_id: 5 }]) assert.equal(claimId(bad), null, JSON.stringify(bad));
+  const list = [pos({ redeemable: true, current_price: 1, current_value: 8 }), pos({ redeemable: true, current_price: 0.5, current_value: 2.5 })];
+  assert.equal(portfolioTotals(list).toClaim, 10.5);
 });
