@@ -6,6 +6,7 @@ import { auth, store } from './auth.mjs';
 import {initWalletAuth,walletSession,walletRoute} from './wallet-auth.mjs';
 import {privyRoute,privyWalletRoute} from './privy-auth.mjs';
 import {ordersLiveFor} from './orders-switch.mjs';
+import {marketsByCondition,parseIds} from './markets-lookup.mjs';
 import {offered as intentsOffered,quote as intentsQuote,status as intentsStatus,limits as intentsLimits} from './intents.mjs';
 import {allowedOrigins,checkOrigin} from './origins.mjs';
 import {cleanAnswer} from './answer-links.mjs';
@@ -28,6 +29,7 @@ const fundUser=new HourlyBudget(30);
 const fundGlobal=new HourlyBudget(300);
 const depositUser=new HourlyBudget(10);   // real deposit addresses: a few per hour is plenty
 const statusUser=new HourlyBudget(600);
+const marketLookup=new HourlyBudget(1200);   // names for the orders on the Portfolio; cheap, but not unlimited
 const researchGlobal=new HourlyBudget(Math.max(1,Number(process.env.CLUE_RESEARCH_GLOBAL_PER_HOUR)||60));
 const researchJobs=new Map();
 const sweepJobs=()=>{const cut=Date.now()-30*60000;for(const [k,j] of researchJobs)if(j.startedAt<cut)researchJobs.delete(k)};
@@ -97,6 +99,10 @@ const app=http.createServer(async(req,res)=>{ try {
   const key=process.env.POLYMARKET_BUILDER_API_KEY,secret=process.env.POLYMARKET_BUILDER_SECRET,passphrase=process.env.POLYMARKET_BUILDER_PASSPHRASE;
   if(!key||!secret||!passphrase) return json(res,503,{error:'Trading is not switched on yet.'});
   return json(res,200,builderHeaders(check,{key,secret,passphrase}));
+ }
+ if(req.method==='GET' && url.pathname==='/api/markets/by-condition') {
+  if(!marketLookup.take()) return json(res,429,{error:'Too many requests. Try again in a little while.'});
+  return json(res,200,{markets:await marketsByCondition(parseIds(url.searchParams.get('ids')))});
  }
  if(url.pathname==='/api/trading/account') {
   const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in first.'});

@@ -128,6 +128,13 @@
     return { value, openPnl, toClaim, open };
   }
 
+  /** An open order's numbers: what is still waiting to fill, and the money held back for it (a buy holds its price times the shares left). */
+  function orderNumbers(o) {
+    const size = Number(o && o.size) || 0, matched = Math.min(size, Number(o && o.matched) || 0), price = Number(o && o.price) || 0;
+    const remaining = Math.max(0, size - matched);
+    return { size, matched, remaining, price, held: String(o && o.side).toUpperCase() === "BUY" ? remaining * price : 0, filledPct: size > 0 ? matched / size : 0 };
+  }
+
   /** The request that reads a trading account's cash: pUSD (Polymarket's dollar, 6 decimals) held at that address. null if the address is malformed. */
   function cashCall(wallet) {
     if (!/^0x[0-9a-fA-F]{40}$/.test(String(wallet || ""))) return null;
@@ -158,5 +165,5 @@
   const fmt = (n) => (Number.isFinite(n) ? (Math.round(n * 100) / 100).toString() : "0");
   const pct = (p) => (p * 100).toFixed(p < 0.1 ? 1 : 0) + "¢";
 
-  root.ClueTicket = { previewBuy, checkGeoblock, orderPlan, validDepositAddress, cashCall, cashParse, positionState, positionNumbers, portfolioTotals, claimId };
+  root.ClueTicket = { previewBuy, checkGeoblock, orderPlan, validDepositAddress, cashCall, cashParse, positionState, positionNumbers, portfolioTotals, claimId, orderNumbers };
 })(typeof window !== "undefined" ? window : globalThis);
