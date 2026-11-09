@@ -445,3 +445,7 @@ html[data-theme="light"] .fund{background:radial-gradient(120% 90% at 100% 0%,rg
 .intents select,.intents input{width:100%}
 .intents .field{display:grid;gap:6px}
 .intents-result{display:flex;flex-direction:column;gap:10px}
+
+/* picking a side in the Trade card */
+.side-seg{display:flex;width:100%}
+.side-seg button{flex:1 1 0;min-width:0;white-space:normal}

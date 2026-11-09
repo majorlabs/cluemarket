@@ -146,10 +146,14 @@ const isAddr = (a) => /^0x[0-9a-fA-F]{40}$/.test(String(a || ""));
 function savedSetup(id) {
   try {
     const d = JSON.parse(localStorage.getItem(setupKey(id)) || "null");
-    return d && isAddr(d.signer) && isAddr(d.wallet) ? { signer: d.signer, wallet: d.wallet, approved: true, balance: null } : null;
+    return d && isAddr(d.wallet) ? { signer: isAddr(d.signer) ? d.signer : null, wallet: d.wallet, approved: true, balance: null } : null;
   } catch { return null; }
 }
-function rememberSetup(id, t) { try { localStorage.setItem(setupKey(id), JSON.stringify({ signer: t.signer, wallet: t.wallet })); } catch { /* private window: it just asks again next time */ } }
+function rememberSetup(id, t) {
+  try { localStorage.setItem(setupKey(id), JSON.stringify({ signer: t.signer, wallet: t.wallet })); } catch { /* private window: the server still knows */ }
+  post("/api/trading/account", { wallet: t.wallet, signer: t.signer }).catch(() => {});   // so a new phone or a cleared browser does not ask again
+}
+let accountLookup = { id: null, state: null };   // asking the server whether this person already set up trading
 let tradingScript = null;
 function loadTradingScript() {
   // Just the trading code, with no sign-in window. Enough for reading deposit addresses.
@@ -397,7 +401,7 @@ async function eventView(slug, marketId, stale) {
     const seg = el("div", { class: "seg", role: "group", "aria-label": "Chart range" }, [["1d", "1D"], ["1w", "1W"], ["1m", "1M"], ["max", "All"]].map(([v, l]) =>
       el("button", { type: "button", "aria-pressed": String(v === interval), text: l, onclick: () => { interval = v; renderStage(); } })));
     const outcomeSeg = outcomes.length > 1 ? el("div", { class: "seg", role: "group", "aria-label": "Outcome" }, outcomes.slice(0, 4).map((o, i) =>
-      el("button", { type: "button", "aria-pressed": String(i === outcomeIdx), text: `${o} ${pct(sel.outcomePrices[i])}`, onclick: () => { outcomeIdx = i; renderStage(); } }))) : null;
+      el("button", { type: "button", "aria-pressed": String(i === outcomeIdx), text: `${o} ${pct(sel.outcomePrices[i])}`, onclick: () => { outcomeIdx = i; renderAll(); } }))) : null;
 
     const tabs = ["Rules", "Live orders"];
     let tab = "Rules";
@@ -471,7 +475,7 @@ async function eventView(slug, marketId, stale) {
     } catch (e) { box.replaceChildren(el("div", { class: "chart-empty", text: `Chart unavailable: ${e.message}` })); }
   }
 
-  function renderAll() { renderStage(); mountTicket(ticketBox, { market: sel, outcome: sel.outcomes[outcomeIdx] || "Yes", token: sel.tokenIds[outcomeIdx], eventTitle: ev.title }); mountWorkspace(workspaceBox, { market: sel, event: ev, outcome: () => (sel.outcomes[outcomeIdx] || "Yes"), outcomeIdx: () => outcomeIdx }); }
+  function renderAll() { renderStage(); mountTicket(ticketBox, { market: sel, outcome: sel.outcomes[outcomeIdx] || "Yes", token: sel.tokenIds[outcomeIdx], eventTitle: ev.title, outcomes: sel.outcomes.length ? sel.outcomes : ["Yes", "No"], prices: sel.outcomePrices, outcomeIdx, pick: (i) => { outcomeIdx = i; renderAll(); } }); mountWorkspace(workspaceBox, { market: sel, event: ev, outcome: () => (sel.outcomes[outcomeIdx] || "Yes"), outcomeIdx: () => outcomeIdx }); }
   renderAll();
 }
 
@@ -527,14 +531,17 @@ async function openShare(data, into) {
 }
 
 /* ---------- trade ticket: preview, and an order check that sends nothing unless real orders are switched on ---------- */
-let geoPromise = null, ordersConfigCache = null;
+let geoPromise = null, ordersConfigCache = null, lastSpend = "50";   // lastSpend: what was typed, kept when the side is switched
 const geoOnce = () => (geoPromise ||= window.ClueTicket.checkGeoblock());
 async function mountTicket(box, ctx) {
   const m = ctx.market, T = window.ClueTicket;
   let mode = "market", book = null, bookErr = "", lastPreview = null, lastGeo = null, depositOpen = false;
   const usd = (n) => `$${Number.isFinite(n) ? n.toFixed(2) : "0.00"}`;
   const cents = (p) => (p == null ? "—" : `${(p * 100).toFixed(1)}¢`);
-  const spend = el("input", { type: "number", min: "0", step: "1", value: "50", inputmode: "decimal", "aria-label": "Amount to spend in dollars" });
+  // The side to buy: the market's own two words (Yes and No, Up and Down, a team's name ...), each with its price.
+  const sideSeg = (ctx.outcomes || []).length > 1 ? el("div", { class: "seg side-seg", role: "group", "aria-label": "Which side to buy" }, ctx.outcomes.slice(0, 4).map((o, i) =>
+    el("button", { type: "button", "aria-pressed": String(i === ctx.outcomeIdx), text: `${o} ${cents(Number(ctx.prices && ctx.prices[i]))}`, onclick: () => ctx.pick(i) }))) : null;
+  const spend = el("input", { type: "number", min: "0", step: "1", value: lastSpend, inputmode: "decimal", "aria-label": "Amount to spend in dollars" });
   const limitPrice = el("input", { type: "number", min: "0", max: "100", step: "0.1", inputmode: "decimal", "aria-label": "Limit price in cents" });
   const shares = el("input", { type: "number", min: "0", step: "1", value: "10", inputmode: "decimal", "aria-label": "Number of shares" });
   const geoBox = el("div", { class: "geo", role: "status" }, el("span", { class: "muted small", text: "Checking your location…" }));
@@ -648,7 +655,7 @@ async function mountTicket(box, ctx) {
     } });
     const show = el("button", { class: "btn small", type: "button", text: "Show my deposit address", onclick: async () => {
       show.disabled = true; status.className = "status"; status.textContent = "Getting your deposit address…";
-      try { await loadTradingScript(); } catch (e) { status.className = "status err"; status.textContent = e.message; show.disabled = false; return; }
+      try { await confirmAccount((t) => { status.textContent = t; }); } catch (e) { status.className = "status err"; status.textContent = e.message; show.disabled = false; return; }
       const cfg = await ordersConfig();
       const [a, mins] = await Promise.all([window.clueTrading.depositAddresses(tradingSetup.wallet, cfg.builderCode), window.clueTrading.depositMinimums()]);
       if (!a.ok) { status.className = "status err"; status.textContent = a.error; show.disabled = false; return; }
@@ -668,6 +675,17 @@ async function mountTicket(box, ctx) {
     } });
     out.append(show, refresh, status);
     return out;
+  }
+
+  // Before a deposit address is shown, read the real trading account from the wallet and fix the saved one if it differs.
+  // This is the one place a wrong address would cost money, so it is checked, not trusted.
+  async function confirmAccount(say) {
+    say("Checking your trading account…");
+    await loadTrading();
+    const r = await window.clueTrading.balance();
+    if (!r.ok) throw new Error(r.error);
+    if (isAddr(r.wallet) && r.wallet.toLowerCase() !== String(tradingSetup.wallet || "").toLowerCase()) tradingSetup = { ...tradingSetup, wallet: r.wallet, signer: r.signer };
+    tradingSetup = { ...tradingSetup, balance: r.balance }; rememberSetup(user.id, tradingSetup);
   }
 
   // ---- Adding money from NEAR or any other chain, carried by NEAR Intents ----
@@ -690,7 +708,7 @@ async function mountTicket(box, ctx) {
     const usdOf = () => { const x = chosen(), n = Number(amount.value); return x && Number.isFinite(n) ? n * x.price : 0; };
     function setRefundDefault() {
       const x = chosen(); if (!x || edited) return;
-      refund.value = x.refundKind === "near" ? (user && String(user.id).startsWith("near:") ? user.name : "") : x.refundKind === "evm" ? (tradingSetup ? tradingSetup.signer : "") : "";
+      refund.value = x.refundKind === "near" ? (user && String(user.id).startsWith("near:") ? user.name : "") : x.refundKind === "evm" ? ((tradingSetup && tradingSetup.signer) || "") : "";
       refund.placeholder = x.refundKind === "near" ? "yourname.near" : x.refundKind === "sol" ? "Your Solana address" : "0x…";
       refundHint.textContent = x.refundKind === "near" ? "Your NEAR account. It has to exist." : x.refundKind === "evm" ? "Your wallet. It is filled in for you." : "A Solana address you control.";
     }
@@ -717,9 +735,9 @@ async function mountTicket(box, ctx) {
     } });
 
     async function deposit(btn) {
-      btn.disabled = true; say("Getting your deposit address…");
+      btn.disabled = true;
       let q;
-      try { q = await ask(false); } catch (e) { say(e.message, "err"); btn.disabled = false; return; }
+      try { await confirmAccount(say); say("Getting your deposit address…"); q = await ask(false); } catch (e) { say(e.message, "err"); btn.disabled = false; return; }
       say("");
       const until = new Date(q.deadline);
       result.replaceChildren(...kids(
@@ -787,6 +805,14 @@ async function mountTicket(box, ctx) {
   function drawChecklist(geo) {
     const isPrivy = user && String(user.id || "").startsWith("privy:"), isNear = user && String(user.id || "").startsWith("near:");
     if (isPrivy && !tradingSetup) tradingSetup = savedSetup(user.id);
+    if (isPrivy && !tradingSetup && accountLookup.id !== user.id) {
+      accountLookup = { id: user.id, state: "pending" };
+      api("/api/trading/account").then((d) => {
+        accountLookup.state = d.account ? "found" : "none";
+        if (d.account && isAddr(d.account.wallet) && user && !tradingSetup) { tradingSetup = { signer: isAddr(d.account.signer) ? d.account.signer : null, wallet: d.account.wallet, approved: true, balance: null }; try { localStorage.setItem(setupKey(user.id), JSON.stringify({ signer: tradingSetup.signer, wallet: tradingSetup.wallet })); } catch { /* fine */ } }
+        drawChecklist(geo);
+      }).catch(() => { accountLookup.state = "none"; drawChecklist(geo); });
+    }
     lastGeo = geo; syncOrder();
     const t = tradingSetup;
     const status = el("p", { class: "status", role: "status", "aria-live": "polite" });
@@ -796,6 +822,7 @@ async function mountTicket(box, ctx) {
     else if (geo.state !== "ok") line = strip("Couldn't check your location, so trading is off.", null, "bad");
     else if (!user) line = strip("Sign in to trade.", el("button", { class: "btn small", type: "button", text: "Sign in", onclick: () => openAccountDialog("Sign in to trade.") }));
     else if (isNear) line = strip("Trading needs an email or Ethereum sign-in.", null);
+    else if (isPrivy && !t && accountLookup.state === "pending") line = strip("Checking your trading account…", null);
     else if (isPrivy && !t) {
       const go = el("button", { class: "btn primary small", type: "button", text: "Set up trading", onclick: async () => {
         go.disabled = true; status.className = "status";
@@ -816,10 +843,13 @@ async function mountTicket(box, ctx) {
     el("div", { class: "panel-head tk-head" }, el("h2", { text: "Trade" })),
     el("div", { class: "pad" },
       geoBox,
-      el("p", { class: "small", style: "margin-top:12px" }, el("b", { text: `Buy "${ctx.outcome}"` }), el("span", { class: "muted", text: ` · ${m.groupItemTitle || m.question}` })),
+      sideSeg ? el("p", { class: "muted small", style: "margin:12px 0 6px" }, "Pick a side") : null,
+      sideSeg,
+      el("p", { class: "small", style: "margin-top:10px" }, el("b", { text: `Buy "${ctx.outcome}"` }), el("span", { class: "muted", text: ` · ${m.groupItemTitle || m.question}` })),
       el("div", { style: "margin:10px 0" }, seg), fields, preview,
       placeBtn, orderNote, orderOut));
   [spend, limitPrice, shares].forEach((i) => i.addEventListener("input", drawPreview));
+  spend.addEventListener("input", () => { lastSpend = spend.value; });
   draw();
   geoOnce().then(drawChecklist);
   if (!ctx.token) { bookErr = "No live orders for this outcome."; drawPreview(); return; }
