@@ -454,3 +454,7 @@ html[data-theme="light"] .fund{background:radial-gradient(120% 90% at 100% 0%,rg
 .as-cash{display:flex;flex-direction:column;gap:2px;line-height:1.15}
 .as-cash small{font-size:12px;letter-spacing:.02em}
 .as-cash b{font-size:22px;letter-spacing:-.02em}
+
+/* the review box before an order is placed */
+.order-out.review{border:1px solid var(--line-strong);border-radius:12px;padding:12px 14px;background:var(--surface);display:flex;flex-direction:column;gap:8px}
+.order-out.review .btn{flex:1 1 0}

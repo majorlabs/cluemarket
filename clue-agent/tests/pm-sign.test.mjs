@@ -43,6 +43,14 @@ test('only the requests trading needs can be signed; anything that manages our b
   for (const [m, p] of [['POST', '/order'], ['POST', '/orders'], ['DELETE', '/order'], ['DELETE', '/orders'], ['DELETE', '/cancel-all'], ['DELETE', '/cancel-market-orders'],
     ['GET', '/data/orders'], ['GET', '/data/trades?market=0xabc'], ['GET', '/balance-allowance?asset_type=COLLATERAL&signature_type=3'], ['GET', '/balance-allowance/update?asset_type=COLLATERAL']])
     assert.ok(ok(m, p, m === 'GET' ? undefined : '{}'), `${m} ${p} should be signed`);
+  // order server: the read-only market information that building an order asks for (this is what refused a real order on 9 Nov)
+  for (const p of ['/markets-by-token/73740327665853513775435224643812227209597485663581167997680615', '/clob-markets/0x98c266979031b3ee6c87ea5b8b671be0e242e13f9be4c123ff2c21ef46ff62c3',
+    '/fees/builder-fees/0xb7f43ad2bb0864ae1b93bbf1e1c8233fce273ed5e0b75490bb8ac2d3712114ed', '/tick-size?token_id=123', '/neg-risk?token_id=123', '/book?token_id=123', '/price?token_id=123&side=BUY',
+    '/midpoint?token_id=123', '/spread?token_id=123', '/last-trade-price?token_id=123'])
+    assert.ok(ok('GET', p), `GET ${p} should be signed`);
+  assert.ok(!ok('POST', '/markets-by-token/123', '{}'));                                  // reading only
+  for (const p of ['/markets-by-token/../auth/builder-api-key', '/markets-by-token/', '/markets-by-token/12 3', '/clob-markets/<x>', '/fees/builder-fees/../../auth/api-key', '/tick-size?token_id=<script>', '/book#x'])
+    assert.ok(!ok('GET', p), `GET ${p} should not be signed`);
   // never: managing our builder account, listing or creating builder keys, session signers, or anything off the list
   for (const [m, p] of [['POST', '/auth/builder-api-key'], ['GET', '/auth/builder-api-key'], ['DELETE', '/auth/builder-api-key'], ['GET', '/auth/api-keys'], ['DELETE', '/auth/api-key'],
     ['GET', '/'], ['GET', '/submit'], ['POST', '/deployed?address=0xabc'], ['POST', '/v1/session-signers/authorizations'], ['POST', '/v1/session-signers/revocations'],
