@@ -105,6 +105,26 @@
     return false;
   }
 
+  /** Where a position stands: still open, or the market ended and it won or lost. */
+  function positionState(p) {
+    if (!p || !p.redeemable) return "open";
+    return Number(p.current_price) >= 0.99 ? "won" : "lost";
+  }
+  /** Profit or loss on a position the way Polymarket counts it (value now minus what was paid, fees apart), and as a share of what was paid. */
+  function positionNumbers(p) {
+    const cost = Number(p.entry_cost_usdc) || 0, pnl = Number(p.unrealized_pnl) || 0;
+    return { value: Number(p.current_value) || 0, pnl, pct: cost > 0 ? pnl / cost : 0, shares: Number(p.current_size) || 0, avg: Number(p.avg_price) || 0, now: Number(p.current_price) || 0, paid: Number(p.total_cost_usdc) || cost };
+  }
+  /** The totals at the top of the portfolio. */
+  function portfolioTotals(list) {
+    let value = 0, openPnl = 0, toClaim = 0, open = 0;
+    for (const p of list || []) {
+      const s = positionState(p), n = positionNumbers(p);
+      if (s === "open") { value += n.value; openPnl += n.pnl; open++; } else if (s === "won") toClaim += n.value;
+    }
+    return { value, openPnl, toClaim, open };
+  }
+
   /** The request that reads a trading account's cash: pUSD (Polymarket's dollar, 6 decimals) held at that address. null if the address is malformed. */
   function cashCall(wallet) {
     if (!/^0x[0-9a-fA-F]{40}$/.test(String(wallet || ""))) return null;
@@ -135,5 +155,5 @@
   const fmt = (n) => (Number.isFinite(n) ? (Math.round(n * 100) / 100).toString() : "0");
   const pct = (p) => (p * 100).toFixed(p < 0.1 ? 1 : 0) + "¢";
 
-  root.ClueTicket = { previewBuy, checkGeoblock, orderPlan, validDepositAddress, cashCall, cashParse };
+  root.ClueTicket = { previewBuy, checkGeoblock, orderPlan, validDepositAddress, cashCall, cashParse, positionState, positionNumbers, portfolioTotals };
 })(typeof window !== "undefined" ? window : globalThis);

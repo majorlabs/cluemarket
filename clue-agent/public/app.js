@@ -243,6 +243,7 @@ function openAccountMenu() {
     addr ? el("div", { class: "acct-addr" }, el("span", { class: "label", text: String(user.id).startsWith("near:") ? "NEAR account" : myWallet?.madeForYou ? "Your Clue wallet" : "Your wallet" }), el("code", { text: addr }),
       el("button", { class: "btn small", type: "button", text: "Copy", onclick: async (ev) => { try { await navigator.clipboard.writeText(addr); ev.currentTarget.textContent = "Copied"; } catch { ev.currentTarget.textContent = "Select and copy"; } } })) : null,
     el("div", { class: "actions", style: "flex-direction:column;align-items:stretch;margin-top:14px" },
+      el("a", { class: "btn", href: "#/portfolio", text: "Portfolio", onclick: () => dialog.close() }),
       el("a", { class: "btn", href: "#/saved", text: "Journal", onclick: () => dialog.close() }),
       el("button", { class: "btn", type: "button", style: "color:var(--no)", text: "Disconnect", onclick: signOut }),
       el("button", { class: "btn ghost", type: "button", text: "Close", onclick: () => dialog.close() })));
@@ -278,11 +279,116 @@ async function route() {
   if (parts[0] === "event" && parts[1]) { setNav("event"); return eventView(parts[1], qs.get("m"), stale); }
   if (parts[0] === "ask") { setNav("ask"); return askView(qs, stale); }
   if (parts[0] === "saved") { setNav("saved"); return savedView(parts[1], stale); }
+  if (parts[0] === "portfolio") { setNav("portfolio"); return portfolioView(stale); }
   setNav("board");
   buildCategories(qs.get("q") ? null : qs.get("tag") || "");
   return boardView(qs.get("tag") || "", qs.get("q") || "", stale, qs.get("sort") || "trending");
 }
 window.addEventListener("hashchange", route);
+
+/* ---------- portfolio: what a person holds, and how it is doing ---------- */
+// Everything here is read from Polymarket's public data service for the person's own trading account (no sign-in step, so it is quick),
+// and the cash from the chain. Nothing is sent anywhere and nothing is changed by looking.
+const DATA_API = "https://data-api.polymarket.com/v2";
+const pfUsd = (n) => `${n < 0 ? "−" : ""}$${Math.abs(n).toFixed(2)}`;
+const pfSigned = (n) => `${n >= 0 ? "+" : "−"}$${Math.abs(n).toFixed(2)}`;
+const pfPct = (n) => `${n >= 0 ? "+" : "−"}${Math.abs(n * 100).toFixed(1)}%`;
+const pfCents = (p) => `${(p * 100).toFixed(1).replace(/\.0$/, "")}¢`;
+async function dataGet(path) {
+  const r = await fetch(`${DATA_API}${path}`, { headers: { accept: "application/json" } });
+  if (!r.ok) throw new Error("Polymarket's data is not answering right now. Try again in a minute.");
+  return r.json();
+}
+async function myTradingWallet() {
+  if (tradingSetup && isAddr(tradingSetup.wallet)) return tradingSetup.wallet;
+  const saved = user ? savedSetup(user.id) : null; if (saved) return saved.wallet;
+  try { const d = await api("/api/trading/account"); return d.account && isAddr(d.account.wallet) ? d.account.wallet : null; } catch { return null; }
+}
+async function portfolioView(stale) {
+  const T = window.ClueTicket;
+  if (!user) {
+    app.replaceChildren(el("div", { class: "card empty" }, el("h2", { text: "Your portfolio" }), el("p", { class: "muted", text: "Sign in to see what you hold and how it is doing." }), el("button", { class: "btn primary", type: "button", text: "Sign in", onclick: () => openAccountDialog("Sign in to see your portfolio.") })));
+    document.addEventListener("clue:account", () => { if (location.hash.startsWith("#/portfolio")) route(); }, { once: true });
+    return;
+  }
+  app.replaceChildren(el("p", { class: "loading", role: "status", text: "Opening your portfolio…" }));
+  const wallet = await myTradingWallet();
+  if (stale()) return;
+  if (!wallet) {
+    app.replaceChildren(el("div", { class: "card empty" }, el("h2", { text: "Your portfolio" }), el("p", { class: "muted", text: "Set up trading on any market and make your first call. Your positions show up here." }), el("a", { class: "btn primary", href: "#/", text: "Find a market" })));
+    return;
+  }
+  const root = el("div", { class: "pf-root" });
+  const summary = el("div", { class: "pf-summary" });
+  const body = el("div", { class: "pf-body" });
+  let tab = "positions", positions = null, history = null, cash = null, failed = "";
+
+  const stat = (label, value, tone = "", note) => el("div", { class: `card pf-stat ${tone}` }, el("small", { class: "muted", text: label }), el("b", { class: "num", text: value }), note ? el("small", { class: "muted", text: note }) : null);
+  function drawSummary() {
+    const t = T.portfolioTotals(positions || []);
+    const total = (cash || 0) + t.value + t.toClaim;
+    summary.replaceChildren(
+      stat("Total", positions || cash !== null ? pfUsd(total) : "…", "big"),
+      stat("Cash", cash === null ? "…" : pfUsd(cash)),
+      stat("In calls", pfUsd(t.value), "", `${t.open} open`),
+      stat("Open profit", pfSigned(t.openPnl), t.openPnl > 0 ? "pos" : t.openPnl < 0 ? "neg" : ""),
+      ...(t.toClaim > 0 ? [stat("Won, to claim", pfUsd(t.toClaim), "pos")] : []));
+  }
+
+  function positionRow(p) {
+    const s = T.positionState(p), n = T.positionNumbers(p), sharePanel = el("div", { class: "share-panel" });
+    const tone = n.pnl > 0 ? "pos" : n.pnl < 0 ? "neg" : "";
+    const share = () => {
+      const data = s === "won" ? { kind: "won", payout: n.value } : s === "lost" ? { kind: "lost" } : { kind: "open", now: n.now };
+      openShare({ ...data, question: p.title, side: p.outcome, entry: n.avg, shares: n.shares, paid: n.paid, eventSlug: p.event_slug }, sharePanel);
+    };
+    return el("div", { class: "card pf-row" },
+      el("div", { class: "pf-top" },
+        p.icon ? el("img", { class: "pf-icon", src: p.icon, alt: "", loading: "lazy", width: "40", height: "40" }) : null,
+        el("div", { class: "pf-title" }, el("a", { href: `#/event/${encodeURIComponent(p.event_slug || p.slug)}`, text: p.title }),
+          el("div", { class: "pf-sub" }, el("span", { class: "pf-side", text: p.outcome }), el("span", { class: "muted", text: `${n.shares.toFixed(2)} shares · ${pfCents(n.avg)}${s === "open" ? ` → ${pfCents(n.now)}` : ""}` }))),
+        el("div", { class: "pf-val" }, el("b", { class: "num", text: pfUsd(n.value) }), el("small", { class: `num ${tone}`, text: `${pfSigned(n.pnl)} · ${pfPct(n.pct)}` }))),
+      s !== "open" ? el("p", { class: `pf-end ${s === "won" ? "pos" : "neg"}`, text: s === "won" ? `Ended: you called it. ${pfUsd(n.value)} is waiting to be claimed. Claiming here is coming next.` : "Ended: it went the other way." }) : null,
+      el("div", { class: "pf-actions" }, el("button", { class: "btn small", type: "button", text: "Share", onclick: (ev) => { ev.currentTarget.hidden = true; share(); } }), el("a", { class: "btn small", href: `#/event/${encodeURIComponent(p.event_slug || p.slug)}`, text: "View market" })),
+      sharePanel);
+  }
+
+  function historyRow(a) {
+    const when = new Date(Number(a.timestamp) * 1000);
+    const what = a.type === "TRADE" ? `${a.side === "SELL" ? "Sold" : "Bought"} ${Number(a.size).toFixed(2)} ${a.outcome || ""} at ${pfCents(Number(a.price))}` : a.type === "REDEEM" ? "Claimed winnings" : String(a.type || "").toLowerCase();
+    return el("div", { class: "card pf-hist" }, el("div", null, el("a", { href: `#/event/${encodeURIComponent(a.event_slug || a.slug || "")}`, text: a.title || "—" }), el("div", { class: "muted small", text: `${what} · ${when.toLocaleDateString([], { day: "numeric", month: "short" })} ${when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` })),
+      a.usdc_size != null ? el("b", { class: "num", text: pfUsd(Number(a.usdc_size)) }) : null);
+  }
+
+  function drawBody() {
+    if (failed) { body.replaceChildren(errBox("Couldn’t load your portfolio", failed, load)); return; }
+    if (tab === "positions") {
+      if (!positions) { body.replaceChildren(el("p", { class: "loading", role: "status", text: "Loading your calls…" })); return; }
+      if (!positions.length) { body.replaceChildren(el("div", { class: "card empty" }, el("h2", { text: "No calls yet" }), el("p", { class: "muted", text: "When you place an order, it shows up here with its profit or loss." }), el("a", { class: "btn primary", href: "#/", text: "Find a market" }))); return; }
+      const order = (p) => ({ won: 0, open: 1, lost: 2 })[T.positionState(p)];
+      body.replaceChildren(...[...positions].sort((x, y) => order(x) - order(y) || T.positionNumbers(y).value - T.positionNumbers(x).value).map(positionRow));
+    } else {
+      if (!history) { body.replaceChildren(el("p", { class: "loading", role: "status", text: "Loading your history…" })); return; }
+      body.replaceChildren(...(history.length ? history.map(historyRow) : [el("div", { class: "card empty" }, el("p", { class: "muted", text: "Nothing yet." }))]));
+    }
+  }
+
+  async function load() {
+    failed = "";
+    try {
+      const [pos, act, c] = await Promise.all([dataGet(`/positions?user=${wallet}&limit=100`), dataGet(`/activity?user=${wallet}&limit=50`), readCash(wallet)]);
+      if (stale() || !root.isConnected) return;
+      positions = pos.data || []; history = (act.data || []).filter((x) => x.type === "TRADE" || x.type === "REDEEM"); cash = c;
+    } catch (e) { if (stale()) return; failed = e.message; }
+    drawSummary(); drawBody();
+  }
+  const seg = el("div", { class: "seg", role: "group", "aria-label": "Portfolio sections" }, [["positions", "Positions"], ["history", "History"]].map(([id, text], i) =>
+    el("button", { type: "button", text, "aria-pressed": String(i === 0), onclick: (ev) => { tab = id; seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", "false")); ev.currentTarget.setAttribute("aria-pressed", "true"); drawBody(); } })));
+  root.append(el("h1", { class: "pf-h1", text: "Portfolio" }), summary, seg, body);
+  app.replaceChildren(root);
+  drawSummary(); drawBody(); load();
+  const timer = setInterval(() => { if (!root.isConnected || stale()) { clearInterval(timer); return; } load(); }, 30000);   // stays fresh while it is open
+}
 
 /* ---------- board ---------- */
 function marketCard(ev) {
@@ -526,7 +632,7 @@ async function openShare(data, into) {
   into.replaceChildren(el("p", { class: "muted small", text: "Making your card…" }));
   let blob, post, imgUrl;
   const home = /^(localhost|127\.|\[::1\])/.test(location.hostname) ? location.origin : "https://www.oncluemarket.xyz";   // shared links always point at the real site
-  const url = `${home}${location.pathname}${location.hash}`;
+  const url = data.eventSlug ? `${home}/#/event/${encodeURIComponent(data.eventSlug)}` : `${home}${location.pathname}${location.hash}`;
   try {
     await loadCard();
     blob = await window.ClueCard.toBlob({ ...data, url });

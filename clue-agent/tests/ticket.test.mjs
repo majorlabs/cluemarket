@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const sandbox = {};
 new Function('window', readFileSync(new URL('../public/ticket.js', import.meta.url), 'utf8'))(sandbox);
-const { previewBuy, checkGeoblock, orderPlan, validDepositAddress, cashCall, cashParse } = sandbox.ClueTicket;
+const { previewBuy, checkGeoblock, orderPlan, validDepositAddress, cashCall, cashParse, positionState, positionNumbers, portfolioTotals } = sandbox.ClueTicket;
 const near = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} should be within ${eps} of ${b}`);
 
 const asks = [{ price: 0.5, size: 100 }, { price: 0.52, size: 100 }, { price: 0.6, size: 1000 }];
@@ -152,4 +152,32 @@ test('the cash balance is read from the trading account\'s pUSD, and only well-f
   assert.equal(cashParse('0x0'), 0);
   assert.equal(cashParse('0x' + '0'.repeat(63) + '1'), 0.000001);
   for (const bad of ['0x', '', 'nope', null, undefined, 5, '0xzz', '0x' + 'f'.repeat(65)]) assert.equal(cashParse(bad), null, String(bad));
+});
+
+// ---- the portfolio ----
+const pos = (o) => ({ redeemable: false, current_price: 0.5, current_size: 10, avg_price: 0.4, entry_cost_usdc: 4, total_cost_usdc: 4.05, current_value: 5, unrealized_pnl: 1, ...o });
+
+test('a position is open, won or lost, by whether its market has ended and what it pays', () => {
+  assert.equal(positionState(pos({})), 'open');
+  assert.equal(positionState(pos({ redeemable: true, current_price: 1 })), 'won');
+  assert.equal(positionState(pos({ redeemable: true, current_price: 0.995 })), 'won');
+  assert.equal(positionState(pos({ redeemable: true, current_price: 0 })), 'lost');
+  assert.equal(positionState(pos({ redeemable: true, current_price: 0.5 })), 'lost');       // ended without paying out in full
+  assert.equal(positionState(null), 'open');
+});
+
+test('profit and loss is value now minus what was paid, as a share of what was paid', () => {
+  const n = positionNumbers(pos({}));
+  assert.equal(n.value, 5); assert.equal(n.pnl, 1); assert.equal(n.pct, 0.25); assert.equal(n.shares, 10); assert.equal(n.paid, 4.05);
+  const down = positionNumbers(pos({ current_value: 3, unrealized_pnl: -1 }));
+  assert.equal(down.pct, -0.25);
+  assert.equal(positionNumbers(pos({ entry_cost_usdc: 0, total_cost_usdc: 0, unrealized_pnl: 0 })).pct, 0);   // nothing paid: no divide by zero
+  assert.equal(positionNumbers({}).value, 0);                                                                 // missing numbers count as zero
+});
+
+test('the totals add up open positions, open profit and what is waiting to be claimed', () => {
+  const list = [pos({}), pos({ current_value: 3, unrealized_pnl: -1 }), pos({ redeemable: true, current_price: 1, current_value: 8, unrealized_pnl: 4 }), pos({ redeemable: true, current_price: 0, current_value: 0, unrealized_pnl: -4 })];
+  assert.deepEqual(portfolioTotals(list), { value: 8, openPnl: 0, toClaim: 8, open: 2 });
+  assert.deepEqual(portfolioTotals([]), { value: 0, openPnl: 0, toClaim: 0, open: 0 });
+  assert.deepEqual(portfolioTotals(undefined), { value: 0, openPnl: 0, toClaim: 0, open: 0 });
 });
