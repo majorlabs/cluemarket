@@ -515,3 +515,24 @@ html[data-theme="light"] .fund{background:radial-gradient(120% 90% at 100% 0%,rg
 .pf-claimall{display:flex;flex-direction:column;gap:10px;margin:0 0 12px}
 .pf-claimall:empty{display:none}
 .pf-claimall .btn{width:100%}
+
+/* the coin picker, with logos */
+.coin-picker{position:relative;display:flex;flex-direction:column;gap:6px}
+.coin-btn,.coin-opt{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:var(--surface);color:var(--ink);border:1px solid var(--line-strong);border-radius:12px;padding:10px 12px;font:inherit;cursor:pointer}
+.coin-btn{min-height:56px}
+.coin-btn[aria-expanded="true"]{border-color:var(--brand)}
+.coin-chev{margin-left:auto;opacity:.7}
+.coin-list{display:flex;flex-direction:column;gap:4px;max-height:300px;overflow:auto;padding:6px;border:1px solid var(--line-strong);border-radius:12px;background:var(--bg)}
+.coin-list[hidden]{display:none}
+.coin-opt{border-color:transparent;background:transparent;min-height:54px}
+.coin-opt:hover,.coin-opt:focus-visible{background:var(--surface)}
+.coin-opt[aria-selected="true"]{border-color:var(--brand);background:var(--brand-wash)}
+.coin{position:relative;flex:none;width:34px;height:34px}
+.coin-main{display:block;width:34px;height:34px;border-radius:50%}
+.coin-chain{position:absolute;right:-5px;bottom:-5px;width:16px;height:16px;border-radius:50%;box-shadow:0 0 0 2px var(--surface);background:var(--surface)}
+.coin-opt .coin-chain{box-shadow:0 0 0 2px var(--bg)}
+.coin-text{display:flex;flex-direction:column;gap:1px;min-width:0}
+.coin-text b{font-size:15px}.coin-text small{font-size:12.5px}
+
+/* the balance is a button: tap to refresh */
+button.as-cash{background:none;border:0;padding:0;color:inherit;font:inherit;text-align:left;cursor:pointer}
