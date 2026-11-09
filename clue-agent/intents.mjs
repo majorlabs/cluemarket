@@ -39,11 +39,11 @@ export const forgetFloor = () => { floorCache = { at: 0, usd: null }; };
 export async function limits({ fetchImpl = fetch } = {}) { return { minUsd: Math.max(MIN_FLOOR_USD, await polymarketFloor(fetchImpl)), maxUsd: maxUsd() }; }
 
 // The coins offered, by chain and symbol. Each shows as "SYMBOL on Chain".
-const CHAINS = { near: 'NEAR', base: 'Base', eth: 'Ethereum', arb: 'Arbitrum', sol: 'Solana', op: 'Optimism', bsc: 'BNB Chain' };
+const CHAINS = { near: 'NEAR', base: 'Base', eth: 'Ethereum', arb: 'Arbitrum', sol: 'Solana', op: 'Optimism' };
 const OFFERED = {
-  near: ['wNEAR', 'USDC', 'USDT'], base: ['USDC', 'ETH'], eth: ['USDC', 'USDT', 'ETH'], arb: ['USDC', 'ETH'], sol: ['USDC', 'SOL'], op: ['USDC'], bsc: ['USDT', 'BNB'],
+  near: ['wNEAR', 'USDC', 'USDT'], base: ['USDC', 'ETH'], eth: ['USDC', 'USDT', 'ETH'], arb: ['USDC', 'ETH'], sol: ['USDC', 'SOL'], op: ['USDC'],
 };
-const EVM = new Set(['base', 'eth', 'arb', 'op', 'bsc', 'pol']);
+const EVM = new Set(['base', 'eth', 'arb', 'op', 'pol']);
 export const chainKind = (chain) => (chain === 'near' ? 'near' : chain === 'sol' ? 'sol' : EVM.has(chain) ? 'evm' : null);
 
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });

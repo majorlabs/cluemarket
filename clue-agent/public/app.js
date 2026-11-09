@@ -1079,7 +1079,7 @@ async function mountTicket(box, ctx) {
     const result = el("div", { class: "intents-result" });
     const chosen = () => (assets || []).find((x) => x.assetId === picked);
     // A coin with its logo, and the logo of the chain it is on in the corner. The logos ship with Clue (public/assets/coins).
-    const LOGO = { wNEAR: "near", USDC: "usdc", USDT: "usdt", ETH: "eth", SOL: "sol", BNB: "bnb" };
+    const LOGO = { wNEAR: "near", USDC: "usdc", USDT: "usdt", ETH: "eth", SOL: "sol" };
     const coinOf = (x) => el("span", { class: "coin" }, el("img", { class: "coin-main", src: `/assets/coins/${LOGO[x.symbol] || "near"}.svg`, alt: "", width: "34", height: "34" }), el("img", { class: "coin-chain", src: `/assets/coins/chain-${x.chain}.svg`, alt: "", width: "16", height: "16" }));
     const coinText = (x) => el("span", { class: "coin-text" }, el("b", { text: x.symbol }), el("small", { class: "muted", text: x.symbol === "wNEAR" ? "wrapped NEAR, on NEAR" : `on ${x.chainName}` }));
     const coinList = el("div", { class: "coin-list", role: "listbox", "aria-label": "Coins you can send", hidden: true });
