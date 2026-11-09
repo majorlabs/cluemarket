@@ -170,7 +170,7 @@ Trading setup and orders go from the user's own browser straight to the venue, s
 
 ## Built with
 
-Node.js, plain JavaScript front end, `better-auth` with SQLite or Postgres (`better-sqlite3`, `pg`), `@near-js/crypto`, `@hot-labs/near-connect` (NEAR wallet), `@privy-io/react-auth` (loaded only when email sign-in is chosen), `@polymarket/client` and `viem` (loaded only when someone sets up trading), `esbuild`, React 19 (the Privy window only), Geist and Geist Mono fonts (SIL Open Font License). Market data: public market APIs. Photo on the cover image: NASA, Apollo 17 (public domain).
+Node.js, plain JavaScript front end, `better-auth` with SQLite or Postgres (`better-sqlite3`, `pg`), `@near-js/crypto`, `@hot-labs/near-connect` (NEAR wallet), `@privy-io/react-auth` (loaded only when email sign-in is chosen), `@polymarket/client` and `viem` (loaded only when someone sets up trading), `esbuild`, React 19 (the Privy window only), Geist and Geist Mono fonts (SIL Open Font License). Coin and chain logos from `@web3icons/core` (MIT). Market data: public market APIs. Photo on the cover image: NASA, Apollo 17 (public domain).
 
 ## Security
 

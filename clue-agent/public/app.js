@@ -743,6 +743,14 @@ async function mountTicket(box, ctx) {
     ].filter(Boolean));
   }
 
+  // The Add money panel holds what the person is typing, a price, a deposit address and a running status. It is built once and put back
+  // as it was whenever the account line is redrawn (a balance refresh redraws it every 30 seconds), never rebuilt.
+  let depositNode = null, depositWallet = null;
+  function depositNodeFor(geo, wallet) {
+    if (!depositNode || depositWallet !== wallet) { depositNode = depositPanel(geo); depositWallet = wallet; }
+    return depositNode;
+  }
+
   // Reads the balance and redraws the account line. Safe to call often: one read at a time.
   let cashTimer = null, cashAsking = false;
   async function refreshCash() {
@@ -751,8 +759,9 @@ async function mountTicket(box, ctx) {
     try {
       const wallet = tradingSetup.wallet, cash = await readCash(wallet);
       if (tradingSetup && tradingSetup.wallet === wallet) {
+        const before = `${tradingSetup.balance}|${tradingSetup.cashFailed}`;
         tradingSetup = cash === null ? { ...tradingSetup, cashFailed: tradingSetup.balance == null } : { ...tradingSetup, balance: cash, cashFailed: false };
-        if (lastGeo) drawChecklist(lastGeo);
+        if (lastGeo && before !== `${tradingSetup.balance}|${tradingSetup.cashFailed}`) drawChecklist(lastGeo);   // only when something changed
       }
     } finally { cashAsking = false; }
   }
@@ -898,13 +907,26 @@ async function mountTicket(box, ctx) {
     const status = el("p", { class: "status", role: "status", "aria-live": "polite" });
     const say = (t, cls = "") => { status.className = `status ${cls}`; status.textContent = t; };
     const copy = (text) => el("button", { class: "btn small", type: "button", text: "Copy", onclick: async (ev) => { try { await navigator.clipboard.writeText(text); ev.currentTarget.textContent = "Copied"; } catch { ev.currentTarget.textContent = "Select and copy"; } } });
-    const select = el("select", { "aria-label": "The coin you will send" });
+    let picked = null;                                                       // the coin chosen, by its id
     const amount = el("input", { type: "text", inputmode: "decimal", placeholder: "2", "aria-label": "How much you will send", autocomplete: "off" });
     const refund = el("input", { type: "text", placeholder: "", "aria-label": "Where to return your money if the swap cannot finish", autocomplete: "off", spellcheck: "false" });
     const hint = el("small", { class: "muted" });
     const refundHint = el("small", { class: "muted" });
     const result = el("div", { class: "intents-result" });
-    const chosen = () => (assets || []).find((x) => x.assetId === select.value);
+    const chosen = () => (assets || []).find((x) => x.assetId === picked);
+    // A coin with its logo, and the logo of the chain it is on in the corner. The logos ship with Clue (public/assets/coins).
+    const LOGO = { wNEAR: "near", USDC: "usdc", USDT: "usdt", ETH: "eth", SOL: "sol", BNB: "bnb" };
+    const coinOf = (x) => el("span", { class: "coin" }, el("img", { class: "coin-main", src: `/assets/coins/${LOGO[x.symbol] || "near"}.svg`, alt: "", width: "34", height: "34" }), el("img", { class: "coin-chain", src: `/assets/coins/chain-${x.chain}.svg`, alt: "", width: "16", height: "16" }));
+    const coinText = (x) => el("span", { class: "coin-text" }, el("b", { text: x.symbol }), el("small", { class: "muted", text: x.symbol === "wNEAR" ? "wrapped NEAR, on NEAR" : `on ${x.chainName}` }));
+    const coinList = el("div", { class: "coin-list", role: "listbox", "aria-label": "Coins you can send", hidden: true });
+    const coinBtn = el("button", { class: "coin-btn", type: "button", "aria-haspopup": "listbox", "aria-expanded": "false", onclick: () => { coinList.hidden = !coinList.hidden; coinBtn.setAttribute("aria-expanded", String(!coinList.hidden)); } });
+    const picker = el("div", { class: "coin-picker" }, coinBtn, coinList);
+    function drawPicker() {
+      const x = chosen(); if (!x) return;
+      coinBtn.replaceChildren(coinOf(x), coinText(x), el("span", { class: "coin-chev", "aria-hidden": "true", text: "▾" }));
+      coinList.replaceChildren(...assets.map((o) => el("button", { type: "button", class: "coin-opt", role: "option", "aria-selected": String(o.assetId === picked), onclick: () => choose(o.assetId) }, coinOf(o), coinText(o))));
+    }
+    function choose(id) { picked = id; coinList.hidden = true; coinBtn.setAttribute("aria-expanded", "false"); edited = false; quoteInfo = null; result.replaceChildren(); setRefundDefault(); drawHint(); drawPicker(); }
     const usdOf = () => { const x = chosen(), n = Number(amount.value); return x && Number.isFinite(n) ? n * x.price : 0; };
     function setRefundDefault() {
       const x = chosen(); if (!x || edited) return;
@@ -970,7 +992,6 @@ async function mountTicket(box, ctx) {
       return b;
     }
 
-    select.addEventListener("change", () => { edited = false; quoteInfo = null; result.replaceChildren(); setRefundDefault(); drawHint(); });
     amount.addEventListener("input", () => { quoteInfo = null; result.replaceChildren(); drawHint(); });
     refund.addEventListener("input", () => { edited = true; quoteInfo = null; result.replaceChildren(); });
 
@@ -978,13 +999,12 @@ async function mountTicket(box, ctx) {
     api("/api/fund/intents/assets").then((d) => {
       assets = d.assets || []; if (d.limits) lim = d.limits;
       if (!assets.length) { out.replaceChildren(el("p", { class: "status err", text: "Adding money from other chains is not available right now. Try again in a minute." })); return; }
-      const label = (x) => `${x.symbol === "wNEAR" ? "wNEAR (wrapped NEAR)" : x.symbol} on ${x.chainName}`;
-      select.replaceChildren(...assets.map((x) => el("option", { value: x.assetId, text: label(x) })));
+      picked = assets[0].assetId;
       const field = (title, input, ...extra) => el("label", { class: "field" }, el("span", { text: title }), input, ...extra);
       out.replaceChildren(
         el("p", { class: "small" }, "Send NEAR or a coin from another chain. ", el("b", { text: "NEAR Intents" }), " swaps it and delivers it to your trading account."),
-        field("Where is your money?", select), field("How much?", amount, hint), field("If it can’t finish, return it to", refund, refundHint), price, result, status);
-      setRefundDefault(); drawHint();
+        el("div", { class: "field" }, el("span", { text: "Where is your money?" }), picker), field("How much?", amount, hint), field("If it can’t finish, return it to", refund, refundHint), price, result, status);
+      setRefundDefault(); drawHint(); drawPicker();
     }).catch((e) => out.replaceChildren(el("p", { class: "status err", text: e.message || "Adding money from other chains is not available right now." })));
     return out;
   }
@@ -1040,7 +1060,7 @@ async function mountTicket(box, ctx) {
       line = strip(t.balance != null ? el("span", { class: "as-text as-cash" }, el("small", { class: "muted", text: "Balance" }), el("b", { class: "num", text: `$${t.balance.toFixed(2)}` }))
         : t.cashFailed ? "Ready to trade" : "Checking your balance…", el("button", { class: "btn small", type: "button", text: depositOpen ? "Hide" : "Add money", onclick: () => { depositOpen = !depositOpen; drawChecklist(geo); } }), "ok");
     }
-    geoBox.replaceChildren(...kids(line, t && depositOpen ? depositPanel(geo) : null, status));
+    geoBox.replaceChildren(...kids(line, t && depositOpen ? depositNodeFor(geo, t.wallet) : null, status));
   }
 
   function draw() { drawFields(); drawPreview(); }
