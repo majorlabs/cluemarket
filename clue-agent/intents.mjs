@@ -77,6 +77,7 @@ export async function offered({ fetchImpl = fetch } = {}) {
 
 /** Whole units from text such as "2" or "2.5". Plain decimals only. */
 export function toUnits(text, decimals) {
+  // eslint-disable-next-line security/detect-unsafe-regex -- both repeats are bounded to a few digits
   if (typeof text !== 'string' || !/^\d{1,12}(\.\d{1,18})?$/.test(text)) return null;
   const [whole, frac = ''] = text.split('.');
   if (frac.length > decimals) return null;
@@ -151,6 +152,7 @@ export async function quote({ assetId, amount, refundTo, wallet, dry = true }, d
   if (!r.ok || !q) {
     const said = String((d && d.message) || '');
     console.error(`intents quote failed: ${r.status} ${asset.symbol}@${asset.chainName} dry=${Boolean(dry)} ${said.slice(0, 200)}`);
+    // eslint-disable-next-line security/detect-unsafe-regex -- the amount comes from NEAR Intents and the pattern has no nested repeats
     const min = /minimum swap amount is \$([\d,]+(?:\.\d+)?)/i.exec(said);
     if (min) throw fail(`${asset.symbol} on ${asset.chainName} needs at least $${min[1]} per deposit right now. Try a different coin.`, 400);
     if (r.status >= 400 && r.status < 500 && r.status !== 429) throw fail('NEAR Intents could not make this swap. Try another coin or a different amount.', 502);

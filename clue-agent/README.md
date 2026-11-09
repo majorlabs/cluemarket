@@ -8,6 +8,8 @@ The Clue Markets app: a plain-JavaScript front end (`public/`) served by one Nod
 npm install
 npm run preview        # http://127.0.0.1:3000 (loopback only)
 npm test
+npm run lint           # ESLint with the security rules
+npm run audit:prod     # known problems in the packages the server runs on
 ```
 
 Run the tests from this folder: one of them starts `server.mjs` by relative path. The live red-team test (`tests/redteam.live.test.mjs`) runs only when `NEARAI_API_KEY` is set and spends a little NEAR AI credit.

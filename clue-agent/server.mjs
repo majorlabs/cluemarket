@@ -1,8 +1,7 @@
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { randomUUID, timingSafeEqual } from 'node:crypto';
-import { toNodeHandler, fromNodeHeaders } from 'better-auth/node';
-import { auth, store } from './auth.mjs';
+import { randomUUID } from 'node:crypto';
+import { store } from './auth.mjs';
 import {initWalletAuth,walletSession,walletRoute} from './wallet-auth.mjs';
 import {privyRoute,privyWalletRoute} from './privy-auth.mjs';
 import {ordersLiveFor} from './orders-switch.mjs';
@@ -65,7 +64,7 @@ async function researchOnce(question, market) {
  const response=await fetch((process.env.NEAR_AI_BASE||'https://cloud-api.near.ai/v1')+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${process.env.NEAR_AI_API_KEY}`},body:JSON.stringify({model,messages:[{role:'user',content:prompt}],tools:[{type:'web_context_search'}],max_tokens:1200,stream:true}),signal:AbortSignal.timeout(90000)});
  if (!response.ok) throw Object.assign(new Error('Research isn’t available right now. Please try again in a little while.'),{status:502});
  const stream=await response.text(); let content=''; let sources=[]; let malformed=0; let usage=null;
- for(const line of stream.split(/\r?\n/)) { if (!line.startsWith('data:')) continue; const data=line.slice(5).trim(); if(!data || data==='[DONE]') continue; try {const part=JSON.parse(data); if(part.error) throw Object.assign(new Error('Research ran into a problem. Please try again.'),{status:502}); if(part.usage&&typeof part.usage==='object'){const i=Number(part.usage.prompt_tokens??part.usage.input_tokens),o=Number(part.usage.completion_tokens??part.usage.output_tokens);if(Number.isFinite(i)&&Number.isFinite(o))usage={input:i,output:o};} const delta=part.choices?.[0]?.delta || {}; if(delta.nearai_tool_result?.status === 'ok' && typeof delta.nearai_tool_result.output === 'string') { const matches=delta.nearai_tool_result.output.match(/https?:\/\/[^\s<>\]\)]+/g) || []; sources.push(...matches); } if(typeof delta.content==='string') content+=delta.content;} catch(e) { if(e instanceof SyntaxError) malformed++; else throw e; } }
+ for(const line of stream.split(/\r?\n/)) { if (!line.startsWith('data:')) continue; const data=line.slice(5).trim(); if(!data || data==='[DONE]') continue; try {const part=JSON.parse(data); if(part.error) throw Object.assign(new Error('Research ran into a problem. Please try again.'),{status:502}); if(part.usage&&typeof part.usage==='object'){const i=Number(part.usage.prompt_tokens??part.usage.input_tokens),o=Number(part.usage.completion_tokens??part.usage.output_tokens);if(Number.isFinite(i)&&Number.isFinite(o))usage={input:i,output:o};} const delta=part.choices?.[0]?.delta || {}; if(delta.nearai_tool_result?.status === 'ok' && typeof delta.nearai_tool_result.output === 'string') { const matches=delta.nearai_tool_result.output.match(/https?:\/\/[^\s<>\])]+/g) || []; sources.push(...matches); } if(typeof delta.content==='string') content+=delta.content;} catch(e) { if(e instanceof SyntaxError) malformed++; else throw e; } }
  if(!content || malformed){ console.log('research attempt incomplete',JSON.stringify({streamChars:stream.length,answerChars:content.length,brokenLines:malformed,searchResults:sources.length})); throw Object.assign(new Error('The research didn’t come back complete. Please try again.'),{status:502,retry:true,usage}); }
  sources=[...new Set(sources)].slice(0,12);
  content=cleanAnswer(content,sources);

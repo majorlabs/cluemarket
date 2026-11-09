@@ -24,7 +24,8 @@ export async function walletRoute(req,res,path,body,origin){
  }
  if(path==='/api/wallet/verify'&&req.method==='POST'){
   const {id,accountId,publicKey,signature}=body;
-  if(typeof accountId!=='string'||!/^([a-z0-9]+[-_])*[a-z0-9]+(\.([a-z0-9]+[-_])*[a-z0-9]+)*$/.test(accountId)||accountId.length>64||typeof publicKey!=='string'||!publicKey.startsWith('ed25519:')||typeof signature!=='string')throw Object.assign(Error('Invalid wallet response'),{status:400});
+  // eslint-disable-next-line security/detect-unsafe-regex -- the length is checked first, so the input is at most 64 characters
+  if(typeof accountId!=='string'||accountId.length>64||!/^([a-z0-9]+[-_])*[a-z0-9]+(\.([a-z0-9]+[-_])*[a-z0-9]+)*$/.test(accountId)||typeof publicKey!=='string'||!publicKey.startsWith('ed25519:')||typeof signature!=='string')throw Object.assign(Error('Invalid wallet response'),{status:400});
   const c=await store.get('SELECT * FROM wallet_challenges WHERE id=? AND expires>?',id,Date.now());
   if(!c||c.binding!==hash(cookie(req,'clue_challenge')||''))throw Object.assign(Error('Wallet request expired. Connect again.'),{status:401});
   if(!PublicKey.fromString(publicKey).verify(messageDigest(c.message,c.nonce,c.recipient),Buffer.from(signature,'base64')))throw Object.assign(Error('Wallet signature could not be verified.'),{status:401});
