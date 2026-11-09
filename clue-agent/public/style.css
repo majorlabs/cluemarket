@@ -458,3 +458,29 @@ html[data-theme="light"] .fund{background:radial-gradient(120% 90% at 100% 0%,rg
 /* the review box before an order is placed */
 .order-out.review{border:1px solid var(--line-strong);border-radius:12px;padding:12px 14px;background:var(--surface);display:flex;flex-direction:column;gap:8px}
 .order-out.review .btn{flex:1 1 0}
+
+/* progress: a spinner while a step runs, a tick when it is done, a cross if it failed */
+.prog{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.pstep{display:flex;align-items:center;gap:12px;font-size:14.5px;color:var(--muted)}
+.pstep-i{flex:none;width:22px;height:22px;border-radius:50%;border:2px solid var(--line-strong);display:grid;place-items:center;font-size:13px;font-weight:700;line-height:1;box-sizing:border-box}
+.pstep.active{color:var(--ink);font-weight:600}
+.pstep.active .pstep-i{border-color:var(--line-strong);border-top-color:var(--brand);animation:clue-spin .8s linear infinite}
+.pstep.done{color:var(--ink)}
+.pstep.done .pstep-i{background:var(--yes);border-color:var(--yes);color:#04140d}
+.pstep.done .pstep-i::after{content:"✓"}
+.pstep.failed{color:var(--no);font-weight:600}
+.pstep.failed .pstep-i{background:var(--no);border-color:var(--no);color:#fff}
+.pstep.failed .pstep-i::after{content:"✕"}
+@keyframes clue-spin{to{transform:rotate(360deg)}}
+@keyframes clue-pulse{50%{opacity:.35}}
+@media(prefers-reduced-motion:reduce){.pstep.active .pstep-i{animation:clue-pulse 1.4s ease-in-out infinite!important;border-top-color:var(--line-strong)}.status.working::before{animation:clue-pulse 1.4s ease-in-out infinite!important}}
+/* how an order ends */
+.order-out.working,.order-out.ok,.order-out.err,.order-out.warn,.order-out.test{display:flex;flex-direction:column;gap:12px}
+.ending{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;font-size:15px}
+.ending-i{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-weight:800}
+.ending.ok{background:var(--yes-wash);color:var(--yes)}.ending.ok .ending-i{background:var(--yes);color:#04140d}
+.ending.bad{background:var(--no-wash);color:var(--no)}.ending.bad .ending-i{background:var(--no);color:#fff}
+.ending.wait{background:var(--brand-wash);color:var(--brand-text)}.ending.wait .ending-i{background:var(--brand);color:#fff}
+/* a status line that is still working shows a small spinner */
+.status.working{display:flex;align-items:center;gap:10px}
+.status.working::before{content:"";flex:none;width:16px;height:16px;border-radius:50%;border:2px solid var(--line-strong);border-top-color:var(--brand);animation:clue-spin .8s linear infinite}

@@ -81,19 +81,38 @@ const num = (v) => Number(v || 0);
 
 // Buy with a dollar amount. All-or-nothing: the order fills completely at no worse than maxPrice, or it does not happen.
 // With send:false (test mode) the order is built and signed by the user's wallet, then thrown away. Nothing is sent to anyone.
-window.clueTrading.order = async function order({ assetId, spend, maxPrice, builderCode, send }) {
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Some markets hold an order for a few seconds before matching it. Follow it for up to about 40 seconds so the person sees how it ends.
+async function follow(client, orderId) {
+  for (let i = 0; i < 14; i++) {
+    await sleep(3000);
+    let o; try { o = await client.fetchOrder({ orderId }); } catch { continue; }
+    const matched = num(o.sizeMatched), size = num(o.originalSize), status = String(o.status || '').toLowerCase();
+    if (matched > 0 && (matched >= size * 0.999 || status === 'matched')) return { ok: true, sent: true, filled: true, shares: matched, paid: matched * num(o.price), avgPrice: num(o.price), orderId };
+    if (['canceled', 'cancelled', 'unmatched', 'expired', 'invalid'].includes(status)) return { ok: false, sent: true, error: 'The order was not filled, so nothing was bought and no money was spent.' };
+  }
+  return null;
+}
+
+// Buy with a dollar amount. All-or-nothing: the order fills completely at no worse than maxPrice, or it does not happen.
+// With send:false (test mode) the order is built and signed by the user's wallet, then thrown away. Nothing is sent to anyone.
+// onStep is told each step as it starts: 'account', 'sign', 'send', 'match'.
+window.clueTrading.order = async function order({ assetId, spend, maxPrice, builderCode, send, onStep = () => {} }) {
   try {
+    onStep('account');
     const client = await openClient();
     const request = { assetId, side: OrderSide.BUY, amount: String(spend), maxPrice: String(maxPrice), orderType: OrderType.FOK, ...(builderCode ? { builderCode } : {}) };
-    if (!send) {
-      const signed = await client.createMarketOrder(request);
-      return { ok: true, sent: false, summary: { spend: num(spend), maxPrice: num(maxPrice), builderCode: Boolean(builderCode), signed: Boolean(signed && signed.signature) } };
-    }
-    const res = await client.placeMarketOrder(request);
+    onStep('sign');
+    const signed = await client.createMarketOrder(request);
+    if (!send) return { ok: true, sent: false, summary: { spend: num(spend), maxPrice: num(maxPrice), builderCode: Boolean(builderCode), signed: Boolean(signed && signed.signature) } };
+    onStep('send');
+    const res = await client.postOrder(signed);
     if (!res.ok) return { ok: false, sent: true, error: REFUSALS[res.code] || 'Polymarket did not accept the order. No money was spent.' };
     const shares = num(res.takingAmount), paid = num(res.makingAmount);
     if (res.status === 'matched' && shares > 0) return { ok: true, sent: true, filled: true, shares, paid, avgPrice: paid / shares, orderId: res.orderId };
-    return { ok: true, sent: true, filled: false, orderId: res.orderId, note: 'The order was accepted but has not filled yet. Check your positions before trying again.' };
+    onStep('match');
+    const followed = await follow(client, res.orderId);
+    return followed || { ok: true, sent: true, filled: false, orderId: res.orderId, note: 'The order was accepted and is still being matched. Your balance will update when it is done.' };
   } catch (e) {
     console.error('order failed', e);
     const text = String((e && e.message) || e || '');

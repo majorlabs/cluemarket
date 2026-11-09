@@ -493,6 +493,21 @@ async function eventView(slug, marketId, stale) {
 }
 
 
+/* ---------- progress: what is happening now, what is done ---------- */
+// A short list of steps. The one in progress shows a spinner, finished ones a tick, a failed one a cross.
+// advance(id) marks everything before it done and starts it; finish() ticks all; fail(id) crosses one.
+function progress(defs) {
+  const items = defs.map((d) => ({ ...d, node: el("li", { class: "pstep pending" }, el("span", { class: "pstep-i", "aria-hidden": "true" }), el("span", { class: "pstep-t", text: d.label })) }));
+  const node = el("ol", { class: "prog", role: "status", "aria-live": "polite" }, ...items.map((i) => i.node));
+  const set = (i, state) => { i.node.className = `pstep ${state}`; };
+  return {
+    node,
+    advance(id) { const at = items.findIndex((i) => i.id === id); if (at < 0) return; items.forEach((i, n) => { if (n < at) set(i, "done"); else if (n === at) set(i, "active"); }); },
+    finish() { items.forEach((i) => set(i, "done")); },
+    fail(id) { const i = items.find((x) => x.id === id) || items.find((x) => x.node.className.includes("active")) || items[0]; set(i, "failed"); },
+  };
+}
+
 /* ---------- sharing a call: a 16:9 picture of it, drawn on the person's own phone ---------- */
 let cardLoading = null;
 function loadCard() {
@@ -657,10 +672,16 @@ async function mountTicket(box, ctx) {
   }
 
   async function submitOrder() {
-    placeBtn.disabled = true; orderOut.className = "order-out"; orderOut.textContent = "Checking the live orders again…";
+    placeBtn.disabled = true;
     const show = (cls, ...nodes) => { orderOut.className = `order-out ${cls}`; orderOut.replaceChildren(...nodes); };
+    const line = (k, v) => el("div", { class: "tk-row" }, el("span", { class: "muted", text: k }), el("b", { class: "num", text: v }));
+    const ending = (kind, title, ...more) => el("div", { class: `ending ${kind}` }, el("span", { class: "ending-i", "aria-hidden": "true", text: kind === "ok" ? "✓" : kind === "bad" ? "✕" : "…" }), el("b", { text: title }), ...more);
     try {
       const cfg = await ordersConfig();
+      const live = cfg.ordersLive;
+      const steps = progress([{ id: "prices", label: "Checking the live prices" }, ...(live ? [{ id: "confirm", label: "Your confirmation" }] : []), { id: "account", label: "Opening your trading account" }, { id: "sign", label: "Signing with your wallet" },
+        ...(live ? [{ id: "send", label: "Sending your order" }, { id: "match", label: "Matching with sellers" }] : [])]);
+      show("working", steps.node); steps.advance("prices");
       if (tradingSetup && tradingSetup.balance == null) {
         await loadTrading();
         const b = await window.clueTrading.balance();
@@ -670,22 +691,23 @@ async function mountTicket(box, ctx) {
       const fresh = await api(`/api/book?token=${encodeURIComponent(ctx.token)}&depth=60`);
       book = fresh; const plan = planFor(previewOn(fresh));
       if (!plan.ok) { show("err", el("p", { text: plan.reason })); return; }
-      if (cfg.ordersLive && !(await reviewOrder(plan))) { show("", el("p", { text: "Cancelled. Nothing was sent." })); return; }
-      show("", el("p", { text: cfg.ordersLive ? "Placing your order. Approve it in your wallet if it asks…" : "Preparing your order…" }));
+      if (live) {
+        steps.advance("confirm");
+        if (!(await reviewOrder(plan))) { show("", el("p", { text: "Cancelled. Nothing was sent." })); return; }
+        show("working", steps.node); steps.advance("account");
+      } else steps.advance("account");
       await loadTrading();
-      const res = await window.clueTrading.order({ assetId: ctx.token, spend: plan.spend, maxPrice: plan.maxPrice, builderCode: cfg.builderCode, send: cfg.ordersLive });
-      const line = (k, v) => el("div", { class: "tk-row" }, el("span", { class: "muted", text: k }), el("b", { class: "num", text: v }));
-      if (!res.ok) show("err", el("p", { text: res.error }), res.detail ? el("small", { class: "err-detail", text: `(${res.detail})` }) : null);
-      else if (!res.sent) show("test", el("b", { text: "Test mode: your order is ready, and it was NOT sent." }),
-        line("Would spend", usd(plan.spend)), line("Worst price accepted", cents(plan.maxPrice)), line("Fills", "completely or not at all"),
-        el("p", { class: "muted small", text: "Trading is not switched on for real orders yet, so no money moved." }));
+      const res = await window.clueTrading.order({ assetId: ctx.token, spend: plan.spend, maxPrice: plan.maxPrice, builderCode: cfg.builderCode, send: live, onStep: (s) => steps.advance(s) });
+      if (!res.ok) { steps.fail(); show("err", steps.node, ending("bad", res.sent ? "Not filled" : "Not placed"), el("p", { text: res.error }), res.detail ? el("small", { class: "err-detail", text: `(${res.detail})` }) : null); }
+      else if (!res.sent) { steps.finish(); show("test", steps.node, ending("ok", "Checked. Your order is ready, and it was NOT sent."), line("Would spend", usd(plan.spend)), line("Worst price accepted", cents(plan.maxPrice)), line("Fills", "completely or not at all"),
+        el("p", { class: "muted small", text: "Real orders are not switched on for this account, so no money moved." })); }
       else if (res.filled) {
+        steps.finish();
         const sharePanel = el("div", { class: "share-panel" });
         setTimeout(refreshCash, 4000); setTimeout(refreshCash, 15000);                  // the spent money leaves the balance a moment after the fill
-        show("ok", el("b", { text: "Your order filled." }), line("Shares bought", res.shares.toFixed(2)), line("You paid", usd(res.paid)), line("Average price", cents(res.avgPrice)),
+        show("ok", steps.node, ending("ok", "Done. Your order was filled."), line("Shares bought", res.shares.toFixed(2)), line("You paid", usd(res.paid)), line("Average price", cents(res.avgPrice)),
           el("button", { class: "btn primary small", type: "button", style: "margin-top:10px", text: "Share this call", onclick: (ev) => { ev.currentTarget.hidden = true; openShare({ kind: "placed", question: m.question, side: ctx.outcome, entry: res.avgPrice, shares: res.shares, paid: res.paid }, sharePanel); } }), sharePanel);
-      }
-      else show("warn", el("p", { text: res.note }));
+      } else { setTimeout(refreshCash, 5000); show("warn", steps.node, ending("wait", "Accepted, still matching"), el("p", { text: res.note })); }
     } catch (e) { show("err", el("p", { text: e.message || "Could not check the order. Nothing was sent." })); }
     finally { syncOrder(); }
   }
@@ -794,7 +816,7 @@ async function mountTicket(box, ctx) {
         q.depositMemo ? el("p", { class: "small" }, "Memo: ", el("code", { text: q.depositMemo })) : null,
         el("p", { class: "tk-warn warn", text: `Send only ${q.send.symbol} on ${q.send.chain}, from a wallet you control, before ${Number.isFinite(until.getTime()) ? until.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "the deadline"}. This address is for this one swap. If it cannot finish, your money is returned to ${q.refundTo}.` }),
         el("p", { class: "muted small", text: "Swapped by NEAR Intents. Clue never holds your money." })));
-      const live = el("p", { class: "status", role: "status", "aria-live": "polite", text: WORDS.waiting });
+      const live = el("p", { class: "status working", role: "status", "aria-live": "polite", text: WORDS.waiting });
       const after = el("div");
       result.append(live, after);
       const poll = async () => {
@@ -805,7 +827,7 @@ async function mountTicket(box, ctx) {
           live.className = "status ok"; live.textContent = `Done. ${s.delivered && s.delivered.amount ? `${s.delivered.amount} USDC` : "Your money"} is on its way to your trading account.`;
           after.replaceChildren(el("p", { class: "muted small", text: "Polymarket turns it into trading money in a minute or two. Then your balance shows it." }), refreshBtn());
         } else if (s.state === "refunded" || s.state === "failed") { stop(); live.className = "status err"; live.textContent = WORDS[s.state]; }
-        else { live.className = "status"; live.textContent = WORDS[s.state] || WORDS.swapping; }
+        else { live.className = "status working"; live.textContent = WORDS[s.state] || WORDS.swapping; }
       };
       timer = setInterval(poll, 6000); poll();
     }
@@ -875,10 +897,11 @@ async function mountTicket(box, ctx) {
     else if (isPrivy && !t) {
       const go = el("button", { class: "btn primary small", type: "button", text: "Set up trading", onclick: async () => {
         go.disabled = true; status.className = "status";
-        const words = { wallet: "Setting up your trading account…", permissions: "Setting permission to trade…", balance: "Checking your balance…" };
-        try { await loadTrading(); } catch (e) { status.className = "status err"; status.textContent = e.message; go.disabled = false; return; }
-        const r = await window.clueTrading.setup((step) => { status.textContent = `${words[step]} Approve it in your wallet if it asks.`; });
-        if (r.ok) { tradingSetup = r; rememberSetup(user.id, r); drawChecklist(geo); } else { status.className = "status err"; status.replaceChildren(r.error, r.detail ? el("small", { class: "err-detail", text: ` (${r.detail})` }) : ""); go.disabled = false; }
+        const pr = progress([{ id: "load", label: "Getting ready" }, { id: "wallet", label: "Setting up your trading account" }, { id: "permissions", label: "Setting permission to trade" }, { id: "balance", label: "Checking your balance" }]);
+        status.className = "status"; status.replaceChildren(pr.node, el("small", { class: "muted", text: "Approve it in your wallet if it asks." })); pr.advance("load");
+        try { await loadTrading(); } catch (e) { pr.fail("load"); status.className = "status err"; status.append(el("p", { text: e.message })); go.disabled = false; return; }
+        const r = await window.clueTrading.setup((step) => pr.advance(step));
+        if (r.ok) { pr.finish(); tradingSetup = r; rememberSetup(user.id, r); setTimeout(() => drawChecklist(geo), 700); } else { pr.fail(); status.className = "status err"; status.append(el("p", { text: r.error }), r.detail ? el("small", { class: "err-detail", text: ` (${r.detail})` }) : null); go.disabled = false; }
       } });
       line = strip("Trading isn't set up yet.", go);
     } else if (t) {
