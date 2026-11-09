@@ -153,7 +153,20 @@ function rememberSetup(id, t) {
   try { localStorage.setItem(setupKey(id), JSON.stringify({ signer: t.signer, wallet: t.wallet })); } catch { /* private window: the server still knows */ }
   post("/api/trading/account", { wallet: t.wallet, signer: t.signer }).catch(() => {});   // so a new phone or a cleared browser does not ask again
 }
-let accountLookup = { id: null, state: null };   // asking the server whether this person already set up trading
+let accountLookup = { id: null, state: null };
+// A person's cash is the pUSD their trading account holds on Polygon. Anyone can read it from a public server: no sign-in step, so it shows at once.
+const CHAIN_READERS = ["https://polygon-bor-rpc.publicnode.com", "https://polygon.drpc.org"];
+async function readCash(wallet) {
+  const call = window.ClueTicket.cashCall(wallet); if (!call) return null;
+  for (const url of CHAIN_READERS) {
+    try {
+      const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [call, "latest"] }) });
+      const cash = window.ClueTicket.cashParse((await r.json()).result);
+      if (cash !== null) return cash;
+    } catch { /* try the next server */ }
+  }
+  return null;
+}   // asking the server whether this person already set up trading
 let tradingScript = null;
 function loadTradingScript() {
   // Just the trading code, with no sign-in window. Enough for reading deposit addresses.
@@ -585,6 +598,20 @@ async function mountTicket(box, ctx) {
     ].filter(Boolean));
   }
 
+  // Reads the balance and redraws the account line. Safe to call often: one read at a time.
+  let cashTimer = null, cashAsking = false;
+  async function refreshCash() {
+    if (!tradingSetup || cashAsking) return;
+    cashAsking = true;
+    try {
+      const wallet = tradingSetup.wallet, cash = await readCash(wallet);
+      if (tradingSetup && tradingSetup.wallet === wallet) {
+        tradingSetup = cash === null ? { ...tradingSetup, cashFailed: tradingSetup.balance == null } : { ...tradingSetup, balance: cash, cashFailed: false };
+        if (lastGeo) drawChecklist(lastGeo);
+      }
+    } finally { cashAsking = false; }
+  }
+
   // ---- ordering: every check is repeated on a fresh book at the moment of ordering ----
   // Every market has its own minimum size and price step. The live book reports the real ones; the listing is only a fallback.
   const rulesOf = (b) => ({ minSize: Number(b && b.minOrderSize) || m.minOrderSize, tickSize: Number(b && b.tickSize) || m.tickSize });
@@ -634,6 +661,7 @@ async function mountTicket(box, ctx) {
         el("p", { class: "muted small", text: "Trading is not switched on for real orders yet, so no money moved." }));
       else if (res.filled) {
         const sharePanel = el("div", { class: "share-panel" });
+        setTimeout(refreshCash, 4000); setTimeout(refreshCash, 15000);                  // the spent money leaves the balance a moment after the fill
         show("ok", el("b", { text: "Your order filled." }), line("Shares bought", res.shares.toFixed(2)), line("You paid", usd(res.paid)), line("Average price", cents(res.avgPrice)),
           el("button", { class: "btn primary small", type: "button", style: "margin-top:10px", text: "Share this call", onclick: (ev) => { ev.currentTarget.hidden = true; openShare({ kind: "placed", question: m.question, side: ctx.outcome, entry: res.avgPrice, shares: res.shares, paid: res.paid }, sharePanel); } }), sharePanel);
       }
@@ -753,7 +781,8 @@ async function mountTicket(box, ctx) {
         if (!out.isConnected) { stop(); return; }
         let s; try { s = await api(`/api/fund/intents/status?deposit=${encodeURIComponent(q.depositAddress)}`); } catch { return; }
         if (s.state === "done") {
-          stop(); live.className = "status ok"; live.textContent = `Done. ${s.delivered && s.delivered.amount ? `${s.delivered.amount} USDC` : "Your money"} is on its way to your trading account.`;
+          stop(); setTimeout(refreshCash, 5000); setTimeout(refreshCash, 30000);
+          live.className = "status ok"; live.textContent = `Done. ${s.delivered && s.delivered.amount ? `${s.delivered.amount} USDC` : "Your money"} is on its way to your trading account.`;
           after.replaceChildren(el("p", { class: "muted small", text: "Polymarket turns it into trading money in a minute or two. Then your balance shows it." }), refreshBtn());
         } else if (s.state === "refunded" || s.state === "failed") { stop(); live.className = "status err"; live.textContent = WORDS[s.state]; }
         else { live.className = "status"; live.textContent = WORDS[s.state] || WORDS.swapping; }
@@ -816,7 +845,7 @@ async function mountTicket(box, ctx) {
     lastGeo = geo; syncOrder();
     const t = tradingSetup;
     const status = el("p", { class: "status", role: "status", "aria-live": "polite" });
-    const strip = (text, action, tone = "") => el("div", { class: `acct-strip ${tone}` }, el("span", { class: "as-text", text }), action);
+    const strip = (text, action, tone = "") => el("div", { class: `acct-strip ${tone}` }, typeof text === "string" ? el("span", { class: "as-text", text }) : text, action);
     let line;
     if (geo.state === "blocked") line = strip(`Trading isn't available in ${[geo.region, geo.country].filter(Boolean).join(", ") || "your location"}.`, null, "bad");
     else if (geo.state !== "ok") line = strip("Couldn't check your location, so trading is off.", null, "bad");
@@ -833,7 +862,10 @@ async function mountTicket(box, ctx) {
       } });
       line = strip("Trading isn't set up yet.", go);
     } else if (t) {
-      line = strip(t.balance == null ? "Ready to trade" : `Ready to trade · $${t.balance.toFixed(2)}`, el("button", { class: "btn small", type: "button", text: depositOpen ? "Hide" : "Add money", onclick: () => { depositOpen = !depositOpen; drawChecklist(geo); } }), "ok");
+      if (t.balance == null && !t.cashFailed && !cashAsking) refreshCash();
+      if (!cashTimer) cashTimer = setInterval(() => { if (!box.isConnected) { clearInterval(cashTimer); cashTimer = null; return; } if (tradingSetup) refreshCash(); }, 30000);
+      line = strip(t.balance != null ? el("span", { class: "as-text as-cash" }, el("small", { class: "muted", text: "Balance" }), el("b", { class: "num", text: `$${t.balance.toFixed(2)}` }))
+        : t.cashFailed ? "Ready to trade" : "Checking your balance…", el("button", { class: "btn small", type: "button", text: depositOpen ? "Hide" : "Add money", onclick: () => { depositOpen = !depositOpen; drawChecklist(geo); } }), "ok");
     }
     geoBox.replaceChildren(...kids(line, t && depositOpen ? depositPanel(geo) : null, status));
   }

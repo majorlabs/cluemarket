@@ -105,6 +105,18 @@
     return false;
   }
 
+  /** The request that reads a trading account's cash: pUSD (Polymarket's dollar, 6 decimals) held at that address. null if the address is malformed. */
+  function cashCall(wallet) {
+    if (!/^0x[0-9a-fA-F]{40}$/.test(String(wallet || ""))) return null;
+    return { to: "0xc011a7e12a19f7b1f670d46f03b03f3342e82dfb", data: "0x70a08231" + wallet.slice(2).toLowerCase().padStart(64, "0") };
+  }
+  /** Dollars from the chain's answer, or null if the answer is not a number. */
+  function cashParse(result) {
+    if (typeof result !== "string" || !/^0x[0-9a-fA-F]{1,64}$/.test(result)) return null;
+    const n = Number(BigInt(result)) / 1e6;
+    return Number.isFinite(n) ? n : null;
+  }
+
   /** Ask Polymarket whether the visitor's location may place orders. Runs in the visitor's browser so it sees their real location. */
   async function checkGeoblock(fetchImpl) {
     const f = fetchImpl || (root.fetch && root.fetch.bind(root));
@@ -123,5 +135,5 @@
   const fmt = (n) => (Number.isFinite(n) ? (Math.round(n * 100) / 100).toString() : "0");
   const pct = (p) => (p * 100).toFixed(p < 0.1 ? 1 : 0) + "¢";
 
-  root.ClueTicket = { previewBuy, checkGeoblock, orderPlan, validDepositAddress };
+  root.ClueTicket = { previewBuy, checkGeoblock, orderPlan, validDepositAddress, cashCall, cashParse };
 })(typeof window !== "undefined" ? window : globalThis);

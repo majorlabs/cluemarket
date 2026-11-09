@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const sandbox = {};
 new Function('window', readFileSync(new URL('../public/ticket.js', import.meta.url), 'utf8'))(sandbox);
-const { previewBuy, checkGeoblock, orderPlan, validDepositAddress } = sandbox.ClueTicket;
+const { previewBuy, checkGeoblock, orderPlan, validDepositAddress, cashCall, cashParse } = sandbox.ClueTicket;
 const near = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} should be within ${eps} of ${b}`);
 
 const asks = [{ price: 0.5, size: 100 }, { price: 0.52, size: 100 }, { price: 0.6, size: 1000 }];
@@ -141,4 +141,15 @@ test('a worst price never lands on a price the market cannot take', () => {
       assert.ok(p.maxPrice <= 1 - tick + 1e-9 && p.maxPrice >= p.worstFill - 1e-9);
     }
   }
+});
+
+test('the cash balance is read from the trading account\'s pUSD, and only well-formed answers count', () => {
+  const call = cashCall('0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045');
+  assert.equal(call.to, '0xc011a7e12a19f7b1f670d46f03b03f3342e82dfb');                         // pUSD
+  assert.equal(call.data, '0x70a08231' + '000000000000000000000000d8da6bf26964af9d7eed9e03e53415d37aa96045');   // balanceOf(address)
+  assert.equal(cashCall('0x123'), null); assert.equal(cashCall(null), null); assert.equal(cashCall('<script>'), null);
+  assert.equal(cashParse('0x1f47d0'), 2.05);                                                  // 2,050,000 units of 6 decimals
+  assert.equal(cashParse('0x0'), 0);
+  assert.equal(cashParse('0x' + '0'.repeat(63) + '1'), 0.000001);
+  for (const bad of ['0x', '', 'nope', null, undefined, 5, '0xzz', '0x' + 'f'.repeat(65)]) assert.equal(cashParse(bad), null, String(bad));
 });
