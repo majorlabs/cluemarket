@@ -138,7 +138,18 @@ async function connectWallet() {
   finally { $("account-open").disabled = false; }
 }
 let privyLoading = null;
-let tradingLoading = null, tradingSetup = null;   // tradingSetup: what the last setup found, for this page load
+let tradingLoading = null, tradingSetup = null;   // tradingSetup: the trading account for the signed-in user (balance null until read)
+// Trading setup is remembered on this device so a refresh does not ask again. Only two public addresses are kept, never keys.
+// Setting up again is harmless: the trading account's address comes from the user's wallet, so it is the same one, not a new one.
+const setupKey = (id) => `clue-trading-setup:${id}`;
+const isAddr = (a) => /^0x[0-9a-fA-F]{40}$/.test(String(a || ""));
+function savedSetup(id) {
+  try {
+    const d = JSON.parse(localStorage.getItem(setupKey(id)) || "null");
+    return d && isAddr(d.signer) && isAddr(d.wallet) ? { signer: d.signer, wallet: d.wallet, approved: true, balance: null } : null;
+  } catch { return null; }
+}
+function rememberSetup(id, t) { try { localStorage.setItem(setupKey(id), JSON.stringify({ signer: t.signer, wallet: t.wallet })); } catch { /* private window: it just asks again next time */ } }
 let tradingScript = null;
 function loadTradingScript() {
   // Just the trading code, with no sign-in window. Enough for reading deposit addresses.
@@ -224,6 +235,7 @@ async function signOut() {
   dialog.close();
   try { await post("/api/wallet/disconnect", {}); } catch { /* session may already be gone */ }
   try { await window.cluePrivy?.logout(); } catch { /* not signed in with Privy */ }
+  tradingSetup = null;
   await refreshAccount();
   if (location.hash.startsWith("#/saved")) route();
 }
@@ -465,7 +477,7 @@ async function eventView(slug, marketId, stale) {
 
 
 /* ---------- trade ticket: preview, and an order check that sends nothing unless real orders are switched on ---------- */
-let geoPromise = null, ordersConfigPromise = null;
+let geoPromise = null, ordersConfigCache = null;
 const geoOnce = () => (geoPromise ||= window.ClueTicket.checkGeoblock());
 async function mountTicket(box, ctx) {
   const m = ctx.market, T = window.ClueTicket;
@@ -518,24 +530,37 @@ async function mountTicket(box, ctx) {
 
   // ---- ordering: every check is repeated on a fresh book at the moment of ordering ----
   const orderOut = el("div", { class: "order-out", role: "status", "aria-live": "polite" });
+  const orderNote = el("p", { class: "order-note muted small" });
   const placeBtn = el("button", { class: "btn dark tk-submit", type: "button", disabled: true, text: "Review my order", onclick: () => submitOrder() });
-  const ordersConfig = () => (ordersConfigPromise ||= api("/api/pm/config").catch(() => ({ ordersLive: false, builderCode: null })));
+  // asked again when a different person signs in, because real orders can be switched on for one account only
+  const ordersConfig = () => {
+    const id = user ? user.id : "";
+    if (!ordersConfigCache || ordersConfigCache.id !== id) ordersConfigCache = { id, promise: api("/api/pm/config").catch(() => ({ ordersLive: false, builderCode: null })) };
+    return ordersConfigCache.promise;
+  };
   const planFor = (preview) => T.orderPlan({
-    preview: mode === "market" ? preview : null, signedIn: Boolean(user), geo: lastGeo, setUp: Boolean(tradingSetup), balance: tradingSetup ? tradingSetup.balance : null,
+    preview: mode === "market" ? preview : null, signedIn: Boolean(user), geo: lastGeo, setUp: Boolean(tradingSetup), balance: tradingSetup ? (tradingSetup.balance == null ? Number.MAX_SAFE_INTEGER : tradingSetup.balance) : null,
     accepting: m.acceptingOrders, minSize: m.minOrderSize, tickSize: m.tickSize,
   });
   const previewOn = (b) => T.previewBuy({ mode: "market", asks: b.asks, bestBid: b.bids[0]?.price ?? null, spend: Number(spend.value), feesEnabled: m.feesEnabled, feeRate: m.feeRate, minSize: m.minOrderSize, tickSize: m.tickSize, accepting: m.acceptingOrders, builderFeeBps: 0 });
   async function syncOrder() {
     const cfg = await ordersConfig();
     placeBtn.textContent = cfg.ordersLive ? "Place order" : "Review my order";
-    const p = mode !== "market" ? { ok: false, reason: "Orders use the Market tab for now." } : planFor(lastPreview);
+    const p = mode !== "market" ? { ok: false, reason: "Limit orders aren't available yet. Tap Market above to place an order." } : planFor(lastPreview);
     placeBtn.disabled = !p.ok; placeBtn.title = p.ok ? "" : p.reason;
+    orderNote.textContent = p.ok ? "" : p.reason;   // on a phone there is no hover, so the reason is written out
   }
   async function submitOrder() {
     placeBtn.disabled = true; orderOut.className = "order-out"; orderOut.textContent = "Checking the live orders again…";
     const show = (cls, ...nodes) => { orderOut.className = `order-out ${cls}`; orderOut.replaceChildren(...nodes); };
     try {
       const cfg = await ordersConfig();
+      if (tradingSetup && tradingSetup.balance == null) {
+        await loadTrading();
+        const b = await window.clueTrading.balance();
+        if (!b.ok) { show("err", el("p", { text: b.error })); return; }
+        tradingSetup = { ...tradingSetup, balance: b.balance }; drawChecklist(lastGeo);
+      }
       const fresh = await api(`/api/book?token=${encodeURIComponent(ctx.token)}&depth=60`);
       book = fresh; const plan = planFor(previewOn(fresh));
       if (!plan.ok) { show("err", el("p", { text: plan.reason })); return; }
@@ -590,8 +615,9 @@ async function mountTicket(box, ctx) {
   }
 
   function drawChecklist(geo) {
-    lastGeo = geo; syncOrder();
     const isPrivy = user && String(user.id || "").startsWith("privy:"), isNear = user && String(user.id || "").startsWith("near:");
+    if (isPrivy && !tradingSetup) tradingSetup = savedSetup(user.id);
+    lastGeo = geo; syncOrder();
     const t = tradingSetup;
     const status = el("p", { class: "status", role: "status", "aria-live": "polite" });
     const strip = (text, action, tone = "") => el("div", { class: `acct-strip ${tone}` }, el("span", { class: "as-text", text }), action);
@@ -606,11 +632,11 @@ async function mountTicket(box, ctx) {
         const words = { wallet: "Setting up your trading account…", permissions: "Setting permission to trade…", balance: "Checking your balance…" };
         try { await loadTrading(); } catch (e) { status.className = "status err"; status.textContent = e.message; go.disabled = false; return; }
         const r = await window.clueTrading.setup((step) => { status.textContent = `${words[step]} Approve it in your wallet if it asks.`; });
-        if (r.ok) { tradingSetup = r; drawChecklist(geo); } else { status.className = "status err"; status.replaceChildren(r.error, r.detail ? el("small", { class: "err-detail", text: ` (${r.detail})` }) : ""); go.disabled = false; }
+        if (r.ok) { tradingSetup = r; rememberSetup(user.id, r); drawChecklist(geo); } else { status.className = "status err"; status.replaceChildren(r.error, r.detail ? el("small", { class: "err-detail", text: ` (${r.detail})` }) : ""); go.disabled = false; }
       } });
       line = strip("Trading isn't set up yet.", go);
     } else if (t) {
-      line = strip(`Ready to trade · $${t.balance.toFixed(2)}`, el("button", { class: "btn small", type: "button", text: depositOpen ? "Hide" : "Add money", onclick: () => { depositOpen = !depositOpen; drawChecklist(geo); } }), "ok");
+      line = strip(t.balance == null ? "Ready to trade" : `Ready to trade · $${t.balance.toFixed(2)}`, el("button", { class: "btn small", type: "button", text: depositOpen ? "Hide" : "Add money", onclick: () => { depositOpen = !depositOpen; drawChecklist(geo); } }), "ok");
     }
     geoBox.replaceChildren(...kids(line, t && depositOpen ? depositPanel(geo) : null, status));
   }
@@ -622,7 +648,7 @@ async function mountTicket(box, ctx) {
       geoBox,
       el("p", { class: "small", style: "margin-top:12px" }, el("b", { text: `Buy "${ctx.outcome}"` }), el("span", { class: "muted", text: ` · ${m.groupItemTitle || m.question}` })),
       el("div", { style: "margin:10px 0" }, seg), fields, preview,
-      placeBtn, orderOut));
+      placeBtn, orderNote, orderOut));
   [spend, limitPrice, shares].forEach((i) => i.addEventListener("input", drawPreview));
   draw();
   geoOnce().then(drawChecklist);
