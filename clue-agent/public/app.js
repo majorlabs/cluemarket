@@ -653,9 +653,7 @@ async function eventView(slug, marketId, stale) {
   const stage = el("div", { id: "stage" });
   const workspaceBox = el("section", { class: "card" });
   const ticketBox = el("section", { class: "card ticket", "aria-label": "Trade ticket" });
-  const fundBox = el("section", { class: "card pad fund", "aria-label": "Add money" });
-  mountFunding(fundBox);
-  const rightCol = el("aside", { class: "rightcol" }, ticketBox, fundBox, workspaceBox);
+  const rightCol = el("aside", { class: "rightcol" }, ticketBox, workspaceBox);
   const left = el("div", null, stage);
 
   const header = el("div", { class: "ev-head" }, thumb(ev),
@@ -861,16 +859,11 @@ async function mountTicket(box, ctx) {
   const shares = el("input", { type: "number", min: "0", step: "1", value: "10", inputmode: "decimal", "aria-label": "Number of shares" });
   const geoBox = el("div", { class: "geo", role: "status" }, el("span", { class: "muted small", text: "Checking your location…" }));
   const preview = el("div", { class: "tk-preview", "aria-live": "polite" });
-  const seg = el("div", { class: "seg", role: "group", "aria-label": "Order type" }, [["market", "Market"], ["limit", "Limit"]].map(([v, l]) =>
-    el("button", { type: "button", "aria-pressed": String(v === mode), text: l, onclick: () => { mode = v; draw(); } })));
   const fields = el("div");
 
   function drawFields() {
-    seg.querySelectorAll("button").forEach((b, i) => b.setAttribute("aria-pressed", String(["market", "limit"][i] === mode)));
     const f = (label, input, hint) => el("label", { class: "field" }, el("span", { text: label }), hint && el("small", { text: hint }), input);
-    fields.replaceChildren(...(mode === "market"
-      ? [f("Amount to spend ($)", spend, "Buys from the cheapest sellers first.")]
-      : [f("Limit price (¢ per share)", limitPrice, `Most you'll pay. Steps of ${m.tickSize ? +(m.tickSize * 100).toFixed(2) : 1}¢.`), f("Shares", shares, `Minimum ${m.minOrderSize || 5} shares.`)]));
+    fields.replaceChildren(f("Amount to spend ($)", spend, "Buys from the cheapest sellers first."));
   }
 
   function drawPreview() {
@@ -950,7 +943,7 @@ async function mountTicket(box, ctx) {
   async function syncOrder() {
     const cfg = await ordersConfig();
     placeBtn.textContent = cfg.ordersLive ? "Place order" : "Review my order";
-    const p = mode !== "market" ? { ok: false, reason: "Limit orders aren't available yet. Tap Market above to place an order." } : planFor(lastPreview);
+    const p = planFor(lastPreview);
     placeBtn.disabled = !p.ok; placeBtn.title = p.ok ? "" : p.reason;
     orderNote.textContent = p.ok ? "" : p.reason;   // on a phone there is no hover, so the reason is written out
   }
@@ -1234,7 +1227,7 @@ async function mountTicket(box, ctx) {
       sideSeg ? el("p", { class: "muted small", style: "margin:12px 0 6px" }, "Pick a side") : null,
       sideSeg,
       el("p", { class: "small", style: "margin-top:10px" }, el("b", { text: `Buy "${ctx.outcome}"` }), el("span", { class: "muted", text: ` · ${m.groupItemTitle || m.question}` })),
-      el("div", { style: "margin:10px 0" }, seg), fields, preview,
+      fields, preview,
       placeBtn, orderNote, orderOut));
   [spend, limitPrice, shares].forEach((i) => i.addEventListener("input", drawPreview));
   spend.addEventListener("input", () => { lastSpend = spend.value; });
@@ -1451,84 +1444,6 @@ async function askView(qs, stale) {
 }
 
 
-
-/* ---------- add money: see what moving money into your Clue balance would cost (nothing is sent) ---------- */
-const CHAIN_LOOK = { "ethereum-usdc": { name: "Ethereum", color: "#627eea" }, "base-usdc": { name: "Base", color: "#0052ff" }, "optimism-usdc": { name: "Optimism", color: "#ff0420" } };
-async function mountFunding(box) {
-  const title = el("div", { class: "fund-title" }, el("h2", { text: "Add money" }), el("span", { class: "fund-badge", text: "Price check" }));
-  const intro = el("p", { class: "fund-intro", text: "Pick where your money is now and see what it would cost to bring it into Clue." });
-  if (!user) { box.replaceChildren(title, intro, el("button", { class: "btn primary", type: "button", text: "Sign in to check a price", onclick: () => openAccountDialog("Sign in to check what adding money would cost.") })); return; }
-  let options;
-  try { options = await api("/api/fund/options"); } catch { box.replaceChildren(title, el("p", { class: "fund-intro", text: "Prices aren’t available right now. Try again in a minute." })); return; }
-
-  let picked = options.sources[0].id;
-  const chips = options.sources.map((o) => {
-    const look = CHAIN_LOOK[o.id] || { name: o.label, color: "#93a4ad" };
-    const b = el("button", { type: "button", class: "chain", "aria-pressed": String(o.id === picked), onclick: () => { picked = o.id; chips.forEach((c) => c.setAttribute("aria-pressed", String(c === b))); } },
-      el("i", { style: `background:${look.color}` }), look.name);
-    return b;
-  });
-  const amount = el("input", { id: "fund-amount", type: "text", inputmode: "decimal", autocomplete: "off", value: "25", "aria-label": "How much, in dollars" });
-  const quick = [10, 25, 100].map((n) => el("button", { type: "button", class: "quick", text: `$${n}`, onclick: () => { amount.value = String(n); } }));
-  const address = el("input", { id: "fund-address", type: "text", autocomplete: "off", spellcheck: "false", placeholder: "0x…", "aria-label": "Your wallet address" });
-  try { address.value = localStorage.getItem("clue.fundAddress") || ""; } catch { /* storage may be blocked */ }
-  const isPrivy = user.id && String(user.id).startsWith("privy:");
-  const walletBox = el("div", { class: "mywallet", hidden: true });
-  const emailNote = el("p", { class: "fund-hint", hidden: true, text: "We couldn’t set up a wallet for you just now. You can paste the address of a wallet you own instead." });
-  const showWallet = (w) => {
-    walletBox.hidden = false;
-    walletBox.replaceChildren(
-      el("span", { class: "label", text: w.madeForYou ? "Your Clue wallet" : "Your connected wallet" }),
-      el("code", { class: "addr", text: w.address }),
-      el("button", { type: "button", class: "btn small", text: "Copy", onclick: async (ev) => { try { await navigator.clipboard.writeText(w.address); ev.currentTarget.textContent = "Copied"; } catch { ev.currentTarget.textContent = "Select and copy"; } } }),
-      el("small", { text: w.madeForYou ? "Made for you when you signed in. It belongs to you, and Clue never holds its keys." : "This is the wallet you signed in with." }));
-    if (!address.value.trim()) address.value = w.address;
-  };
-  if (isPrivy) {
-    walletBox.hidden = false; walletBox.replaceChildren(el("span", { class: "fund-wait", text: "Setting up your wallet…" }));
-    (async () => {
-      for (let i = 0; i < 10; i++) {
-        try { const d = await api("/api/privy/wallet"); if (d.wallet) return showWallet(d.wallet); } catch { /* try again */ }
-        await new Promise((r) => setTimeout(r, 3000));
-      }
-      walletBox.hidden = true; emailNote.hidden = false;
-    })();
-  }
-  const out = el("div", { class: "fund-out", role: "status", "aria-live": "polite" });
-  const go = el("button", { class: "btn primary fund-go", type: "button", text: "See what I’d get", onclick: async () => {
-    go.disabled = true; out.replaceChildren(el("p", { class: "fund-wait", text: "Checking the best way to move your money…" }));
-    try {
-      try { localStorage.setItem("clue.fundAddress", address.value.trim()); } catch { /* ignore */ }
-      const q = await api(`/api/fund/quote?${new URLSearchParams({ source: picked, amount: amount.value.trim(), address: address.value.trim() })}`);
-      const dollars = (n) => `$${n.toFixed(n < 1 ? 3 : 2)}`;
-      const look = CHAIN_LOOK[q.source.id] || { name: q.source.label };
-      out.replaceChildren(el("div", { class: "receipt" },
-        el("div", { class: "rc-top" },
-          el("div", null, el("span", { text: "You send" }), el("b", { class: "num", text: dollars(q.pay) }), el("small", { text: `on ${look.name}` })),
-          el("div", { class: "rc-mid", "aria-hidden": "true" }),
-          el("div", { class: "rc-get" }, el("span", { text: "You get about" }), el("b", { class: "num", text: dollars(q.receive) }), el("small", { text: "in your Clue balance" }))),
-        el("dl", { class: "rc-list" },
-          el("dt", { text: "Worst case you get" }), el("dd", { class: "num", text: dollars(q.minimumReceive) }),
-          el("dt", { text: "Fee for moving it" }), el("dd", { class: "num", text: dollars(q.costUsd) }),
-          q.networkFeeUsd != null ? el("dt", { text: "Blockchain fee" }) : null, q.networkFeeUsd != null ? el("dd", { class: "num", text: `about ${dollars(q.networkFeeUsd)}, paid in ${q.networkFeeToken}` }) : null,
-          q.seconds != null ? el("dt", { text: "Takes" }) : null, q.seconds != null ? el("dd", { class: "num", text: `about ${q.seconds} seconds` }) : null),
-        el("p", { class: "fund-foot", text: "This is a price check only. Nothing has been sent and your money hasn’t moved. Sending is the next thing we’re adding." })));
-    } catch (e) { out.replaceChildren(el("p", { class: "status err", text: e.message })); }
-    finally { go.disabled = false; }
-  } });
-  const body = el("div", { class: "fund-body", hidden: true });
-  title.classList.add("fund-toggle"); title.setAttribute("role", "button"); title.tabIndex = 0; title.setAttribute("aria-expanded", "false");
-  const flip = () => { body.hidden = !body.hidden; title.setAttribute("aria-expanded", String(!body.hidden)); };
-  title.addEventListener("click", flip); title.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); flip(); } });
-  body.replaceChildren(...kids(intro,
-    el("div", { class: "fund-step" }, el("span", { class: "fund-n", text: "1" }), el("b", { text: "Where is your money now?" })), el("div", { class: "chains", role: "group", "aria-label": "Where your money is" }, chips),
-    el("div", { class: "fund-step" }, el("span", { class: "fund-n", text: "2" }), el("b", { text: "How much?" })),
-    el("div", { class: "amt" }, el("span", { text: "$" }), amount), el("div", { class: "quicks" }, quick),
-    el("div", { class: "fund-step" }, el("span", { class: "fund-n", text: "3" }), el("b", { text: "Your wallet address" })),
-    walletBox, address, el("p", { class: "fund-hint", text: "It starts with 0x. This is where the money would arrive." }), emailNote,
-    go, out));
-  box.replaceChildren(title, body);
-}
 
 /* ---------- journal: the memory loop ---------- */
 const signed = (n, unit = "") => `${n > 0 ? "+" : n < 0 ? "−" : ""}${Math.abs(n)}${unit}`;
