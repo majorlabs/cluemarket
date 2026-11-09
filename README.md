@@ -22,7 +22,7 @@
   <a href="https://near.org"><img src="https://img.shields.io/badge/built%20on-NEAR-000000.svg" alt="Built on NEAR"></a>
 </p>
 
-<p align="center"><img src="docs/images/home.png" alt="The Clue Markets home page: an ask box and the most traded markets" width="880"></p>
+<p align="center"><img src="docs/images/home.png" alt="The Clue Markets home page: the glass header, the ask box and the most traded markets" width="880"></p>
 
 ## What is Clue?
 
@@ -81,7 +81,9 @@ Open **https://www.oncluemarket.xyz**. Nothing needs signing in until step 5.
 9. **Trade.** With cash in your account, tap **Review my order**, check the box, and place it. *You should see* live steps and then the result.
 10. **Open your Portfolio.** *You should see* your cash, your positions and your history, with **Claim**, **Cancel** and **Withdraw** where they apply.
 
-<p align="center"><img src="docs/images/phone.png" alt="The home page on a phone" width="260"></p>
+<p align="center"><img src="docs/images/phone.png" alt="The home page on a phone, with the tab bar at the bottom" width="260"></p>
+
+On a phone, Markets, Ask Clue, Portfolio and Journal sit in a tab bar at the bottom of the screen, so every page is one tap away. Clue comes in a dark and a light look, and the sun or moon button in the header switches between them.
 
 ## Quick start
 
