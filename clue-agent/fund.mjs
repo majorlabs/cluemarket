@@ -12,6 +12,7 @@ export const MIN_USD = 1, MAX_USD = 10000;
 
 // Whole-number amount in the token's smallest unit, from text like "25" or "25.5". Rejects anything else.
 export function toUnits(text, decimals) {
+  // eslint-disable-next-line security/detect-unsafe-regex -- both repeats are bounded to a few digits
   if (typeof text !== 'string' || !/^\d{1,9}(\.\d{1,6})?$/.test(text)) return null;
   const [whole, frac = ''] = text.split('.');
   const units = BigInt(whole) * 10n ** BigInt(decimals) + BigInt(frac.padEnd(decimals, '0').slice(0, decimals) || '0');

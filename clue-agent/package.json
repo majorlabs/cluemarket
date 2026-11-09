@@ -8,7 +8,9 @@
     "build:trading": "esbuild trading-client.js --bundle --minify --format=iife --target=es2020 --define:process.env.NODE_ENV=\\\"production\\\" --define:global=window --outfile=public/trading.js",
     "build:privy": "esbuild privy-client.jsx --bundle --minify --format=iife --target=es2020 --define:process.env.NODE_ENV=\\\"production\\\" --define:global=window --loader:.js=jsx --outfile=public/privy.js",
     "test": "node --test tests/*.mjs",
-    "build:card": "esbuild card-client.js --bundle --minify --format=iife --target=es2020 --outfile=public/card.js"
+    "build:card": "esbuild card-client.js --bundle --minify --format=iife --target=es2020 --outfile=public/card.js",
+    "lint": "eslint .",
+    "audit:prod": "npm audit --omit=dev --audit-level=high"
   },
   "dependencies": {
     "@hot-labs/near-connect": "^0.12.0",
@@ -19,9 +21,13 @@
     "pg": "^8.23.1"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@polymarket/client": "^0.17.0",
     "@privy-io/react-auth": "^3.51.3",
     "@stripe/stripe-js": "^10.2.1",
+    "eslint": "^9.39.5",
+    "eslint-plugin-security": "^4.2.1",
+    "globals": "^17.14.0",
     "qrcode-generator": "^2.0.4",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
