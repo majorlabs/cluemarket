@@ -14,8 +14,29 @@ const ONECLICK = () => process.env.ONECLICK_BASE || 'https://1click.chaindefuser
 const BRIDGE = () => process.env.POLYMARKET_BRIDGE_BASE || 'https://bridge.polymarket.com';
 const NEAR_RPC = () => process.env.NEAR_RPC_URL || 'https://rpc.mainnet.near.org';
 
-export const MIN_USD = 3;                                                     // Polymarket's deposit service ignores smaller deposits
-export const maxUsd = () => Number(process.env.CLUE_FUND_MAX_USD) || 500;
+// Limits follow Polymarket's own deposit service. It ignores deposits under its per-coin floor (read live below), and it sets no cap of its
+// own: its guide only advises another bridge above $50,000 from a chain other than Polygon. Clue keeps a little above the floor so that the
+// swap fee and price movement cannot push a deposit under it.
+export const MIN_FLOOR_USD = 2.5;
+export const MAX_USD = 50000;
+export const maxUsd = () => Number(process.env.CLUE_FUND_MAX_USD) || MAX_USD;
+
+let floorCache = { at: 0, usd: null };
+async function polymarketFloor(fetchImpl) {
+  if (floorCache.usd !== null && Date.now() - floorCache.at < 10 * 60_000) return floorCache.usd;
+  let usd = 2;                                                                // what Polymarket lists today, if it cannot be read
+  try {
+    const r = await fetchImpl(`${BRIDGE()}/supported-assets`, { signal: AbortSignal.timeout(8000), headers: { accept: 'application/json' } });
+    const d = await json(r);
+    const mins = (d.supportedAssets || []).filter((a) => a.chainName === 'Polygon' && a.token && a.token.symbol === 'USDC').map((a) => Number(a.minCheckoutUsd)).filter((n) => n > 0);
+    if (mins.length) usd = Math.max(...mins);
+  } catch { /* keep the listed value */ }
+  floorCache = { at: Date.now(), usd };
+  return usd;
+}
+export const forgetFloor = () => { floorCache = { at: 0, usd: null }; };
+/** The smallest and largest amount, in dollars. */
+export async function limits({ fetchImpl = fetch } = {}) { return { minUsd: Math.max(MIN_FLOOR_USD, await polymarketFloor(fetchImpl)), maxUsd: maxUsd() }; }
 
 // The coins offered, by chain and symbol. Each shows as "SYMBOL on Chain".
 const CHAINS = { near: 'NEAR', base: 'Base', eth: 'Ethereum', arb: 'Arbitrum', sol: 'Solana', op: 'Optimism', bsc: 'BNB Chain' };
@@ -105,8 +126,9 @@ export async function quote({ assetId, amount, refundTo, wallet, dry = true }, d
   const units = toUnits(String(amount), asset.decimals);
   if (units === null || units === 0n) throw fail('Enter an amount like 2 or 2.5.');
   const usd = (Number(units) / 10 ** asset.decimals) * asset.price;
-  if (usd < MIN_USD) throw fail(`The smallest amount is about $${MIN_USD}. Smaller deposits are not processed.`);
-  if (usd > maxUsd()) throw fail(`For now, funding is limited to about $${maxUsd()} at a time.`);
+  const lim = await limits({ fetchImpl });
+  if (usd < lim.minUsd) throw fail(`The smallest amount is about $${lim.minUsd.toFixed(2)}. Smaller deposits are not processed.`);
+  if (usd > lim.maxUsd) throw fail(`The most you can add at once is about $${lim.maxUsd.toLocaleString('en-US')}. For more, split it into smaller amounts.`);
   const refund = await checkRefund(asset.refundKind, refundTo, { fetchImpl });
   const recipient = await polymarketDeposit(wallet, { fetchImpl });
   const body = {

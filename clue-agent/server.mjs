@@ -6,7 +6,7 @@ import { auth, store } from './auth.mjs';
 import {initWalletAuth,walletSession,walletRoute} from './wallet-auth.mjs';
 import {privyRoute,privyWalletRoute} from './privy-auth.mjs';
 import {ordersLiveFor} from './orders-switch.mjs';
-import {offered as intentsOffered,quote as intentsQuote,status as intentsStatus} from './intents.mjs';
+import {offered as intentsOffered,quote as intentsQuote,status as intentsStatus,limits as intentsLimits} from './intents.mjs';
 import {allowedOrigins,checkOrigin} from './origins.mjs';
 import {cleanAnswer} from './answer-links.mjs';
 import {HourlyBudget} from './budget.mjs';
@@ -100,7 +100,7 @@ const app=http.createServer(async(req,res)=>{ try {
  }
  if(req.method==='GET' && url.pathname==='/api/fund/intents/assets') {
   const o=await intentsOffered();
-  return json(res,200,{assets:o.assets.map(({assetId,chain,chainName,symbol,decimals,price,refundKind})=>({assetId,chain,chainName,symbol,decimals,price,refundKind}))});
+  return json(res,200,{limits:await intentsLimits(),assets:o.assets.map(({assetId,chain,chainName,symbol,decimals,price,refundKind})=>({assetId,chain,chainName,symbol,decimals,price,refundKind}))});
  }
  if(req.method==='POST' && url.pathname==='/api/fund/intents/quote') {
   const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in to add money.'});

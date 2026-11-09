@@ -8,7 +8,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
-import { offered, quote, status, toUnits, checkRefund, forgetTokens, MIN_USD } from '../intents.mjs';
+import { offered, quote, status, toUnits, checkRefund, forgetTokens, forgetFloor, limits, MIN_FLOOR_USD, MAX_USD } from '../intents.mjs';
 
 const WALLET = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045';
 const BRIDGE_EVM = '0xcCBa13a8d2803b2Ed5c9576796A03b4b6bCb917d';
@@ -23,7 +23,7 @@ const NEAR_ACCOUNT = 'alice.near';
 // One fake service that plays NEAR Intents, Polymarket's deposit service and a NEAR node.
 function fakeServices() {
   const seen = { quotes: [], auth: [], bridge: [], status: [] };
-  const state = { bridgeOk: true, quoteStatus: 201, statusBody: { status: 'PENDING_DEPOSIT' } };
+  const state = { bridgeOk: true, floor: 2, quoteStatus: 201, statusBody: { status: 'PENDING_DEPOSIT' } };
   const server = http.createServer(async (req, res) => {
     let body = ''; for await (const c of req) body += c;
     const send = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
@@ -35,6 +35,7 @@ function fakeServices() {
       return send(201, { quote: { amountOutFormatted: '6.96', amountOutUsd: '6.96', minAmountOutFormatted: '6.89', timeEstimate: 24, ...(q.dry ? {} : { depositAddress: 'a'.repeat(64), deadline: '2026-11-09T09:00:00.000Z' }) } });
     }
     if (url.pathname === '/v0/status') { seen.status.push(url.searchParams.get('depositAddress')); return send(200, state.statusBody); }
+    if (url.pathname === '/supported-assets') return send(200, { supportedAssets: [{ chainName: 'Polygon', token: { symbol: 'USDC' }, minCheckoutUsd: state.floor }, { chainName: 'Polygon', token: { symbol: 'USDC.e' }, minCheckoutUsd: 99 }, { chainName: 'Ethereum', token: { symbol: 'USDC' }, minCheckoutUsd: 7 }] });
     if (url.pathname === '/deposit') { seen.bridge.push(JSON.parse(body).address); return state.bridgeOk ? send(201, { address: { evm: BRIDGE_EVM, svm: 'x', btc: 'y', tron: 'z' } }) : send(500, {}); }
     if (url.pathname === '/rpc') { const p = JSON.parse(body).params; return send(200, p.account_id === NEAR_ACCOUNT ? { result: { amount: '1' } } : { error: { name: 'UNKNOWN_ACCOUNT' } }); }
     send(404, {});
@@ -103,8 +104,9 @@ test('each unsafe or silly request is refused before any money can move', async 
   const before = seen.quotes.length;
   await assert.rejects(quote({ ...ok, assetId: 'nep141:eth-weird.omft.near' }, deps), /listed coins/);
   await assert.rejects(quote({ ...ok, assetId: 'made-up' }, deps), /listed coins/);
-  await assert.rejects(quote({ ...ok, amount: '0.1' }, deps), new RegExp(`\\$${MIN_USD}`));          // under the floor
-  await assert.rejects(quote({ ...ok, amount: '5000' }, deps), /limited to about \$500/);            // over the ceiling
+  await assert.rejects(quote({ ...ok, amount: '0.1' }, deps), /smallest amount is about \$2\.50/);   // under the floor
+  await assert.rejects(quote({ ...ok, amount: '0.7' }, deps), /smallest amount is about \$2\.50/);   // $2.45: under the floor
+  await assert.rejects(quote({ ...ok, amount: '15000' }, deps), /most you can add at once is about \$50,000/);   // $52,500: over the ceiling
   await assert.rejects(quote({ ...ok, amount: '1e3' }, deps), /Enter an amount/);
   await assert.rejects(quote({ ...ok, refundTo: 'nobody-home.near' }, deps), /not found/);
   await assert.rejects(quote({ ...ok, wallet: '0xabc' }, deps), /Set up trading first/);
@@ -175,4 +177,19 @@ test('server: a person can ask for at most 10 real deposit addresses an hour', a
   let last;
   for (let i = 0; i < 11; i++) last = await call('POST', '/api/fund/intents/quote', cookie, real);
   assert.equal(last.status, 429);
+});
+
+test('the limits: $2.50 at least, or a little above Polymarket\'s own floor if that is higher; $50,000 at most', async () => {
+  forgetFloor(); state.floor = 2;
+  assert.deepEqual(await limits(), { minUsd: 2.5, maxUsd: 50000 });
+  assert.equal(MIN_FLOOR_USD, 2.5); assert.equal(MAX_USD, 50000);
+  forgetFloor(); state.floor = 4;                                              // Polymarket raises its floor: Clue follows
+  assert.equal((await limits()).minUsd, 4);
+  const ok = { assetId: 'nep141:wrap.near', amount: '1', refundTo: 'alice.near', wallet: WALLET, dry: true };      // 1 wNEAR = $3.50
+  await assert.doesNotReject(quote({ ...ok, amount: '1.2' }, deps));                                                   // $4.20
+  await assert.rejects(quote(ok, deps), /smallest amount is about \$4\.00/);                                       // $3.50 is now under
+  forgetFloor(); state.floor = 2;
+  await assert.doesNotReject(quote({ ...ok, amount: '0.72' }, deps));                                                  // $2.52: just over $2.50
+  const big = await quote({ ...ok, amount: '14000' }, deps);                                                           // $49,000: allowed
+  assert.equal(big.send.amount, '14000');
 });
