@@ -512,6 +512,8 @@ html[data-theme="light"] .fund{background:radial-gradient(120% 90% at 100% 0%,rg
 /* claiming */
 .claim-panel{display:flex;flex-direction:column;gap:10px}
 .claim-panel:empty{display:none}
+.pf-actions{display:flex;gap:10px;margin:0 0 12px}
+.pf-actions .btn{flex:1}
 .pf-claimall{display:flex;flex-direction:column;gap:10px;margin:0 0 12px}
 .pf-claimall:empty{display:none}
 .pf-claimall .btn{width:100%}
@@ -541,3 +543,16 @@ button.as-cash{background:none;border:0;padding:0;color:inherit;font:inherit;tex
 .cancel-panel{display:flex;flex-direction:column;gap:10px}
 .cancel-panel:empty{display:none}
 .seg{flex-wrap:wrap}
+
+/* withdraw */
+.withdraw-panel{display:flex;flex-direction:column;gap:12px;margin:0 0 12px}
+.withdraw-panel[hidden]{display:none}
+.wd-chains button{display:inline-flex;align-items:center;gap:6px}
+.wd-chains img{border-radius:50%}
+.wd-amt{display:flex;gap:8px}.wd-amt input{flex:1;min-width:0}
+.wd-result{display:flex;flex-direction:column;gap:10px}.wd-result:empty{display:none}
+.review{display:flex;flex-direction:column;gap:10px;border:1px solid var(--line-strong);border-radius:12px;padding:12px 14px;background:var(--surface)}
+.wd-to{display:flex;flex-direction:column;gap:4px}
+.wd-to code{overflow-wrap:anywhere;word-break:break-all;font-size:13px}
+.wd-sure{display:flex;gap:8px;align-items:flex-start;font-size:14px}
+.review .btn{flex:1 1 0}

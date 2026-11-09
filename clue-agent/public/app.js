@@ -156,17 +156,19 @@ function rememberSetup(id, t) {
 let accountLookup = { id: null, state: null };
 // A person's cash is the pUSD their trading account holds on Polygon. Anyone can read it from a public server: no sign-in step, so it shows at once.
 const CHAIN_READERS = ["https://polygon-bor-rpc.publicnode.com", "https://polygon.drpc.org"];
-async function readCash(wallet) {
+async function readCashRaw(wallet) {
   const call = window.ClueTicket.cashCall(wallet); if (!call) return null;
   for (const url of CHAIN_READERS) {
     try {
       const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [call, "latest"] }) });
-      const cash = window.ClueTicket.cashParse((await r.json()).result);
-      if (cash !== null) return cash;
+      const raw = (await r.json()).result;
+      if (window.ClueTicket.cashParse(raw) !== null) return raw;
     } catch { /* try the next server */ }
   }
   return null;
-}   // asking the server whether this person already set up trading
+}
+const readCash = async (wallet) => window.ClueTicket.cashParse(await readCashRaw(wallet));
+const readCashUnits = async (wallet) => window.ClueTicket.cashUnits(await readCashRaw(wallet));   // asking the server whether this person already set up trading
 let tradingScript = null;
 function loadTradingScript() {
   // Just the trading code, with no sign-in window. Enough for reading deposit addresses.
@@ -433,6 +435,92 @@ async function portfolioView(stale) {
   }
   const allPanel = el("div", { class: "cancel-panel" });
 
+  // ---- Withdraw: cash out as USDC on a chain the person uses ----
+  // Only these USDC contracts can be chosen (the well-known ones); the smallest amount for each is read live from Polymarket.
+  const WD_CHAINS = [
+    { id: "8453", name: "Base", logo: "base", token: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
+    { id: "1", name: "Ethereum", logo: "eth", token: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" },
+    { id: "42161", name: "Arbitrum", logo: "arb", token: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" },
+    { id: "10", name: "Optimism", logo: "op", token: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85" },
+    { id: "137", name: "Polygon", logo: "pol", token: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359" },
+  ];
+  let wdNode = null;
+  function withdrawPanel() {
+    if (wdNode) return wdNode;
+    const out = el("div", { class: "card pad withdraw-panel" });
+    let chain = WD_CHAINS[0], mins = {}, cashUnitsNow = null, timer = null;
+    const msg = el("p", { class: "status", role: "status", "aria-live": "polite" });
+    const say = (t, cls = "") => { msg.className = `status ${cls}`; msg.textContent = t; };
+    const amount = el("input", { type: "text", inputmode: "decimal", placeholder: "5.00", autocomplete: "off", "aria-label": "How much to withdraw, in dollars" });
+    const recipient = el("input", { type: "text", placeholder: "0x…", autocomplete: "off", spellcheck: "false", "aria-label": "The address to send it to" });
+    const hint = el("small", { class: "muted" });
+    const result = el("div", { class: "wd-result" });
+    const chainBtns = el("div", { class: "seg wd-chains", role: "group", "aria-label": "Which chain to receive it on" }, WD_CHAINS.map((c) => el("button", { type: "button", "aria-pressed": String(c === chain), onclick: (ev) => { chain = c; chainBtns.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", "false")); ev.currentTarget.setAttribute("aria-pressed", "true"); result.replaceChildren(); drawHint(); } },
+      el("img", { src: `/assets/coins/chain-${c.logo}.svg`, alt: "", width: "18", height: "18" }), ` ${c.name}`)));
+    const minOf = () => mins[chain.id] || 2;
+    function drawHint() { hint.textContent = `You receive USDC on ${chain.name}. Polymarket charges no fee. The smallest withdrawal is about $${minOf().toFixed(2)}.`; }
+    const ownNow = () => (tradingSetup && tradingSetup.signer) || "";
+    const useMine = el("button", { class: "btn small", type: "button", text: "Use my Clue wallet", onclick: () => { if (!ownNow()) { say("Set up trading first, so your Clue wallet is ready.", "err"); return; } recipient.value = ownNow(); result.replaceChildren(); } });
+    const maxBtn = el("button", { class: "btn small", type: "button", text: "Max", onclick: async () => {
+      say("Reading your cash…"); const u = await readCashUnits(wallet); say("");
+      if (u === null) { say("Could not read your cash right now. Try again.", "err"); return; }
+      cashUnitsNow = u; const n = BigInt(u); amount.value = `${n / 1000000n}.${String(n % 1000000n).padStart(6, "0")}`.replace(/0+$/, "").replace(/\.$/, "") || "0";
+    } });
+    // the supported minimums, read live
+    fetch("https://bridge.polymarket.com/supported-assets").then((r) => r.json()).then((d) => { for (const c of WD_CHAINS) { const m = (d.supportedAssets || []).find((x) => String(x.chainId) === c.id && String(x.token && x.token.address).toLowerCase() === c.token.toLowerCase()); if (m && Number(m.minCheckoutUsd) > 0) mins[c.id] = Number(m.minCheckoutUsd); } drawHint(); }).catch(() => {});
+
+    async function review() {
+      result.replaceChildren(); say("Checking…");
+      const u = await readCashUnits(wallet); say(""); cashUnitsNow = u;
+      const chk = window.ClueTicket.withdrawCheck({ amount: amount.value, balanceUnits: u, minUsd: minOf(), recipient: recipient.value });
+      if (!chk.ok) { say(chk.reason, "err"); return; }
+      const mine = ownNow() && chk.recipient.toLowerCase() === ownNow().toLowerCase();
+      const sure = el("input", { type: "checkbox", id: "wd-sure" });
+      const go = el("button", { class: "btn primary", type: "button", disabled: !mine, text: `Withdraw ${pfUsd(chk.usd)}`, onclick: () => send(chk) });
+      sure.addEventListener("change", () => { go.disabled = !sure.checked; });
+      result.replaceChildren(el("div", { class: "review" },
+        el("b", { text: "Review your withdrawal" }),
+        el("div", { class: "tk-row" }, el("span", { class: "muted", text: "You send" }), el("b", { class: "num", text: pfUsd(chk.usd) })),
+        el("div", { class: "tk-row" }, el("span", { class: "muted", text: "You receive" }), el("b", { class: "num", text: `about ${pfUsd(chk.usd)} in USDC on ${chain.name}` })),
+        el("div", { class: "wd-to" }, el("span", { class: "muted", text: "To this address" }), el("code", { text: chk.recipient })),
+        el("p", { class: "tk-warn warn", text: `This cannot be undone. It must be an address you control on ${chain.name}. If it is wrong, or it is on a different chain, the money is lost.` }),
+        mine ? el("p", { class: "muted small", text: "This is your own Clue wallet." }) : el("label", { class: "wd-sure" }, sure, " I checked the address and the chain."),
+        el("div", { class: "share-row" }, go, el("button", { class: "btn", type: "button", text: "Cancel", onclick: () => result.replaceChildren() }))));
+    }
+
+    async function send(chk) {
+      const pr = progress([{ id: "load", label: "Getting ready" }, { id: "account", label: "Opening your trading account" }, { id: "prepare", label: "Preparing the withdrawal" }, { id: "sign", label: "Signing with your wallet" }, { id: "confirm", label: "Sending your cash" }, { id: "deliver", label: `Delivering USDC on ${chain.name}` }]);
+      result.replaceChildren(pr.node); pr.advance("load");
+      try { await loadTrading(); } catch (e) { pr.fail("load"); result.append(el("p", { class: "status err", text: e.message })); return; }
+      const cfg = await ordersConfigFor();
+      const r = await window.clueTrading.withdraw({ units: chk.units, chainId: chain.id, tokenAddress: chain.token, recipient: chk.recipient, builderCode: cfg.builderCode, onStep: (s) => pr.advance(s) });
+      if (!r.ok) { pr.fail(); result.append(el("div", { class: "ending bad" }, el("span", { class: "ending-i", "aria-hidden": "true", text: "✕" }), el("b", { text: "Not withdrawn" })), el("p", { text: r.error }), r.detail ? el("small", { class: "err-detail", text: `(${r.detail})` }) : null); return; }
+      pr.advance("deliver"); setTimeout(() => load(true), 4000);
+      const finish = (kind, title, note) => { pr.finish(); result.append(el("div", { class: `ending ${kind}` }, el("span", { class: "ending-i", "aria-hidden": "true", text: kind === "ok" ? "✓" : "…" }), el("b", { text: title })), note ? el("p", { class: "muted small", text: note }) : null); };
+      let tries = 0;
+      clearInterval(timer);
+      timer = setInterval(async () => {
+        tries++;
+        try {
+          const st = window.ClueTicket.bridgeState(await (await fetch(`https://bridge.polymarket.com/status/${r.bridgeAddress}`)).json());
+          if (st.state === "done") { clearInterval(timer); finish("ok", `Done. ${pfUsd(chk.usd)} in USDC is on ${chain.name}.`); setTimeout(() => load(true), 1500); }
+          else if (st.state === "failed") { clearInterval(timer); pr.fail("deliver"); result.append(el("div", { class: "ending bad" }, el("span", { class: "ending-i", "aria-hidden": "true", text: "✕" }), el("b", { text: "The bridge could not deliver it" })), el("p", { text: "Your cash left your account. Polymarket's bridge holds it; contact Polymarket support with this address." }), el("code", { text: r.bridgeAddress }));
+          }
+        } catch { /* ask again */ }
+        if (tries >= 40) { clearInterval(timer); finish("wait", "Still on its way", `It can take a few minutes. Your cash has left your account and will arrive on ${chain.name}. Bridge address, for support if needed: ${r.bridgeAddress}`); }
+      }, 6000);
+    }
+
+    drawHint();
+    out.append(el("div", { class: "fund-title" }, el("h2", { text: "Withdraw" }), el("button", { class: "btn small", type: "button", text: "Close", onclick: () => { out.hidden = true; } })),
+      el("p", { class: "small", text: "Take cash out of your trading account as USDC, on a chain you use. Polymarket's bridge does the swap and charges no fee." }),
+      el("div", { class: "field" }, el("span", { text: "Which chain?" }), chainBtns),
+      el("label", { class: "field" }, el("span", { text: "How much? ($)" }), el("div", { class: "wd-amt" }, amount, maxBtn), hint),
+      el("label", { class: "field" }, el("span", { text: "Send it to" }), recipient, useMine),
+      el("button", { class: "btn primary", type: "button", text: "Review withdrawal", onclick: review }), msg, result);
+    wdNode = out; return out;
+  }
+
   function historyRow(a) {
     const when = new Date(Number(a.timestamp) * 1000);
     const what = a.type === "TRADE" ? `${a.side === "SELL" ? "Sold" : "Bought"} ${Number(a.size).toFixed(2)} ${a.outcome || ""} at ${pfCents(Number(a.price))}` : a.type === "REDEEM" ? "Claimed winnings" : String(a.type || "").toLowerCase();
@@ -455,7 +543,7 @@ async function portfolioView(stale) {
   }
 
   // Something is in progress on the page (a claim running or its result, or a share panel the person opened): leave the page alone.
-  const busy = () => [...root.querySelectorAll(".claim-panel, .share-panel, .cancel-panel")].some((n) => n.childElementCount > 0) || ordersLoading;
+  const busy = () => [...root.querySelectorAll(".claim-panel, .share-panel, .cancel-panel, .wd-result")].some((n) => n.childElementCount > 0) || ordersLoading;
   let lastSig = "";
   async function load(force) {
     failed = "";
@@ -471,7 +559,9 @@ async function portfolioView(stale) {
   }
   const seg = el("div", { class: "seg", role: "group", "aria-label": "Portfolio sections" }, [["positions", "Positions"], ["orders", "Open orders"], ["history", "History"]].map(([id, text], i) =>
     el("button", { type: "button", text, "aria-pressed": String(i === 0), onclick: (ev) => { tab = id; seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", "false")); ev.currentTarget.setAttribute("aria-pressed", "true"); if (id === "orders" && orders === null && !ordersLoading) loadOrders(); else drawBody(); } })));
-  root.append(el("h1", { class: "pf-h1", text: "Portfolio" }), summary, claimAll, seg, body);
+  const withdrawBtn = el("button", { class: "btn", type: "button", text: "Withdraw", onclick: () => { const p = withdrawPanel(); p.hidden = !p.hidden; if (!p.hidden) p.scrollIntoView({ block: "nearest", behavior: "smooth" }); } });
+  root.append(el("h1", { class: "pf-h1", text: "Portfolio" }), summary, el("div", { class: "pf-actions" }, withdrawBtn), withdrawPanel(), claimAll, seg, body);
+  withdrawPanel().hidden = true;
   app.replaceChildren(root);
   drawSummary(); drawBody(); load();
   // Stays fresh while it is open, and when the person comes back to the tab. Never in the middle of something (see busy above).
@@ -755,6 +845,7 @@ async function openShare(data, into) {
 }
 
 /* ---------- trade ticket: preview, and an order check that sends nothing unless real orders are switched on ---------- */
+const ordersConfigFor = () => api("/api/pm/config").catch(() => ({ ordersLive: false, builderCode: null }));
 let geoPromise = null, ordersConfigCache = null, lastSpend = "50";   // lastSpend: what was typed, kept when the side is switched
 const geoOnce = () => (geoPromise ||= window.ClueTicket.checkGeoblock());
 async function mountTicket(box, ctx) {

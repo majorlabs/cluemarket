@@ -135,6 +135,40 @@
     return { size, matched, remaining, price, held: String(o && o.side).toUpperCase() === "BUY" ? remaining * price : 0, filledPct: size > 0 ? matched / size : 0 };
   }
 
+  /** Whole pUSD units (6 decimals, as text) from the chain's answer, or null. Exact, so a "Max" withdrawal takes every last cent. */
+  function cashUnits(result) {
+    return typeof result === "string" && /^0x[0-9a-fA-F]{1,64}$/.test(result) ? BigInt(result).toString() : null;
+  }
+  /**
+   * Is this withdrawal safe to ask for? Amount a plain decimal of at most 6 places, at least the destination's floor, no more than the cash held;
+   * an address in the 0x form that is not the empty one. Returns the exact units to send. The address checksum is checked by the wallet code.
+   */
+  function withdrawCheck(o) {
+    const no = (reason) => ({ ok: false, reason });
+    const text = String((o && o.amount) || "").trim();
+    if (!/^\d{1,9}(\.\d{1,6})?$/.test(text)) return no("Enter an amount like 5 or 5.25.");
+    const [whole, frac = ""] = text.split(".");
+    const units = BigInt(whole) * 1000000n + BigInt(frac.padEnd(6, "0"));
+    if (units === 0n) return no("Enter an amount above zero.");
+    const usd = Number(units) / 1e6, min = Number(o.minUsd) || 0;
+    if (usd < min) return no(`The smallest withdrawal to this chain is about $${min.toFixed(2)}.`);
+    if (o.balanceUnits == null) return no("Your balance could not be read, so nothing was sent. Try again in a moment.");
+    if (units > BigInt(o.balanceUnits)) return no(`You have $${(Number(o.balanceUnits) / 1e6).toFixed(2)} in your account, which is less than $${usd.toFixed(2)}.`);
+    const to = String((o && o.recipient) || "").trim();
+    if (!/^0x[0-9a-fA-F]{40}$/.test(to)) return no("Enter the address to send to: 0x followed by 40 letters or numbers.");
+    if (/^0x0{40}$/.test(to)) return no("That is the empty address. Money sent there is gone for good.");
+    return { ok: true, units: units.toString(), usd, recipient: to };
+  }
+  /** Where a withdrawal is at the bridge, from its status answer: nothing seen yet, on its way, done (with the transaction), or failed. */
+  function bridgeState(d) {
+    const list = d && Array.isArray(d.transactions) ? d.transactions : [];
+    if (!list.length) return { state: "waiting" };
+    const s = String(list[0].status || "");
+    if (s === "COMPLETED") return { state: "done", hash: list[0].txHash || null };
+    if (s === "FAILED") return { state: "failed" };
+    return { state: "working" };
+  }
+
   /** The request that reads a trading account's cash: pUSD (Polymarket's dollar, 6 decimals) held at that address. null if the address is malformed. */
   function cashCall(wallet) {
     if (!/^0x[0-9a-fA-F]{40}$/.test(String(wallet || ""))) return null;
@@ -165,5 +199,5 @@
   const fmt = (n) => (Number.isFinite(n) ? (Math.round(n * 100) / 100).toString() : "0");
   const pct = (p) => (p * 100).toFixed(p < 0.1 ? 1 : 0) + "¢";
 
-  root.ClueTicket = { previewBuy, checkGeoblock, orderPlan, validDepositAddress, cashCall, cashParse, positionState, positionNumbers, portfolioTotals, claimId, orderNumbers };
+  root.ClueTicket = { previewBuy, checkGeoblock, orderPlan, validDepositAddress, cashCall, cashParse, positionState, positionNumbers, portfolioTotals, claimId, orderNumbers, cashUnits, withdrawCheck, bridgeState };
 })(typeof window !== "undefined" ? window : globalThis);

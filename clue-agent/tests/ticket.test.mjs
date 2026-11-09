@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const sandbox = {};
 new Function('window', readFileSync(new URL('../public/ticket.js', import.meta.url), 'utf8'))(sandbox);
-const { previewBuy, checkGeoblock, orderPlan, validDepositAddress, cashCall, cashParse, positionState, positionNumbers, portfolioTotals, claimId, orderNumbers } = sandbox.ClueTicket;
+const { previewBuy, checkGeoblock, orderPlan, validDepositAddress, cashCall, cashParse, positionState, positionNumbers, portfolioTotals, claimId, orderNumbers, cashUnits, withdrawCheck, bridgeState } = sandbox.ClueTicket;
 const near = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} should be within ${eps} of ${b}`);
 
 const asks = [{ price: 0.5, size: 100 }, { price: 0.52, size: 100 }, { price: 0.6, size: 1000 }];
@@ -197,4 +197,35 @@ test('an open order shows what is left to fill and the money held for it', () =>
   assert.equal(orderNumbers({ side: 'SELL', price: 0.4, size: 10, matched: 0 }).held, 0);                     // a sell holds shares, not money
   assert.equal(orderNumbers({ side: 'BUY', price: 0.4, size: 10, matched: 99 }).remaining, 0);                // never negative
   assert.deepEqual(orderNumbers(null), { size: 0, matched: 0, remaining: 0, price: 0, held: 0, filledPct: 0 });
+});
+
+// ---- withdrawing ----
+const ME = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045';
+const wd = (o) => withdrawCheck({ amount: '5', balanceUnits: '12340000', minUsd: 2, recipient: ME, ...o });
+
+test('cash is read as exact units, so a Max withdrawal takes every last cent', () => {
+  assert.equal(cashUnits('0x1f47d0'), '2050000');
+  assert.equal(cashUnits('0x0'), '0');
+  for (const bad of ['0x', '', 'nope', null, undefined, 5, '0xzz', '0x' + 'f'.repeat(65)]) assert.equal(cashUnits(bad), null, String(bad));
+});
+
+test('a good withdrawal gives the exact units; each bad one is refused with a plain reason', () => {
+  const ok = wd({});
+  assert.equal(ok.ok, true); assert.equal(ok.units, '5000000'); assert.equal(ok.recipient, ME);
+  assert.equal(wd({ amount: '12.34' }).units, '12340000');                                   // exactly everything held
+  assert.match(wd({ amount: '12.35' }).reason, /You have \$12\.34/);                         // one cent too many
+  assert.match(wd({ amount: '1' }).reason, /smallest withdrawal .* \$2\.00/);                // under the floor
+  assert.match(wd({ amount: '0' }).reason, /above zero/);
+  for (const amount of ['', '-5', '5.1234567', '1e3', '5,5', 'abc', ' ', '0x10']) assert.match(wd({ amount }).reason, /Enter an amount/, amount);
+  assert.match(wd({ balanceUnits: null }).reason, /could not be read/);
+  for (const recipient of ['', 'nope', '0x123', '<script>', ME + '0', ME.slice(0, 41)]) assert.match(wd({ recipient }).reason, /0x followed by 40/, recipient);
+  assert.match(wd({ recipient: '0x' + '0'.repeat(40) }).reason, /empty address/);
+});
+
+test('the bridge status becomes one plain state', () => {
+  assert.deepEqual(bridgeState({ transactions: [] }), { state: 'waiting' });
+  assert.deepEqual(bridgeState(null), { state: 'waiting' });
+  assert.deepEqual(bridgeState({ transactions: [{ status: 'COMPLETED', txHash: '0xabc' }] }), { state: 'done', hash: '0xabc' });
+  assert.deepEqual(bridgeState({ transactions: [{ status: 'FAILED' }] }), { state: 'failed' });
+  for (const s of ['DEPOSIT_DETECTED', 'PROCESSING', 'ORIGIN_TX_CONFIRMED', 'SUBMITTED']) assert.deepEqual(bridgeState({ transactions: [{ status: s }] }), { state: 'working' }, s);
 });

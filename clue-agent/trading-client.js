@@ -6,7 +6,7 @@
 import { createSecureClient, remoteBuilderSigning, forkEnvironmentConfig, production, OrderSide, OrderType } from '@polymarket/client';
 import { fetchBalanceAllowance } from '@polymarket/client/actions';
 import { signerFrom } from '@polymarket/client/viem';
-import { createWalletClient, custom } from 'viem';
+import { createWalletClient, custom, isAddress } from 'viem';
 import { polygon } from 'viem/chains';
 
 const builderSigning = remoteBuilderSigning({ url: '/api/pm/sign', credentials: 'include' });
@@ -167,6 +167,40 @@ window.clueTrading.cancelOrders = async function cancelOrders({ orderIds, all, o
     const text = String((e && e.message) || e || '');
     if (/reject|denied|cancel/i.test(text) && /wallet|user|signature/i.test(text)) return { ok: false, error: 'You cancelled the request in your wallet. Nothing was changed.' };
     return { ok: false, error: 'The order could not be cancelled. It may have just been filled. Check your positions before trying again.', detail: describe('cancel', e) };
+  }
+};
+
+// Take cash out of the trading account as USDC on another chain, through Polymarket's own bridge (it charges no fee).
+// The bridge gives a one-time address set up for exactly this destination. The pUSD is sent there from the trading account (gasless), and the
+// bridge turns it into USDC and delivers it. Every check happens before anything is sent. onStep: 'account', 'prepare', 'sign', 'confirm'.
+const BRIDGE = 'https://bridge.polymarket.com';
+window.clueTrading.withdraw = async function withdraw({ units, chainId, tokenAddress, recipient, builderCode, onStep = () => {} }) {
+  try {
+    if (!/^[1-9]\d{0,17}$/.test(String(units))) return { ok: false, error: 'That amount cannot be sent.' };
+    if (!/^\d{1,10}$/.test(String(chainId)) || !isAddress(String(tokenAddress), { strict: false })) return { ok: false, error: 'That destination cannot be used.' };
+    // a mixed-case address must have a correct checksum: a typo is caught here instead of losing the money
+    if (!isAddress(String(recipient), { strict: true })) return { ok: false, error: 'That address does not pass its safety check. A letter may be wrong. Nothing was sent.' };
+    if (/^0x0{40}$/.test(recipient)) return { ok: false, error: 'That is the empty address. Nothing was sent.' };
+    onStep('account');
+    const client = await openClient();
+    const held = BigInt((await fetchBalanceAllowance(client, { assetType: 'COLLATERAL' })).balance || '0');
+    if (BigInt(units) > held) return { ok: false, error: 'You have less cash than that in your account now. Nothing was sent.' };
+    onStep('prepare');
+    const r = await fetch(`${BRIDGE}/withdraw`, { method: 'POST', headers: { 'content-type': 'application/json', ...(builderCode ? { 'X-Builder-Code': builderCode } : {}) },
+      body: JSON.stringify({ address: client.account.wallet, toChainId: String(chainId), toTokenAddress: tokenAddress, recipientAddr: recipient }) });
+    const d = await r.json().catch(() => ({}));
+    const bridgeAddress = d && d.address && d.address.evm;
+    if (!r.ok || !isAddress(String(bridgeAddress || ''), { strict: false })) return { ok: false, error: 'Polymarket could not set up this withdrawal right now. Nothing was sent. Try again in a minute.' };
+    onStep('sign');
+    const handle = await client.transferErc20({ amount: BigInt(units), recipientAddress: bridgeAddress, tokenAddress: client.environment.contracts.collateralToken });
+    onStep('confirm');
+    const outcome = await handle.wait();
+    return { ok: true, bridgeAddress, hash: (outcome && outcome.transactionHash) || handle.transactionHash || null };
+  } catch (e) {
+    console.error('withdraw failed', e);
+    const text = String((e && e.message) || e || '');
+    if (/reject|denied|cancel/i.test(text) && /wallet|user|signature/i.test(text)) return { ok: false, error: 'You cancelled the request in your wallet. Nothing was sent.' };
+    return { ok: false, error: 'The withdrawal did not finish. Check your balance before trying again: if it went down, the money is on its way.', detail: describe('withdraw', e) };
   }
 };
 
