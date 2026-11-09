@@ -508,3 +508,10 @@ html[data-theme="light"] .fund{background:radial-gradient(120% 90% at 100% 0%,rg
 .pf-hist{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 16px}
 .pf-hist a{color:var(--ink);font-weight:600;text-decoration:none;overflow-wrap:anywhere}
 @media(min-width:720px){.pf-summary{grid-template-columns:repeat(4,minmax(0,1fr))}.pf-stat.big{grid-column:auto}}
+
+/* claiming */
+.claim-panel{display:flex;flex-direction:column;gap:10px}
+.claim-panel:empty{display:none}
+.pf-claimall{display:flex;flex-direction:column;gap:10px;margin:0 0 12px}
+.pf-claimall:empty{display:none}
+.pf-claimall .btn{width:100%}
