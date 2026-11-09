@@ -222,8 +222,8 @@ dialog .actions{margin-top:8px}
 .foot p{max-width:640px;font-size:12.5px;color:var(--muted)}
 
 @media(max-width:1020px){
-  .layout{grid-template-columns:1fr}.panel{position:static}
-  .hero{grid-template-columns:1fr}
+  .layout{grid-template-columns:minmax(0,1fr)}.panel{position:static}
+  .hero{grid-template-columns:minmax(0,1fr)}
   .main-nav{display:none}
   .top-row{gap:12px;padding:10px 16px}.cats,main{padding-left:16px;padding-right:16px}
   .search{max-width:none}.search kbd{display:none}
@@ -425,3 +425,10 @@ html[data-theme="light"] .fund{background:radial-gradient(120% 90% at 100% 0%,rg
 .jump-trade{display:none}
 @media(max-width:1020px){.jump-trade{display:inline-flex}}
 .ticket{scroll-margin-top:130px}
+
+/* nothing on a market page may push the page wider than the screen */
+.layout>*{min-width:0}
+.opt .name,.opt small{overflow-wrap:anywhere}
+.rules a,.rules{overflow-wrap:anywhere;word-break:break-word}
+.order-note{margin:8px 0 0}
+.order-note:empty{display:none}
