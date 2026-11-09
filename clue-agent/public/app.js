@@ -476,6 +476,32 @@ async function eventView(slug, marketId, stale) {
 }
 
 
+/* ---------- sharing a call: a 16:9 picture of it, drawn on the person's own phone ---------- */
+let cardLoading = null;
+function loadCard() {
+  cardLoading ||= new Promise((resolve, reject) => {
+    const s = el("script", { src: "/card.js" });
+    s.onload = resolve; s.onerror = () => reject(new Error("Could not make the card. Check your connection and try again."));
+    document.head.append(s);
+  }).catch((e) => { cardLoading = null; throw e; });
+  return cardLoading;
+}
+// data: { kind, question, side, entry, shares, paid, now?, payout? }. Only numbers the person already saw go on it.
+async function shareCall(data, status) {
+  const say = (t, cls = "") => { status.className = `status ${cls}`; status.textContent = t; };
+  try {
+    say("Making your card…");
+    await loadCard();
+    const url = `${location.origin}${location.pathname}${location.hash}`;
+    const blob = await window.ClueCard.toBlob({ ...data, url });
+    const file = new File([blob], "my-call-on-clue.png", { type: "image/png" });
+    const text = `${data.kind === "won" ? "Called it" : "My call"}: ${data.side} on "${data.question}". Make your own call on Clue:`;
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text, url }); say(""); return; }
+    const a = el("a", { href: URL.createObjectURL(blob), download: "my-call-on-clue.png" }); document.body.append(a); a.click(); a.remove();
+    try { await navigator.clipboard.writeText(`${text} ${url}`); say("Saved the card. The post text is copied.", "ok"); } catch { say("Saved the card.", "ok"); }
+  } catch (e) { if (e && e.name === "AbortError") { say(""); return; } say(e.message || "Could not share the card.", "err"); }
+}
+
 /* ---------- trade ticket: preview, and an order check that sends nothing unless real orders are switched on ---------- */
 let geoPromise = null, ordersConfigCache = null;
 const geoOnce = () => (geoPromise ||= window.ClueTicket.checkGeoblock());
@@ -575,7 +601,11 @@ async function mountTicket(box, ctx) {
       else if (!res.sent) show("test", el("b", { text: "Test mode: your order is ready, and it was NOT sent." }),
         line("Would spend", usd(plan.spend)), line("Worst price accepted", cents(plan.maxPrice)), line("Fills", "completely or not at all"),
         el("p", { class: "muted small", text: "Trading is not switched on for real orders yet, so no money moved." }));
-      else if (res.filled) show("ok", el("b", { text: "Your order filled." }), line("Shares bought", res.shares.toFixed(2)), line("You paid", usd(res.paid)), line("Average price", cents(res.avgPrice)));
+      else if (res.filled) {
+        const shareStatus = el("p", { class: "status", role: "status", "aria-live": "polite" });
+        show("ok", el("b", { text: "Your order filled." }), line("Shares bought", res.shares.toFixed(2)), line("You paid", usd(res.paid)), line("Average price", cents(res.avgPrice)),
+          el("button", { class: "btn primary small", type: "button", style: "margin-top:10px", text: "Share this call", onclick: () => shareCall({ kind: "placed", question: m.question, side: ctx.outcome, entry: res.avgPrice, shares: res.shares, paid: res.paid }, shareStatus) }), shareStatus);
+      }
       else show("warn", el("p", { text: res.note }));
     } catch (e) { show("err", el("p", { text: e.message || "Could not check the order. Nothing was sent." })); }
     finally { syncOrder(); }
