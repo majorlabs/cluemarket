@@ -142,6 +142,34 @@ window.clueTrading.claim = async function claim({ conditionId, onStep = () => {}
   }
 };
 
+// The orders still waiting on the market for this trading account (needs the signed-in client, so it opens the account first).
+window.clueTrading.openOrders = async function openOrders() {
+  try {
+    const client = await openClient();
+    const page = await client.listOpenOrders().firstPage();
+    return { ok: true, orders: (page.items || []).map((o) => ({ id: String(o.id), conditionId: o.conditionId, assetId: o.assetId, side: String(o.side || ''), price: num(o.price), size: num(o.originalSize), matched: num(o.sizeMatched), outcome: o.outcome || '', status: String(o.status || ''), createdAt: o.createdAt || null })) };
+  } catch (e) {
+    console.error('open orders failed', e);
+    return { ok: false, error: 'Could not load your open orders right now. Try again in a minute.', detail: describe('orders', e) };
+  }
+};
+
+// Cancel some orders by id, or all of them. Says which were cancelled and which were not (an order that filled a moment ago cannot be).
+window.clueTrading.cancelOrders = async function cancelOrders({ orderIds, all, onStep = () => {} }) {
+  try {
+    onStep('account');
+    const client = await openClient();
+    onStep('cancel');
+    const res = all ? await client.cancelAll() : await client.cancelOrders({ orderIds });
+    return { ok: true, canceled: (res && res.canceled) || [], notCanceled: (res && res.notCanceled) || {} };
+  } catch (e) {
+    console.error('cancel failed', e);
+    const text = String((e && e.message) || e || '');
+    if (/reject|denied|cancel/i.test(text) && /wallet|user|signature/i.test(text)) return { ok: false, error: 'You cancelled the request in your wallet. Nothing was changed.' };
+    return { ok: false, error: 'The order could not be cancelled. It may have just been filled. Check your positions before trying again.', detail: describe('cancel', e) };
+  }
+};
+
 // Polymarket's own deposit service gives each trading account its own address per chain. Anything sent there in a supported token
 // is turned into trading money automatically. Called straight from the browser; nothing about the user passes through Clue's server.
 window.clueTrading.depositAddresses = async function depositAddresses(wallet, builderCode) {

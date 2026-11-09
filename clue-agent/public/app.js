@@ -323,6 +323,7 @@ async function portfolioView(stale) {
   const claimAll = el("div", { class: "pf-claimall" }), claimAllPanel = el("div", { class: "claim-panel" });
   const body = el("div", { class: "pf-body" });
   let tab = "positions", positions = null, history = null, cash = null, failed = "";
+  let orders = null, ordersError = null, titles = {}, ordersLoading = false;           // open orders are read only when the tab is opened
 
   const stat = (label, value, tone = "", note) => el("div", { class: `card pf-stat ${tone}` }, el("small", { class: "muted", text: label }), el("b", { class: "num", text: value }), note ? el("small", { class: "muted", text: note }) : null);
   function drawSummary() {
@@ -377,6 +378,61 @@ async function portfolioView(stale) {
       claimPanel, sharePanel);
   }
 
+  // ---- open orders: what is still waiting on the market, with a way to cancel it ----
+  async function loadOrders() {
+    if (ordersLoading) return;
+    ordersLoading = true; ordersError = null; orders = null; drawBody();
+    const pr = progress([{ id: "load", label: "Getting ready" }, { id: "account", label: "Opening your trading account" }, { id: "read", label: "Reading your open orders" }]);
+    body.replaceChildren(pr.node); pr.advance("load");
+    try {
+      await loadTrading(); pr.advance("account");
+      const r = await window.clueTrading.openOrders();
+      if (!r.ok) { ordersError = r; return; }
+      pr.advance("read"); orders = r.orders;
+      const ids = [...new Set(orders.map((o) => o.conditionId).filter(Boolean))];
+      if (ids.length) { try { titles = { ...titles, ...(await api(`/api/markets/by-condition?ids=${ids.join(",")}`)).markets }; } catch { /* the order still shows, without a name */ } }
+    } catch (e) { ordersError = { error: e.message }; }
+    finally { ordersLoading = false; if (stale() || !root.isConnected) return; drawBody(); }
+  }
+
+  async function cancelThese(list, into, all) {
+    const pr = progress([{ id: "load", label: "Getting ready" }, { id: "account", label: "Opening your trading account" }, { id: "cancel", label: list.length > 1 || all ? "Cancelling your orders" : "Cancelling your order" }]);
+    into.replaceChildren(pr.node); pr.advance("load");
+    try { await loadTrading(); } catch (e) { pr.fail("load"); into.append(el("p", { class: "status err", text: e.message })); return; }
+    const r = await window.clueTrading.cancelOrders({ orderIds: list.map((o) => o.id), all, onStep: (s) => pr.advance(s) });
+    const bad = (title, ...more) => { pr.fail(); into.append(el("div", { class: "ending bad" }, el("span", { class: "ending-i", "aria-hidden": "true", text: "✕" }), el("b", { text: title })), ...more); };
+    if (!r.ok) { bad("Not cancelled", el("p", { text: r.error }), r.detail ? el("small", { class: "err-detail", text: `(${r.detail})` }) : null); return; }
+    const done = new Set(r.canceled), missed = Object.entries(r.notCanceled || {});
+    const freed = list.filter((o) => done.has(o.id)).reduce((s, o) => s + T.orderNumbers(o).held, 0);
+    if (!done.size && missed.length) { bad("Not cancelled", el("p", { text: "It may have just been filled, or was already cancelled. Check your positions." })); return; }
+    pr.finish();
+    into.append(el("div", { class: "ending ok" }, el("span", { class: "ending-i", "aria-hidden": "true", text: "✓" }), el("b", { text: `${done.size} cancelled${freed > 0 ? `. ${pfUsd(freed)} is free again.` : "."}${missed.length ? ` ${missed.length} could not be (probably filled).` : ""}` })));
+    setTimeout(() => { orders = (orders || []).filter((o) => !done.has(o.id)); drawBody(); load(true); }, 1800);   // the cancelled order leaves the list after a moment
+  }
+
+  function orderRow(o) {
+    const n = T.orderNumbers(o), ti = titles[String(o.conditionId || "").toLowerCase()], cancelPanel = el("div", { class: "cancel-panel" });
+    const when = o.createdAt ? new Date(o.createdAt) : null;
+    return el("div", { class: "card pf-row" },
+      el("div", { class: "pf-top" },
+        el("div", { class: "pf-title" }, ti && ti.eventSlug ? el("a", { href: `#/event/${encodeURIComponent(ti.eventSlug)}`, text: ti.question || ti.group || "Open market" }) : el("span", { class: "muted", text: ti ? ti.question : "An order on a market" }),
+          el("div", { class: "pf-sub" }, el("span", { class: "pf-side", text: `${o.side === "SELL" ? "Sell" : "Buy"} ${o.outcome || ""}`.trim() }), el("span", { class: "muted", text: `${n.size.toFixed(2)} shares at ${pfCents(n.price)}${n.matched > 0 ? ` · ${n.matched.toFixed(2)} filled` : ""}` }))),
+        el("div", { class: "pf-val" }, el("b", { class: "num", text: n.held > 0 ? pfUsd(n.held) : `${n.remaining.toFixed(2)} sh` }), el("small", { class: "muted", text: n.held > 0 ? "held for it" : "left to sell" }))),
+      when && Number.isFinite(when.getTime()) ? el("p", { class: "muted small", style: "margin:0", text: `Placed ${when.toLocaleDateString([], { day: "numeric", month: "short" })} ${when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}. It waits until someone takes it, or you cancel.` }) : null,
+      el("div", { class: "pf-actions" }, el("button", { class: "btn small", type: "button", text: "Cancel order", onclick: (ev) => { ev.currentTarget.hidden = true; cancelThese([o], cancelPanel, false); } })),
+      cancelPanel);
+  }
+
+  function ordersBody() {
+    if (ordersLoading) return null;
+    if (ordersError) return [errBox("Couldn’t load your open orders", ordersError.error, loadOrders), ordersError.detail ? el("small", { class: "err-detail", text: `(${ordersError.detail})` }) : null];
+    if (!orders) return null;
+    if (!orders.length) return [el("div", { class: "card empty" }, el("h2", { text: "No open orders" }), el("p", { class: "muted", text: "Orders placed with Clue fill completely or not at all, so they never wait. An order shows here only if one is waiting on a market, for example one placed on Polymarket itself." }), el("button", { class: "btn small", type: "button", text: "Check again", onclick: loadOrders }))];
+    const top = orders.length > 1 ? [el("div", { class: "pf-claimall" }, el("button", { class: "btn", type: "button", text: `Cancel all ${orders.length} orders`, onclick: (ev) => { ev.currentTarget.hidden = true; cancelThese(orders, allPanel, true); } }), allPanel)] : [];
+    return [...top, ...orders.map(orderRow)];
+  }
+  const allPanel = el("div", { class: "cancel-panel" });
+
   function historyRow(a) {
     const when = new Date(Number(a.timestamp) * 1000);
     const what = a.type === "TRADE" ? `${a.side === "SELL" ? "Sold" : "Bought"} ${Number(a.size).toFixed(2)} ${a.outcome || ""} at ${pfCents(Number(a.price))}` : a.type === "REDEEM" ? "Claimed winnings" : String(a.type || "").toLowerCase();
@@ -385,7 +441,8 @@ async function portfolioView(stale) {
   }
 
   function drawBody() {
-    if (failed) { body.replaceChildren(errBox("Couldn’t load your portfolio", failed, load)); return; }
+    if (failed && tab !== "orders") { body.replaceChildren(errBox("Couldn’t load your portfolio", failed, load)); return; }
+    if (tab === "orders") { const nodes = ordersBody(); if (nodes) body.replaceChildren(...kids(nodes)); return; }
     if (tab === "positions") {
       if (!positions) { body.replaceChildren(el("p", { class: "loading", role: "status", text: "Loading your calls…" })); return; }
       if (!positions.length) { body.replaceChildren(el("div", { class: "card empty" }, el("h2", { text: "No calls yet" }), el("p", { class: "muted", text: "When you place an order, it shows up here with its profit or loss." }), el("a", { class: "btn primary", href: "#/", text: "Find a market" }))); return; }
@@ -398,7 +455,7 @@ async function portfolioView(stale) {
   }
 
   // Something is in progress on the page (a claim running or its result, or a share panel the person opened): leave the page alone.
-  const busy = () => [...root.querySelectorAll(".claim-panel, .share-panel")].some((n) => n.childElementCount > 0);
+  const busy = () => [...root.querySelectorAll(".claim-panel, .share-panel, .cancel-panel")].some((n) => n.childElementCount > 0) || ordersLoading;
   let lastSig = "";
   async function load(force) {
     failed = "";
@@ -412,8 +469,8 @@ async function portfolioView(stale) {
     } catch (e) { if (stale()) return; if (!force && busy()) return; failed = e.message; }
     drawSummary(); drawBody();
   }
-  const seg = el("div", { class: "seg", role: "group", "aria-label": "Portfolio sections" }, [["positions", "Positions"], ["history", "History"]].map(([id, text], i) =>
-    el("button", { type: "button", text, "aria-pressed": String(i === 0), onclick: (ev) => { tab = id; seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", "false")); ev.currentTarget.setAttribute("aria-pressed", "true"); drawBody(); } })));
+  const seg = el("div", { class: "seg", role: "group", "aria-label": "Portfolio sections" }, [["positions", "Positions"], ["orders", "Open orders"], ["history", "History"]].map(([id, text], i) =>
+    el("button", { type: "button", text, "aria-pressed": String(i === 0), onclick: (ev) => { tab = id; seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", "false")); ev.currentTarget.setAttribute("aria-pressed", "true"); if (id === "orders" && orders === null && !ordersLoading) loadOrders(); else drawBody(); } })));
   root.append(el("h1", { class: "pf-h1", text: "Portfolio" }), summary, claimAll, seg, body);
   app.replaceChildren(root);
   drawSummary(); drawBody(); load();

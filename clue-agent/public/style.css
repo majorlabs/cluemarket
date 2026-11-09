@@ -536,3 +536,8 @@ html[data-theme="light"] .fund{background:radial-gradient(120% 90% at 100% 0%,rg
 
 /* the balance is a button: tap to refresh */
 button.as-cash{background:none;border:0;padding:0;color:inherit;font:inherit;text-align:left;cursor:pointer}
+
+/* open orders */
+.cancel-panel{display:flex;flex-direction:column;gap:10px}
+.cancel-panel:empty{display:none}
+.seg{flex-wrap:wrap}

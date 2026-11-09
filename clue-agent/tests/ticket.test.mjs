@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const sandbox = {};
 new Function('window', readFileSync(new URL('../public/ticket.js', import.meta.url), 'utf8'))(sandbox);
-const { previewBuy, checkGeoblock, orderPlan, validDepositAddress, cashCall, cashParse, positionState, positionNumbers, portfolioTotals, claimId } = sandbox.ClueTicket;
+const { previewBuy, checkGeoblock, orderPlan, validDepositAddress, cashCall, cashParse, positionState, positionNumbers, portfolioTotals, claimId, orderNumbers } = sandbox.ClueTicket;
 const near = (a, b, eps = 1e-6) => assert.ok(Math.abs(a - b) < eps, `${a} should be within ${eps} of ${b}`);
 
 const asks = [{ price: 0.5, size: 100 }, { price: 0.52, size: 100 }, { price: 0.6, size: 1000 }];
@@ -189,4 +189,12 @@ test('only a real market id can be claimed, and a part payout counts toward what
   for (const bad of [{}, null, { condition_id: '0x123' }, { condition_id: id + '0' }, { condition_id: '<script>' }, { condition_id: 5 }]) assert.equal(claimId(bad), null, JSON.stringify(bad));
   const list = [pos({ redeemable: true, current_price: 1, current_value: 8 }), pos({ redeemable: true, current_price: 0.5, current_value: 2.5 })];
   assert.equal(portfolioTotals(list).toClaim, 10.5);
+});
+
+test('an open order shows what is left to fill and the money held for it', () => {
+  const n = orderNumbers({ side: 'BUY', price: 0.4, size: 10, matched: 2.5 });
+  assert.equal(n.remaining, 7.5); assert.equal(n.held, 3); assert.equal(n.filledPct, 0.25); assert.equal(n.matched, 2.5);
+  assert.equal(orderNumbers({ side: 'SELL', price: 0.4, size: 10, matched: 0 }).held, 0);                     // a sell holds shares, not money
+  assert.equal(orderNumbers({ side: 'BUY', price: 0.4, size: 10, matched: 99 }).remaining, 0);                // never negative
+  assert.deepEqual(orderNumbers(null), { size: 0, matched: 0, remaining: 0, price: 0, held: 0, filledPct: 0 });
 });
