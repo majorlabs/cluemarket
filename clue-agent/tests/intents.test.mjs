@@ -23,7 +23,7 @@ const NEAR_ACCOUNT = 'alice.near';
 // One fake service that plays NEAR Intents, Polymarket's deposit service and a NEAR node.
 function fakeServices() {
   const seen = { quotes: [], auth: [], bridge: [], status: [] };
-  const state = { bridgeOk: true, floor: 2, quoteStatus: 201, statusBody: { status: 'PENDING_DEPOSIT' } };
+  const state = { bridgeOk: true, floor: 2, quoteStatus: 201, quoteMessage: '', statusBody: { status: 'PENDING_DEPOSIT' } };
   const server = http.createServer(async (req, res) => {
     let body = ''; for await (const c of req) body += c;
     const send = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
@@ -31,7 +31,7 @@ function fakeServices() {
     if (url.pathname === '/v0/tokens') return send(200, TOKENS);
     if (url.pathname === '/v0/quote') {
       const q = JSON.parse(body); seen.quotes.push(q); seen.auth.push(req.headers.authorization || null);
-      if (state.quoteStatus !== 201) return send(state.quoteStatus, { message: 'Internal server error' });
+      if (state.quoteStatus !== 201) return send(state.quoteStatus, { message: state.quoteMessage || 'Internal server error' });
       return send(201, { quote: { amountOutFormatted: '6.96', amountOutUsd: '6.96', minAmountOutFormatted: '6.89', timeEstimate: 24, ...(q.dry ? {} : { depositAddress: 'a'.repeat(64), deadline: '2026-11-09T09:00:00.000Z' }) } });
     }
     if (url.pathname === '/v0/status') { seen.status.push(url.searchParams.get('depositAddress')); return send(200, state.statusBody); }
@@ -119,8 +119,24 @@ test('each unsafe or silly request is refused before any money can move', async 
 test('when NEAR Intents cannot do it, the person gets a plain sentence, not the provider\'s error', async () => {
   state.quoteStatus = 400;
   await assert.rejects(quote({ assetId: NEAR_ASSET, amount: '2', refundTo: NEAR_ACCOUNT, wallet: WALLET, dry: true }, deps),
-    (e) => e.status === 502 && /not available right now/.test(e.message) && !/Internal server error|400/.test(e.message));
+    (e) => e.status === 502 && /could not make this swap/.test(e.message) && !/Internal server error/.test(e.message));
   state.quoteStatus = 201;
+});
+
+test('a busy NEAR Intents is asked a second time, then reported as busy', async () => {
+  state.quoteStatus = 503;
+  const before = seen.quotes.length;
+  await assert.rejects(quote({ assetId: NEAR_ASSET, amount: '2', refundTo: NEAR_ACCOUNT, wallet: WALLET, dry: true }, deps),
+    (e) => e.status === 502 && /busy/.test(e.message));
+  assert.equal(seen.quotes.length - before, 2);
+  state.quoteStatus = 201;
+});
+
+test('a coin with a higher minimum says so in plain words', async () => {
+  state.quoteStatus = 400; state.quoteMessage = 'Temporary swap limits: minimum swap amount is $1,000';
+  await assert.rejects(quote({ assetId: NEAR_ASSET, amount: '2', refundTo: NEAR_ACCOUNT, wallet: WALLET, dry: true }, deps),
+    (e) => e.status === 400 && /at least \$1,000/.test(e.message));
+  state.quoteStatus = 201; state.quoteMessage = '';
 });
 
 test('status is one plain word, with what arrived once it is done', async () => {

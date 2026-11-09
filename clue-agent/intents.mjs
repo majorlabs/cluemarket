@@ -39,11 +39,11 @@ export const forgetFloor = () => { floorCache = { at: 0, usd: null }; };
 export async function limits({ fetchImpl = fetch } = {}) { return { minUsd: Math.max(MIN_FLOOR_USD, await polymarketFloor(fetchImpl)), maxUsd: maxUsd() }; }
 
 // The coins offered, by chain and symbol. Each shows as "SYMBOL on Chain".
-const CHAINS = { near: 'NEAR', base: 'Base', eth: 'Ethereum', arb: 'Arbitrum', sol: 'Solana', op: 'Optimism', bsc: 'BNB Chain' };
+const CHAINS = { near: 'NEAR', base: 'Base', eth: 'Ethereum', arb: 'Arbitrum', sol: 'Solana', op: 'Optimism' };
 const OFFERED = {
-  near: ['wNEAR', 'USDC', 'USDT'], base: ['USDC', 'ETH'], eth: ['USDC', 'USDT', 'ETH'], arb: ['USDC', 'ETH'], sol: ['USDC', 'SOL'], op: ['USDC'], bsc: ['USDT', 'BNB'],
+  near: ['wNEAR', 'USDC', 'USDT'], base: ['USDC', 'ETH'], eth: ['USDC', 'USDT', 'ETH'], arb: ['USDC', 'ETH'], sol: ['USDC', 'SOL'], op: ['USDC'],
 };
-const EVM = new Set(['base', 'eth', 'arb', 'op', 'bsc', 'pol']);
+const EVM = new Set(['base', 'eth', 'arb', 'op', 'pol']);
 export const chainKind = (chain) => (chain === 'near' ? 'near' : chain === 'sol' ? 'sol' : EVM.has(chain) ? 'evm' : null);
 
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
@@ -136,13 +136,26 @@ export async function quote({ assetId, amount, refundTo, wallet, dry = true }, d
     destinationAsset: dest.assetId, amount: units.toString(), refundTo: refund, refundType: 'ORIGIN_CHAIN', recipient, recipientType: 'DESTINATION_CHAIN',
     deadline: new Date(Date.now() + 60 * 60_000).toISOString(), quoteWaitingTimeMs: 3000, referral: 'clue',
   };
-  let r;
-  try {
-    r = await fetchImpl(`${ONECLICK()}/quote`, { method: 'POST', signal: AbortSignal.timeout(25000), headers: { 'content-type': 'application/json', ...(jwt ? { authorization: `Bearer ${jwt}` } : {}) }, body: JSON.stringify(body) });
-  } catch { throw fail('Could not get a price right now. Try again in a minute.', 502); }
-  const d = await json(r);
-  const q = d && d.quote;
-  if (!r.ok || !q) throw fail('This route is not available right now. Try another coin or a different amount.', 502);
+  // NEAR Intents sometimes answers with a passing error (busy, no solver in time). Ask a second time before giving up.
+  let r, d, q;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      r = await fetchImpl(`${ONECLICK()}/quote`, { method: 'POST', signal: AbortSignal.timeout(25000), headers: { 'content-type': 'application/json', ...(jwt ? { authorization: `Bearer ${jwt}` } : {}) }, body: JSON.stringify(body) });
+    } catch { r = null; }
+    d = r ? await json(r) : null;
+    q = d && d.quote;
+    if (r && r.ok && q) break;
+    if (r && r.status >= 400 && r.status < 500 && r.status !== 429) break;   // our request was refused: asking again will not change it
+  }
+  if (!r) throw fail('Could not get a price right now. Try again in a minute.', 502);
+  if (!r.ok || !q) {
+    const said = String((d && d.message) || '');
+    console.error(`intents quote failed: ${r.status} ${asset.symbol}@${asset.chainName} dry=${Boolean(dry)} ${said.slice(0, 200)}`);
+    const min = /minimum swap amount is \$([\d,]+(?:\.\d+)?)/i.exec(said);
+    if (min) throw fail(`${asset.symbol} on ${asset.chainName} needs at least $${min[1]} per deposit right now. Try a different coin.`, 400);
+    if (r.status >= 400 && r.status < 500 && r.status !== 429) throw fail('NEAR Intents could not make this swap. Try another coin or a different amount.', 502);
+    throw fail('NEAR Intents is busy right now. Nothing was changed. Try again in a moment.', 502);
+  }
   const out = {
     dry: Boolean(dry),
     send: { symbol: asset.symbol, chain: asset.chainName, amount: String(amount), usd: Math.round(usd * 100) / 100 },
