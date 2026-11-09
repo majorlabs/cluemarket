@@ -636,6 +636,26 @@ async function mountTicket(box, ctx) {
     placeBtn.disabled = !p.ok; placeBtn.title = p.ok ? "" : p.reason;
     orderNote.textContent = p.ok ? "" : p.reason;   // on a phone there is no hover, so the reason is written out
   }
+  // The last look before real money moves, on the page itself (not the browser's pop-up): what is bought, what it costs, the worst price.
+  function reviewOrder(plan) {
+    return new Promise((resolve) => {
+      const row = (k, v) => el("div", { class: "tk-row" }, el("span", { class: "muted", text: k }), el("b", { class: "num", text: v }));
+      const done = (yes) => { box.removeEventListener("keydown", esc); resolve(yes); };
+      const esc = (ev) => { if (ev.key === "Escape") done(false); };
+      const go = el("button", { class: "btn primary", type: "button", text: `Confirm · ${usd(plan.expectedCost)}`, onclick: () => done(true) });
+      orderOut.className = "order-out review";
+      orderOut.replaceChildren(
+        el("b", { text: "Review your order" }),
+        row("Buy", `${ctx.outcome} · ${m.groupItemTitle || m.question}`.slice(0, 60)),
+        row("Shares", plan.shares.toFixed(2)),
+        row("You pay, at most", usd(plan.expectedCost)),
+        row("Worst price", `${cents(plan.maxPrice)} a share`),
+        el("p", { class: "muted small", text: "All or nothing. If it cannot fill completely at that price, nothing is bought and no money is spent." }),
+        el("div", { class: "share-row" }, go, el("button", { class: "btn", type: "button", text: "Cancel", onclick: () => done(false) })));
+      box.addEventListener("keydown", esc); go.focus();
+    });
+  }
+
   async function submitOrder() {
     placeBtn.disabled = true; orderOut.className = "order-out"; orderOut.textContent = "Checking the live orders again…";
     const show = (cls, ...nodes) => { orderOut.className = `order-out ${cls}`; orderOut.replaceChildren(...nodes); };
@@ -650,12 +670,12 @@ async function mountTicket(box, ctx) {
       const fresh = await api(`/api/book?token=${encodeURIComponent(ctx.token)}&depth=60`);
       book = fresh; const plan = planFor(previewOn(fresh));
       if (!plan.ok) { show("err", el("p", { text: plan.reason })); return; }
-      if (cfg.ordersLive && !confirm(`Buy "${ctx.outcome}" for about ${usd(plan.expectedCost)}?\n\nIt only goes through if all of it fills at ${cents(plan.maxPrice)} a share or better. Otherwise nothing is bought and no money is spent.`)) { show("", el("p", { text: "Cancelled. Nothing was sent." })); return; }
+      if (cfg.ordersLive && !(await reviewOrder(plan))) { show("", el("p", { text: "Cancelled. Nothing was sent." })); return; }
       show("", el("p", { text: cfg.ordersLive ? "Placing your order. Approve it in your wallet if it asks…" : "Preparing your order…" }));
       await loadTrading();
       const res = await window.clueTrading.order({ assetId: ctx.token, spend: plan.spend, maxPrice: plan.maxPrice, builderCode: cfg.builderCode, send: cfg.ordersLive });
       const line = (k, v) => el("div", { class: "tk-row" }, el("span", { class: "muted", text: k }), el("b", { class: "num", text: v }));
-      if (!res.ok) show("err", el("p", { text: res.error }));
+      if (!res.ok) show("err", el("p", { text: res.error }), res.detail ? el("small", { class: "err-detail", text: `(${res.detail})` }) : null);
       else if (!res.sent) show("test", el("b", { text: "Test mode: your order is ready, and it was NOT sent." }),
         line("Would spend", usd(plan.spend)), line("Worst price accepted", cents(plan.maxPrice)), line("Fills", "completely or not at all"),
         el("p", { class: "muted small", text: "Trading is not switched on for real orders yet, so no money moved." }));

@@ -32,6 +32,11 @@ const ALLOWED = [
   ['GET', new RegExp(`^/(data/(orders|order/[A-Za-z0-9x]{1,100}|trades)|balance-allowance|order-scoring|orders-scoring)${QUERY}$`)],
   ['POST', /^\/(orders-scoring|heartbeats?)$/],
   ['GET', new RegExp(`^/balance-allowance/update${QUERY}$`)],
+  // order server: read-only market information that building an order asks for (which market a token belongs to, its price step,
+  // whether it is a multi-outcome market, the fee rates). All of it is public data; signing it gives no extra power.
+  ['GET', /^\/(markets-by-token|clob-markets)\/[A-Za-z0-9x]{1,100}$/],
+  ['GET', /^\/fees\/builder-fees\/[A-Za-z0-9x]{1,100}$/],
+  ['GET', new RegExp(`^/(tick-size|neg-risk|spread|price|midpoint|last-trade-price|book)${QUERY}$`)],
 ];
 const MAX_BODY = 20000;
 const isAddress = (a) => typeof a === 'string' && /^0x[0-9a-fA-F]{40}$/.test(a);
