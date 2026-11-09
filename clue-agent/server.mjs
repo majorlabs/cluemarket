@@ -6,6 +6,7 @@ import { auth, store } from './auth.mjs';
 import {initWalletAuth,walletSession,walletRoute} from './wallet-auth.mjs';
 import {privyRoute,privyWalletRoute} from './privy-auth.mjs';
 import {ordersLiveFor} from './orders-switch.mjs';
+import {offered as intentsOffered,quote as intentsQuote,status as intentsStatus} from './intents.mjs';
 import {allowedOrigins,checkOrigin} from './origins.mjs';
 import {cleanAnswer} from './answer-links.mjs';
 import {HourlyBudget} from './budget.mjs';
@@ -25,6 +26,8 @@ if(hosted && (!publicOrigin.startsWith('https://') || !process.env.CLUE_SERVICE_
 const signUser=new HourlyBudget(1200);
 const fundUser=new HourlyBudget(30);
 const fundGlobal=new HourlyBudget(300);
+const depositUser=new HourlyBudget(10);   // real deposit addresses: a few per hour is plenty
+const statusUser=new HourlyBudget(600);
 const researchGlobal=new HourlyBudget(Math.max(1,Number(process.env.CLUE_RESEARCH_GLOBAL_PER_HOUR)||60));
 const researchJobs=new Map();
 const sweepJobs=()=>{const cut=Date.now()-30*60000;for(const [k,j] of researchJobs)if(j.startedAt<cut)researchJobs.delete(k)};
@@ -94,6 +97,22 @@ const app=http.createServer(async(req,res)=>{ try {
   const key=process.env.POLYMARKET_BUILDER_API_KEY,secret=process.env.POLYMARKET_BUILDER_SECRET,passphrase=process.env.POLYMARKET_BUILDER_PASSPHRASE;
   if(!key||!secret||!passphrase) return json(res,503,{error:'Trading is not switched on yet.'});
   return json(res,200,builderHeaders(check,{key,secret,passphrase}));
+ }
+ if(req.method==='GET' && url.pathname==='/api/fund/intents/assets') {
+  const o=await intentsOffered();
+  return json(res,200,{assets:o.assets.map(({assetId,chain,chainName,symbol,decimals,price,refundKind})=>({assetId,chain,chainName,symbol,decimals,price,refundKind}))});
+ }
+ if(req.method==='POST' && url.pathname==='/api/fund/intents/quote') {
+  const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in to add money.'});
+  const b=await getBody(req);
+  const dry=b.dry!==false;
+  if(!fundUser.take(session.user.id)||!fundGlobal.take()||(!dry&&!depositUser.take(session.user.id))) return json(res,429,{error:'Too many requests. Try again in a little while.'});
+  return json(res,200,await intentsQuote({assetId:String(b.assetId||''),amount:String(b.amount??''),refundTo:String(b.refundTo||''),wallet:String(b.wallet||''),dry}));
+ }
+ if(req.method==='GET' && url.pathname==='/api/fund/intents/status') {
+  const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in to see this.'});
+  if(!statusUser.take(session.user.id)) return json(res,429,{error:'Too many requests. Try again in a little while.'});
+  return json(res,200,await intentsStatus(url.searchParams.get('deposit')));
  }
  if(req.method==='GET' && url.pathname==='/api/fund/options') return json(res,200,{destination:{symbol:DEST.symbol,chain:'Polygon'},sources:SOURCES.map(({id,label})=>({id,label}))});
  if(req.method==='GET' && url.pathname==='/api/fund/quote') {

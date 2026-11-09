@@ -636,7 +636,7 @@ async function mountTicket(box, ctx) {
   }
 
   // Putting money into the trading account: Polymarket gives the account its own address for each chain.
-  function depositPanel(geo) {
+  function directPanel(geo) {
     const out = el("div", { class: "deposit" });
     const status = el("p", { class: "status", role: "status", "aria-live": "polite" });
     const copy = (text) => el("button", { class: "btn small", type: "button", text: "Copy", onclick: async (ev) => { try { await navigator.clipboard.writeText(text); ev.currentTarget.textContent = "Copied"; } catch { ev.currentTarget.textContent = "Select and copy"; } } });
@@ -668,6 +668,119 @@ async function mountTicket(box, ctx) {
     } });
     out.append(show, refresh, status);
     return out;
+  }
+
+  // ---- Adding money from NEAR or any other chain, carried by NEAR Intents ----
+  // The person picks a coin they hold; Clue asks NEAR Intents for the price, then for a one-time deposit address. Whatever is sent there
+  // arrives as USDC at the person's own Polymarket deposit address. Clue never holds the money.
+  const WORDS = { waiting: "Waiting for your deposit…", seen: "Deposit seen. Swapping it now…", swapping: "Swapping it now…", short: "You sent less than the amount. Send the rest, or it will be returned.", refunded: "The swap could not finish, so your money was returned to your refund address.", failed: "The swap failed. If you sent money, it will be returned to your refund address." };
+  function intentsPanel(geo) {
+    const out = el("div", { class: "intents" });
+    let assets = null, quoteInfo = null, timer = null, edited = false;
+    const status = el("p", { class: "status", role: "status", "aria-live": "polite" });
+    const say = (t, cls = "") => { status.className = `status ${cls}`; status.textContent = t; };
+    const copy = (text) => el("button", { class: "btn small", type: "button", text: "Copy", onclick: async (ev) => { try { await navigator.clipboard.writeText(text); ev.currentTarget.textContent = "Copied"; } catch { ev.currentTarget.textContent = "Select and copy"; } } });
+    const select = el("select", { "aria-label": "The coin you will send" });
+    const amount = el("input", { type: "text", inputmode: "decimal", placeholder: "2", "aria-label": "How much you will send", autocomplete: "off" });
+    const refund = el("input", { type: "text", placeholder: "", "aria-label": "Where to return your money if the swap cannot finish", autocomplete: "off", spellcheck: "false" });
+    const hint = el("small", { class: "muted" });
+    const refundHint = el("small", { class: "muted" });
+    const result = el("div", { class: "intents-result" });
+    const chosen = () => (assets || []).find((x) => x.assetId === select.value);
+    const usdOf = () => { const x = chosen(), n = Number(amount.value); return x && Number.isFinite(n) ? n * x.price : 0; };
+    function setRefundDefault() {
+      const x = chosen(); if (!x || edited) return;
+      refund.value = x.refundKind === "near" ? (user && String(user.id).startsWith("near:") ? user.name : "") : x.refundKind === "evm" ? (tradingSetup ? tradingSetup.signer : "") : "";
+      refund.placeholder = x.refundKind === "near" ? "yourname.near" : x.refundKind === "sol" ? "Your Solana address" : "0x…";
+      refundHint.textContent = x.refundKind === "near" ? "Your NEAR account. It has to exist." : x.refundKind === "evm" ? "Your wallet. It is filled in for you." : "A Solana address you control.";
+    }
+    function drawHint() { const u = usdOf(); hint.textContent = u > 0 ? `About $${u.toFixed(2)}. The smallest amount is about $3.` : "The smallest amount is about $3."; }
+    const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
+
+    async function ask(dry) {
+      const x = chosen();
+      return post("/api/fund/intents/quote", { assetId: x.assetId, amount: amount.value.trim(), refundTo: refund.value.trim(), wallet: tradingSetup.wallet, dry });
+    }
+    const price = el("button", { class: "btn primary small", type: "button", text: "See what I’d get", onclick: async () => {
+      price.disabled = true; stop(); result.replaceChildren(); say("Getting the price…");
+      try { quoteInfo = await ask(true); } catch (e) { say(e.message, "err"); price.disabled = false; return; }
+      price.disabled = false; say("");
+      const q = quoteInfo;
+      result.replaceChildren(el("div", { class: "receipt" },
+        el("dl", { class: "fund-dl" },
+          el("dt", { text: "You send" }), el("dd", { class: "num", text: `${q.send.amount} ${q.send.symbol} on ${q.send.chain} (about $${q.send.usd.toFixed(2)})` }),
+          el("dt", { text: "You get about" }), el("dd", { class: "num", text: `${q.receive.amount} USDC in your trading account` }),
+          q.receive.minimum ? el("dt", { text: "At worst" }) : null, q.receive.minimum ? el("dd", { class: "num", text: `${q.receive.minimum} USDC` }) : null,
+          q.seconds != null ? el("dt", { text: "Takes" }) : null, q.seconds != null ? el("dd", { class: "num", text: `about ${q.seconds} seconds, plus a minute or two for your trading account` }) : null)),
+        el("button", { class: "btn dark small", type: "button", text: "Get my deposit address", onclick: (ev) => deposit(ev.currentTarget) }));
+    } });
+
+    async function deposit(btn) {
+      btn.disabled = true; say("Getting your deposit address…");
+      let q;
+      try { q = await ask(false); } catch (e) { say(e.message, "err"); btn.disabled = false; return; }
+      say("");
+      const until = new Date(q.deadline);
+      result.replaceChildren(...kids(
+        el("p", { class: "small" }, "Send exactly ", el("b", { text: `${q.send.amount} ${q.send.symbol}` }), " on ", el("b", { text: q.send.chain }), " to:"),
+        el("div", { class: "acct-addr" }, el("code", { text: q.depositAddress }), copy(q.depositAddress)),
+        q.depositMemo ? el("p", { class: "small" }, "Memo: ", el("code", { text: q.depositMemo })) : null,
+        el("p", { class: "tk-warn warn", text: `Send only ${q.send.symbol} on ${q.send.chain}, from a wallet you control, before ${Number.isFinite(until.getTime()) ? until.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "the deadline"}. This address is for this one swap. If it cannot finish, your money is returned to ${q.refundTo}.` }),
+        el("p", { class: "muted small", text: "Swapped by NEAR Intents. Clue never holds your money." })));
+      const live = el("p", { class: "status", role: "status", "aria-live": "polite", text: WORDS.waiting });
+      const after = el("div");
+      result.append(live, after);
+      const poll = async () => {
+        if (!out.isConnected) { stop(); return; }
+        let s; try { s = await api(`/api/fund/intents/status?deposit=${encodeURIComponent(q.depositAddress)}`); } catch { return; }
+        if (s.state === "done") {
+          stop(); live.className = "status ok"; live.textContent = `Done. ${s.delivered && s.delivered.amount ? `${s.delivered.amount} USDC` : "Your money"} is on its way to your trading account.`;
+          after.replaceChildren(el("p", { class: "muted small", text: "Polymarket turns it into trading money in a minute or two. Then your balance shows it." }), refreshBtn());
+        } else if (s.state === "refunded" || s.state === "failed") { stop(); live.className = "status err"; live.textContent = WORDS[s.state]; }
+        else { live.className = "status"; live.textContent = WORDS[s.state] || WORDS.swapping; }
+      };
+      timer = setInterval(poll, 6000); poll();
+    }
+    function refreshBtn() {
+      const b = el("button", { class: "btn small", type: "button", text: "Refresh my balance", onclick: async () => {
+        b.disabled = true;
+        try { await loadTrading(); const r = await window.clueTrading.balance(); if (r.ok) { tradingSetup = { ...tradingSetup, balance: r.balance }; drawChecklist(geo); return; } say(r.error, "err"); } catch (e) { say(e.message, "err"); }
+        b.disabled = false;
+      } });
+      return b;
+    }
+
+    select.addEventListener("change", () => { edited = false; quoteInfo = null; result.replaceChildren(); setRefundDefault(); drawHint(); });
+    amount.addEventListener("input", () => { quoteInfo = null; result.replaceChildren(); drawHint(); });
+    refund.addEventListener("input", () => { edited = true; quoteInfo = null; result.replaceChildren(); });
+
+    out.replaceChildren(el("p", { class: "muted small", text: "Loading what you can send…" }));
+    api("/api/fund/intents/assets").then((d) => {
+      assets = d.assets || [];
+      if (!assets.length) { out.replaceChildren(el("p", { class: "status err", text: "Adding money from other chains is not available right now. Try again in a minute." })); return; }
+      const label = (x) => `${x.symbol === "wNEAR" ? "wNEAR (wrapped NEAR)" : x.symbol} on ${x.chainName}`;
+      select.replaceChildren(...assets.map((x) => el("option", { value: x.assetId, text: label(x) })));
+      const field = (title, input, ...extra) => el("label", { class: "field" }, el("span", { text: title }), input, ...extra);
+      out.replaceChildren(
+        el("p", { class: "small" }, "Send NEAR or a coin from another chain. ", el("b", { text: "NEAR Intents" }), " swaps it and delivers it to your trading account."),
+        field("Where is your money?", select), field("How much?", amount, hint), field("If it can’t finish, return it to", refund, refundHint), price, result, status);
+      setRefundDefault(); drawHint();
+    }).catch((e) => out.replaceChildren(el("p", { class: "status err", text: e.message || "Adding money from other chains is not available right now." })));
+    return out;
+  }
+
+  // The panel under "Add money": NEAR Intents first, and the direct deposit addresses as the other choice.
+  function depositPanel(geo) {
+    const box = el("div", { class: "deposit-choice" });
+    const body = el("div");
+    const modes = [["near", "NEAR & other chains", () => intentsPanel(geo)], ["direct", "Solana or Polygon", () => directPanel(geo)]];
+    const seg = el("div", { class: "seg", role: "group", "aria-label": "How to add money" }, modes.map(([id, text], i) => el("button", { type: "button", text, "aria-pressed": String(i === 0), onclick: (ev) => {
+      seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", "false")); ev.currentTarget.setAttribute("aria-pressed", "true");
+      body.replaceChildren(modes.find((m) => m[0] === id)[2]());
+    } })));
+    body.replaceChildren(modes[0][2]());
+    box.append(seg, body);
+    return box;
   }
 
   function drawChecklist(geo) {

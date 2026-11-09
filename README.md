@@ -42,7 +42,7 @@ Clue shows live market data and previews trades against the real order book. **P
 | **Forecast privately** | Set your probability, write why, list evidence for and against, and say what would change your mind. Each save is a dated update, and earlier ones are kept. |
 | **Journal** | Every forecast records the market's price at that moment. The Journal compares it with the market whenever you open it: price moves, gaps, closing dates and the result. When a market resolves, your forecast is scored against the market's price at the time and you can write what you learned. It makes no claim about your skill until at least 5 forecasts have resolved. |
 | **Share** | Publish your research (never your private forecast) as a public page, and remove it any time. |
-| **Add money** | See what it would cost to bring USDC from Ethereum, Base or Optimism into Clue, with prices from Rhea's cross-chain service. A price check only: nothing is sent yet. |
+| **Add money** | Put money in your trading account from **NEAR or another chain**. Pick a coin you hold (wNEAR, USDC or USDT on NEAR, USDC, ETH or SOL on other chains), see the price, and get a one-time deposit address. **NEAR Intents** swaps it and delivers USDC on Polygon to your own Polymarket deposit address, with live status and a refund address if it cannot finish. You can also send USDC straight from Solana or Polygon. |
 | **A wallet made for you** | Sign in with just an email and Clue makes you a wallet. It belongs to you and Clue never holds its keys. The profile icon in the corner shows it, with Copy and Disconnect. |
 | **Trade preview** | A trade card walks the live orders and shows the shares you would get, the price, the estimated fee, and what you would win or lose, with warnings for thin markets and small orders. It checks your location first. **Set up trading** creates your trading account in your own browser. |
 | **Sign in your way** | A NEAR wallet (a signed message, no transaction) or an email or Ethereum wallet. |
@@ -75,7 +75,7 @@ This table separates what has been run from what has not. Nothing here is claime
 | Trading setup (trading account and permission) | **Built**; the first run from a supported location is not yet recorded. Trading is blocked from the address the project was tested from |
 | Placing orders | **Built in test mode.** Clue re-checks the live orders, works out the worst price it will accept, and signs the order with your wallet, but sends nothing until real orders are switched on. Not yet run with real money. See [docs/TRADING_PLAN.md](docs/TRADING_PLAN.md) |
 | Share card | **Built.** After an order fills, **Share this call** draws a 16:9 picture of the call on your own phone (question, side, price, what it pays if it lands) with a code that opens the market, and writes a post to go with it in plain words, which you can edit. On a phone the share sheet sends the picture and text to any app; **Post on X** opens X with the text and link ready; the card can also be saved or the text copied. Win, loss and live versions are built but wait for positions, which are not built yet |
-| Putting money in your trading account | **Built, not yet run with real money.** Clue shows your account's own deposit address from Polymarket's deposit service (USDC on Solana or Polygon, minimums read live) and a Refresh balance button. Clue's own Add money price check is separate and still sends nothing |
+| Putting money in from NEAR or another chain | **Built; prices and deposit addresses verified against the live NEAR Intents service** (2 wNEAR gives about $6.94 of USDC in about 24 seconds; 5 USDC on Base gives about $4.99). A real deposit from this screen has not been recorded yet. Direct deposits from Solana or Polygon use Polymarket's own deposit service and are shown in the same panel. |
 | Alerts when evidence changes, public profiles | **Not built** |
 
 ## Try it in five minutes
@@ -130,6 +130,8 @@ Settings (names only; never commit values):
 | `CLUE_FREE_RESEARCH_PER_DAY`, `CLUE_AI_DAILY_USD` | Free researches per person per day (default 2) and the daily spending cap for all free research (default $0.25) |
 | `PRIVY_APP_ID`, `PRIVY_APP_SECRET` | Email and wallet sign-in, and the wallet made for email users. The secret is used by the server to look up a user's wallet |
 | `RHEA_API_KEY` | Prices for the Add money check |
+| `ONECLICK_JWT` | Optional partner key for NEAR Intents' 1Click service (lowers its fee). Without it, funding still works |
+| `CLUE_FUND_MAX_USD` | The most that can be sent in one funding, in dollars (default 500) |
 | `POLYMARKET_BUILDER_API_KEY`, `_SECRET`, `_PASSPHRASE`, `_CODE` | Our builder account for trading. Used only on the server to sign trading setup requests; never sent to the browser |
 | `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | Postgres and auth, for a hosted deployment |
 | `CLUE_HOSTED`, `CLUE_SERVICE_HOST`, `CLUE_SIGNUP_TOKEN` | Hosted-mode switches |
@@ -144,6 +146,7 @@ flowchart LR
   S --> M[Market data: prices, rules, live orders]
   S --> N[NEAR AI Cloud: AI with web search]
   S --> R[Rhea: cross-chain prices]
+  S --> I[NEAR Intents: swaps NEAR and other coins into your account]
   S --> W[Privy: sign-in and your wallet]
   S --> K[NEAR: wallet key checks]
   U -->|trading setup and orders, from your own browser| M2[Market venue]
@@ -162,7 +165,7 @@ Trading setup and orders go from the user's own browser straight to the venue, s
 | **NEAR AI Cloud** | Runs the research model with web search, on its cheapest model, with a hard daily spending cap. |
 | **NEAR wallet sign-in** | You sign one message with your own wallet key. The server checks the signature and asks NEAR that the key is a full-access key for that account. No transaction, no funds move. |
 | **Rhea** | Gives prices for moving USDC from another chain into Clue. Prices only; the key stays on the server. |
-| **NEAR Intents** | Rhea can route through NEAR Intents among other routes. Sending money is **not built**. Clue does not claim NEAR Intents supplies the market's liquidity: orders match on the venue's own order book. |
+| **NEAR Intents** | Carries money from NEAR or any other chain into your trading account: Clue asks its 1Click service for a price and a one-time deposit address, and NEAR Intents swaps the coin and delivers USDC on Polygon to your own Polymarket deposit address. Clue never holds the money. A refund address is required. It does not supply the market's liquidity: orders match on the venue's own order book. |
 
 ## Built with
 
