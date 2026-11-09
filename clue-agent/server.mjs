@@ -98,6 +98,19 @@ const app=http.createServer(async(req,res)=>{ try {
   if(!key||!secret||!passphrase) return json(res,503,{error:'Trading is not switched on yet.'});
   return json(res,200,builderHeaders(check,{key,secret,passphrase}));
  }
+ if(url.pathname==='/api/trading/account') {
+  const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in first.'});
+  const owner=session.user.id;
+  if(req.method==='GET'){const row=await store.get('SELECT wallet, signer FROM trading_accounts WHERE user_id=?',owner);return json(res,200,{account:row?{wallet:row.wallet,signer:row.signer||null}:null});}
+  if(req.method==='POST'){
+   const b=await getBody(req); const addr=/^0x[0-9a-fA-F]{40}$/;
+   if(!addr.test(String(b.wallet||''))) return json(res,400,{error:'That does not look like a trading account address.'});
+   const signer=addr.test(String(b.signer||''))?String(b.signer):null; const now=new Date().toISOString();
+   await store.run('INSERT INTO trading_accounts (user_id,wallet,signer,created_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET wallet=excluded.wallet, signer=excluded.signer, updated_at=excluded.updated_at',owner,String(b.wallet),signer,now,now);
+   return json(res,200,{ok:true});
+  }
+  return json(res,405,{error:'Method not allowed.'});
+ }
  if(req.method==='GET' && url.pathname==='/api/fund/intents/assets') {
   const o=await intentsOffered();
   return json(res,200,{limits:await intentsLimits(),assets:o.assets.map(({assetId,chain,chainName,symbol,decimals,price,refundKind})=>({assetId,chain,chainName,symbol,decimals,price,refundKind}))});

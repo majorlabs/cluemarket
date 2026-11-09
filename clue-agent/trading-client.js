@@ -132,7 +132,7 @@ window.clueTrading.balance = async function balance() {
   try {
     const client = await openClient();
     const b = await fetchBalanceAllowance(client, { assetType: 'COLLATERAL' });
-    return { ok: true, balance: dollars(b.balance) };
+    return { ok: true, balance: dollars(b.balance), signer: client.account && client.account.signer, wallet: client.account && client.account.wallet };
   } catch (e) {
     return { ok: false, error: 'Could not read your balance right now. Try again in a minute.' };
   }

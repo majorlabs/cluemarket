@@ -46,6 +46,10 @@ CREATE TABLE IF NOT EXISTS ai_usage (
  status TEXT NOT NULL, input_tokens INTEGER, output_tokens INTEGER, cost_usd REAL NOT NULL, estimated INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS ai_usage_day ON ai_usage(day, user_id);
+CREATE TABLE IF NOT EXISTS trading_accounts (
+ user_id TEXT PRIMARY KEY, wallet TEXT NOT NULL, signer TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ FOREIGN KEY(user_id) REFERENCES "user"(id) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS research_results (
  id TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at TEXT NOT NULL,
  question TEXT NOT NULL, content TEXT NOT NULL, sources TEXT NOT NULL,
