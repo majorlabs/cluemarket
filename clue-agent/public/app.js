@@ -493,7 +493,8 @@ async function openShare(data, into) {
   const say = (t, cls = "") => { status.className = `status ${cls}`; status.textContent = t; };
   into.replaceChildren(el("p", { class: "muted small", text: "Making your card…" }));
   let blob, post, imgUrl;
-  const url = `${location.origin}${location.pathname}${location.hash}`;
+  const home = /^(localhost|127\.|\[::1\])/.test(location.hostname) ? location.origin : "https://www.oncluemarket.xyz";   // shared links always point at the real site
+  const url = `${home}${location.pathname}${location.hash}`;
   try {
     await loadCard();
     blob = await window.ClueCard.toBlob({ ...data, url });
@@ -510,15 +511,19 @@ async function openShare(data, into) {
   if (canShareFile) buttons.push(el("button", { class: "btn primary small", type: "button", text: "Share…", onclick: async () => {
     try { await navigator.share({ files: [file], text: text() }); say(""); } catch (e) { if (!e || e.name !== "AbortError") say("Could not open the share sheet. Use Post on X or Save card.", "err"); }
   } }));
-  buttons.push(el("button", { class: `btn ${canShareFile ? "" : "primary "}small`, type: "button", text: "Post on X", onclick: () => {
-    // X fills in the text and link; it cannot attach a picture, so the card is saved to add by hand when the share sheet is not available.
+  buttons.push(el("button", { class: `btn ${canShareFile ? "" : "primary "}small`, type: "button", text: "Post on X", onclick: async () => {
+    // X fills in the text and link; it cannot attach a picture, so on a computer the card is copied (or saved) to add by hand.
     const lines = text().split("\n"), link = lines[lines.length - 1].startsWith("http") ? lines.pop() : url;
     window.open(`https://x.com/intent/tweet?text=${encodeURIComponent(lines.join("\n").trim())}&url=${encodeURIComponent(link)}`, "_blank", "noopener");
-    if (!canShareFile) { saveCard(); say("The card was saved. Add it to your post.", "ok"); }
+    if (canShareFile) return;
+    // On a computer: put the card on the clipboard so it can be pasted into the post; if that is not allowed, save it instead.
+    try { await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]); say("Card copied. In your X post, paste it (Ctrl+V, or Cmd+V on a Mac).", "ok"); }
+    catch { saveCard(); say("Card saved. Add it to your X post.", "ok"); }
   } }));
   buttons.push(el("button", { class: "btn small", type: "button", text: "Copy text", onclick: copy }));
   buttons.push(el("button", { class: "btn small", type: "button", text: "Save card", onclick: () => { saveCard(); say("Card saved.", "ok"); } }));
-  into.replaceChildren(el("img", { class: "card-preview", src: imgUrl, alt: "Your share card" }), box, el("div", { class: "share-row" }, ...buttons), status);
+  into.replaceChildren(el("img", { class: "card-preview", src: imgUrl, alt: "Your share card" }), box, el("div", { class: "share-row" }, ...buttons),
+    canShareFile ? null : el("p", { class: "muted small", text: "Post on X opens X with your words and copies the card. Paste the card into your post." }), status);
 }
 
 /* ---------- trade ticket: preview, and an order check that sends nothing unless real orders are switched on ---------- */
