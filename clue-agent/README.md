@@ -23,7 +23,7 @@ Run the tests from this folder: one of them starts `server.mjs` by relative path
 | `fund.mjs` | Prices for adding money from another chain (Rhea), prices only |
 | `pm-sign.mjs` | Signs trading setup paperwork on the server, for the user's own wallet and a short fixed list of requests |
 | `answer-links.mjs`, `origins.mjs` | Removing links the web search did not return; the approved-origin check |
-| `public/` | The site: `app.js`, `ticket.js` (trade preview maths), `style.css`, assets, fonts |
+| `public/` | The site: `app.js`, `ticket.js` (trade and portfolio maths), `style.css`, assets, fonts |
 | `privy-client.jsx`, `trading-client.js` | Sources of `public/privy.js` and `public/trading.js`. Rebuild with `npm run build:privy` and `npm run build:trading` |
 | `tests/` | Node tests (`node:test`) |
 

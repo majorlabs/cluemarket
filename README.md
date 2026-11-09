@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>A clearer view of what comes next.</b><br>
-  Research any question, see where real prediction markets stand, record your own private forecast, and learn from what happens.
+  Research any question, see where real prediction markets stand, record your own private forecast, trade it, and learn from what happens.
 </p>
 
 <p align="center">
@@ -28,9 +28,7 @@
 
 Prediction markets put a price on questions like "Will the Fed cut rates?" A price is not an explanation. To form your own view you have to read the exact resolution rules, find evidence on both sides, remember what you thought and why, and notice when something changes. That work is scattered across a dozen tabs, and almost nobody keeps a record of their reasoning, so almost nobody learns from being right or wrong.
 
-Clue puts it in one place. Pick a real market, read exactly how it resolves, ask an AI research assistant to find sources for and against, write down your own probability and what would change your mind, and come back to see how you did. Clue never decides an outcome: each market's own rules settle it. Your notes are private to you unless you choose to share one.
-
-Clue shows live market data and previews trades against the real order book. **Placing orders is not built yet.** See [What works today](#what-works-today).
+Clue puts it in one place. Pick a real market, read exactly how it resolves, ask an AI research assistant to find sources for and against, write down your own probability and what would change your mind, trade it when you are sure, and come back to see how you did. Clue never decides an outcome: each market's own rules settle it. Your notes are private to you unless you choose to share one.
 
 ## What you can do
 
@@ -38,46 +36,35 @@ Clue shows live market data and previews trades against the real order book. **P
 | --- | --- |
 | **Explore markets** | A live board of real prediction-market questions with category tabs, search and sorting (trending, volume, new, ending soon). Prices are what traders are paying, shown as chances. They are not Clue's forecast. |
 | **Read the exact question** | Every market page shows the market's own rules, who decides it, a price chart (1 day to all time) and the live orders with spread and depth. |
-| **Research with sources** | Ask any question, with or without a market. AI on NEAR AI Cloud searches the web and returns an answer with source links. Only links the search actually returned are kept. Answers are labelled as AI-written and may be wrong. Everyone gets 2 free researches a day. |
+| **Research with sources** | Ask any question, with or without a market. AI on NEAR AI Cloud searches the web and returns an answer with source links. Only links the search actually returned are kept. Answers are labelled as AI-written. Everyone gets 2 free researches a day. |
 | **Forecast privately** | Set your probability, write why, list evidence for and against, and say what would change your mind. Each save is a dated update, and earlier ones are kept. |
 | **Journal** | Every forecast records the market's price at that moment. The Journal compares it with the market whenever you open it: price moves, gaps, closing dates and the result. When a market resolves, your forecast is scored against the market's price at the time and you can write what you learned. It makes no claim about your skill until at least 5 forecasts have resolved. |
 | **Share** | Publish your research (never your private forecast) as a public page, and remove it any time. |
 | **Add money** | Put money in your trading account from **NEAR or another chain**. Pick a coin you hold (wNEAR, USDC or USDT on NEAR, USDC, ETH or SOL on other chains), see the price, and get a one-time deposit address. **NEAR Intents** swaps it and delivers USDC on Polygon to your own Polymarket deposit address, with live status and a refund address if it cannot finish. You can also send USDC straight from Solana or Polygon. |
 | **A wallet made for you** | Sign in with just an email and Clue makes you a wallet. It belongs to you and Clue never holds its keys. The profile icon in the corner shows it, with Copy and Disconnect. |
-| **Trade preview** | A trade card walks the live orders and shows the shares you would get, the price, the estimated fee, and what you would win or lose, with warnings for thin markets and small orders. It checks your location first. **Set up trading** creates your trading account in your own browser. |
+| **Trade** | Buy Yes or No on the same page. The trade card walks the live orders and shows the shares you get, the price, the fee, and what you win or lose. A review box shows the order before anything is sent, then live steps follow it until it fills. Orders match on Polymarket's order book and are signed by your own wallet. |
+| **Portfolio** | Your total (cash plus what you hold), every position with shares, entry and current price, value and profit or loss, and your history. **Claim** your winnings on ended markets you called, see and **Cancel** open orders, and **Withdraw** your cash as USDC to your own wallet on Base, Ethereum, Arbitrum, Optimism or Polygon. |
+| **Share a call** | Turn a call into a 16:9 card (live, won or lost) with a code that opens the market, plus a post to go with it. On a phone the share sheet sends it to any app, and **Post on X** opens X with the text and link ready. |
 | **Sign in your way** | A NEAR wallet (a signed message, no transaction) or an email or Ethereum wallet. |
 
 <table>
   <tr>
-    <td><img src="docs/images/research.png" alt="A research report with sources" width="430"></td>
-    <td><img src="docs/images/journal.png" alt="The Journal comparing forecasts with the market" width="430"></td>
+    <td><img src="docs/images/market.png" alt="A market page with the candidates, the chart and the trade card" width="430"></td>
+    <td><img src="docs/images/portfolio.png" alt="The Portfolio with positions, claim, share and withdraw" width="430"></td>
   </tr>
   <tr>
-    <td align="center"><b>Research with sources</b></td>
-    <td align="center"><b>The Journal</b>: your forecast next to the market, and what changed</td>
+    <td align="center"><b>A market page</b>: the exact question, live prices and the trade card</td>
+    <td align="center"><b>The Portfolio</b>: positions, claim, share and withdraw (sample data)</td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/journal.png" alt="The Journal comparing forecasts with the market" width="430"></td>
+    <td><img src="docs/images/share-card.png" alt="A share card for a call that came in" width="430"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>The Journal</b>: your forecast next to the market, and what changed (sample data)</td>
+    <td align="center"><b>A share card</b>: a call that came in (sample data)</td>
   </tr>
 </table>
-
-## What works today
-
-This table separates what has been run from what has not. Nothing here is claimed without a check.
-
-| Feature | Status |
-| --- | --- |
-| Market board, market pages, chart, rules, live orders | **Verified** on the live site |
-| Trade preview and location check | **Verified**: matches an independent calculation from the raw order book |
-| AI research with sources | **Verified** on the live site, including the free limit and a daily spending cap |
-| Forecasts, Journal comparison with the market, sharing, deleting | **Verified** on the live site; accounts cannot see each other's data (tested) |
-| Scoring a forecast when its market resolves | **Tested**; not yet seen on the live site because it needs a market to resolve |
-| Add money price check | **Verified** against Rhea's live service: about $24.95 back for $25 from Ethereum or Base. Nothing is sent |
-| Email sign-in and the wallet made for you | **Verified** on the live site |
-| NEAR wallet sign-in | **Partly verified**: the signed-message and key checks are tested; a sign-in with a real wallet app on mainnet has not been recorded |
-| Trading setup (trading account and permission) | **Built**; the first run from a supported location is not yet recorded. Trading is blocked from the address the project was tested from |
-| Placing orders | **Built in test mode.** Clue re-checks the live orders, works out the worst price it will accept, and signs the order with your wallet, but sends nothing until real orders are switched on. Not yet run with real money. See [docs/TRADING_PLAN.md](docs/TRADING_PLAN.md) |
-| Share card | **Built.** After an order fills, **Share this call** draws a 16:9 picture of the call on your own phone (question, side, price, what it pays if it lands) with a code that opens the market, and writes a post to go with it in plain words, which you can edit. On a phone the share sheet sends the picture and text to any app; **Post on X** opens X with the text and link ready; the card can also be saved or the text copied. Win, loss and live versions are built but wait for positions, which are not built yet |
-| Portfolio | **Built.** Your total (cash plus what you hold), each position with shares, entry and current price, value and profit or loss, a Share button on every position (open, won or lost versions of the card), your history, **Claim** for ended markets you called (one at a time or **Claim all**), and an **Open orders** tab to see orders waiting on a market and **Cancel** them (one or all), all with live steps. Read from Polymarket's public data service for your own trading account. and **Withdraw**, which sends your cash out as USDC to an address you enter on Base, Ethereum, Arbitrum, Optimism or Polygon (full address shown, a tick box unless it is your own Clue wallet, live steps, delivery tracked through Polymarket's bridge). **Claim, Cancel and Withdraw have not yet been run for real.** |
-| Putting money in from NEAR or another chain | **Built; prices and deposit addresses verified against the live NEAR Intents service** (2 wNEAR gives about $6.94 of USDC in about 24 seconds; 5 USDC on Base gives about $4.99). A real deposit from this screen has not been recorded yet. Direct deposits from Solana or Polygon use Polymarket's own deposit service and are shown in the same panel. |
-| Alerts when evidence changes, public profiles | **Not built** |
 
 ## Try it in five minutes
 
@@ -86,24 +73,15 @@ Open **https://www.oncluemarket.xyz**. Nothing needs signing in until step 5.
 1. **See the markets.** *You should see* cards with chances and Yes/No buttons, and a "Live prices" time.
 2. **Open one.** Click any card, for example *Democratic Presidential Nominee 2028*. *You should see* the candidates ranked by probability, a price chart you can hover, and tabs for **Rules** and **Live orders**.
 3. **Read how it resolves.** Open the **Rules** tab. *You should see* the market's own wording and who decides it.
-4. **Preview a trade.** In the **Trade** card enter an amount. *You should see* shares, price, estimated fee and win/lose amounts. The button says "not available yet" on purpose.
+4. **Size a trade.** In the **Trade** card pick Yes or No and enter an amount. *You should see* shares, price, fee and win/lose amounts.
 5. **Sign in.** Tap **Sign in** and choose a NEAR wallet or email. With email, you get a code and then a wallet of your own. *You should see* a round profile icon in the corner; tap it for your wallet address, Copy, Journal and Disconnect.
 6. **Research.** Open the research box on a market, or **Ask Clue**, and tap **Research with sources**. *You should see* a report with links you can open, and "N of 2 free researches left today".
 7. **Forecast.** Set your probability, write why and what would change your mind, and tap **Save forecast**. *You should see* it in the **Journal** next to the market's price.
-8. **Check the price of adding money.** On a market page find **Add money**, pick where your money is, and tap **See what I'd get**. *You should see* what you would receive, the fees and the time. Nothing is sent.
+8. **Add money.** In the Trade card open **Add money**, choose **NEAR & other chains**, pick a coin and an amount, and tap **See what I'd get**. *You should see* what you would receive and how long it takes. **Get my deposit address** then gives you the address to send to.
+9. **Trade.** With cash in your account, tap **Review my order**, check the box, and place it. *You should see* live steps and then the result.
+10. **Open your Portfolio.** *You should see* your cash, your positions and your history, with **Claim**, **Cancel** and **Withdraw** where they apply.
 
-<table>
-  <tr>
-    <td><img src="docs/images/market.png" alt="A market page with the candidates, the chart and the trade card" width="430"></td>
-    <td><img src="docs/images/phone.png" alt="The home page on a phone" width="200"></td>
-    <td><img src="docs/images/add-money.png" alt="The Add money price check" width="200"></td>
-  </tr>
-  <tr>
-    <td align="center"><b>A market page</b>: the exact question, live prices and the trade card (the location line shows where the screenshot was taken, a US address where trading is not available)</td>
-    <td align="center"><b>On a phone</b></td>
-    <td align="center"><b>Add money</b>: a price, nothing sent</td>
-  </tr>
-</table>
+<p align="center"><img src="docs/images/phone.png" alt="The home page on a phone" width="260"></p>
 
 ## Quick start
 
@@ -115,7 +93,7 @@ npm install
 npm run preview            # http://127.0.0.1:3000
 ```
 
-With no keys set, the markets, charts, live orders and trade preview work. Research needs `NEAR_AI_API_KEY`, the Add money price check needs `RHEA_API_KEY`, and email sign-in needs `PRIVY_APP_ID`. Data is stored in a local SQLite file under `.clue-data/` (not encrypted; use only test data).
+With no keys set, the markets, charts, live orders and the trade card work. Research needs `NEAR_AI_API_KEY`, the Add money price check needs `RHEA_API_KEY`, and email sign-in needs `PRIVY_APP_ID`. Data is stored in a local SQLite file under `.clue-data/` (not encrypted; use only test data).
 
 Run the tests from the `clue-agent` folder:
 
@@ -136,7 +114,7 @@ Settings (names only; never commit values):
 | `POLYMARKET_BUILDER_API_KEY`, `_SECRET`, `_PASSPHRASE`, `_CODE` | Our builder account for trading. Used only on the server to sign trading setup requests; never sent to the browser |
 | `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | Postgres and auth, for a hosted deployment |
 | `CLUE_HOSTED`, `CLUE_SERVICE_HOST`, `CLUE_SIGNUP_TOKEN` | Hosted-mode switches |
-| `CLUE_ORDERS_LIVE` | Set to `1` to let orders actually be sent. Off by default: orders are checked and signed, then discarded |
+| `CLUE_ORDERS_LIVE`, `CLUE_ORDERS_LIVE_ADDRESSES` | `CLUE_ORDERS_LIVE=1` lets orders be sent for everyone. `CLUE_ORDERS_LIVE_ADDRESSES` is a comma-separated list of wallet addresses that can send real orders while everyone else sees the review step only |
 | `CLUE_PUBLIC_ORIGINS` | https addresses allowed to sign in (list them all, comma-separated) |
 
 ## How it works
@@ -200,13 +178,10 @@ The app's own README, with a file-by-file table, is in [clue-agent/README.md](cl
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. To report a vulnerability, follow [SECURITY.md](SECURITY.md); please do not open a public issue for one.
 
-## Limitations
+## Good to know
 
 - Clue is not a trading venue, an oracle or financial advice. A forecast here is not a trade.
-- Trading is blocked or limited in many countries, including the US and UK. Clue checks the visitor's own location and never helps get around it.
-- AI research can be wrong, out of date or manipulated by hostile text. Check the sources.
-- Placing orders and sending money from other chains are not built (see above).
-- Data stored by the local preview is not encrypted. The hosted service uses Postgres.
+- Trading follows Polymarket's own location rules. Clue checks the visitor's own location and never helps get around it.
 
 ## License
 
