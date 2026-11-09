@@ -131,7 +131,7 @@ Settings (names only; never commit values):
 | `PRIVY_APP_ID`, `PRIVY_APP_SECRET` | Email and wallet sign-in, and the wallet made for email users. The secret is used by the server to look up a user's wallet |
 | `RHEA_API_KEY` | Prices for the Add money check |
 | `ONECLICK_JWT` | Optional partner key for NEAR Intents' 1Click service (lowers its fee). Without it, funding still works |
-| `CLUE_FUND_MAX_USD` | The most that can be sent in one funding, in dollars (default 500) |
+| `CLUE_FUND_MAX_USD` | The most that can be sent in one funding, in dollars. Default 50,000, which is where Polymarket's own guide advises another bridge |
 | `POLYMARKET_BUILDER_API_KEY`, `_SECRET`, `_PASSPHRASE`, `_CODE` | Our builder account for trading. Used only on the server to sign trading setup requests; never sent to the browser |
 | `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | Postgres and auth, for a hosted deployment |
 | `CLUE_HOSTED`, `CLUE_SERVICE_HOST`, `CLUE_SIGNUP_TOKEN` | Hosted-mode switches |

@@ -694,7 +694,8 @@ async function mountTicket(box, ctx) {
       refund.placeholder = x.refundKind === "near" ? "yourname.near" : x.refundKind === "sol" ? "Your Solana address" : "0x…";
       refundHint.textContent = x.refundKind === "near" ? "Your NEAR account. It has to exist." : x.refundKind === "evm" ? "Your wallet. It is filled in for you." : "A Solana address you control.";
     }
-    function drawHint() { const u = usdOf(); hint.textContent = u > 0 ? `About $${u.toFixed(2)}. The smallest amount is about $3.` : "The smallest amount is about $3."; }
+    let lim = { minUsd: 2.5, maxUsd: 50000 };
+    function drawHint() { const u = usdOf(), floor = `The smallest amount is about $${lim.minUsd.toFixed(2)}.`; hint.textContent = u > 0 ? `About $${u.toFixed(2)}. ${floor}` : floor; }
     const stop = () => { if (timer) { clearInterval(timer); timer = null; } };
 
     async function ask(dry) {
@@ -756,7 +757,7 @@ async function mountTicket(box, ctx) {
 
     out.replaceChildren(el("p", { class: "muted small", text: "Loading what you can send…" }));
     api("/api/fund/intents/assets").then((d) => {
-      assets = d.assets || [];
+      assets = d.assets || []; if (d.limits) lim = d.limits;
       if (!assets.length) { out.replaceChildren(el("p", { class: "status err", text: "Adding money from other chains is not available right now. Try again in a minute." })); return; }
       const label = (x) => `${x.symbol === "wNEAR" ? "wNEAR (wrapped NEAR)" : x.symbol} on ${x.chainName}`;
       select.replaceChildren(...assets.map((x) => el("option", { value: x.assetId, text: label(x) })));
