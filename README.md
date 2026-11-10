@@ -180,11 +180,6 @@ The app's own README, with a file-by-file table, is in [clue-agent/README.md](cl
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. To report a vulnerability, follow [SECURITY.md](SECURITY.md); please do not open a public issue for one.
 
-## Good to know
-
-- Clue is not a trading venue, an oracle or financial advice. A forecast here is not a trade.
-- Trading follows Polymarket's own location rules. Clue checks the visitor's own location and never helps get around it.
-
 ## License
 
 [MIT](LICENSE)

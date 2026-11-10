@@ -1308,17 +1308,17 @@ function mountWorkspace(container, ctx) {
   const histBox = el("div", { class: "hist" });
   const field = (label, hint, input) => el("label", { class: "field" }, el("span", { text: label }), hint && el("small", { text: hint }), input);
 
-  const refLine = market ? el("p", { class: "ref" }, `Market last traded at ${pct(market.lastTradePrice, 0)}. That is a price, not the truth.`) : null;
+  const refLine = market ? el("p", { class: "ref" }, `The market is at ${pct(market.lastTradePrice, 0)}.`) : null;
 
   const step1 = el("section", { class: "step active" },
     el("div", { class: "step-title" }, el("span", { class: "step-n", text: "1" }), "Research it"),
-    el("p", { class: "muted small", text: market ? "Clue searches the web for evidence for and against. The market’s own rules still decide how it resolves." : "Clue searches the web for evidence for and against, and says when evidence is thin." }),
+    el("p", { class: "muted small", text: market ? "Clue searches the web for evidence for and against." : "Clue searches the web for evidence for and against, and says when evidence is thin." }),
     el("label", { class: "field" }, el("span", { text: "Your question" }), q),
     el("div", { class: "actions" }, researchBtn), allowLine, rStatus, reportBox);
 
   const step2 = el("section", { class: "step" },
     el("div", { class: "step-title" }, el("span", { class: "step-n", text: "2" }), "What do you think?"),
-    el("p", { class: "muted small", text: "Private to you. This is a forecast, not a trade." }),
+    el("p", { class: "muted small", text: "Private to you." }),
     el("div", { class: "field" }, el("span", { text: `Chance that ${market ? `“${(ctx.outcome ? ctx.outcome() : "Yes")}”` : "it"} happens` }), el("div", { class: "prob" }, range, out), refLine),
     field("Why do you think so?", null, why),
     field("Evidence for", null, pro),
@@ -1340,9 +1340,9 @@ function mountWorkspace(container, ctx) {
     renderAnswer(text, r.content, r.sources || []);
     const more = el("button", { class: "btn small ghost", type: "button", text: "Read full research", onclick: () => { const c = text.classList.toggle("clamp"); more.textContent = c ? "Read full research" : "Show less"; } });
     reportBox.replaceChildren(
-      el("span", { class: "label" }, "AI-generated · check the sources"),
+      el("span", { class: "label" }, "Sources"),
       sourceChips(r.sources || []), text, more,
-      el("p", { class: "muted small", style: "margin-top:8px", title: `Written by ${r.model}`, text: `Written by AI · ${when(r.retrievedAt)}. It can be wrong or out of date, so check the sources. It does not decide how a market settles.` }));
+      el("p", { class: "muted small", style: "margin-top:8px", title: `Written by ${r.model}`, text: `Researched ${when(r.retrievedAt)}.` }));
     reportBox.hidden = false;
   }
 
@@ -1600,8 +1600,8 @@ async function sharedView(shareId) {
     app.replaceChildren(el("div", { class: "ask-page" },
       el("p", { class: "muted small", text: `Shared research · ${when(d.publishedAt)}` }),
       el("h1", { text: d.snapshot.question }),
-      el("div", { class: "card pad", style: "margin-top:20px" }, el("span", { class: "label", style: "color:var(--brand-text);font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase", text: "AI-generated · check the sources" }), sourceChips(d.snapshot.sources || []), text),
-      el("p", { class: "note", text: "This is a copy that its author chose to share. It is not the full story, and their private forecasts are not included." })));
+      el("div", { class: "card pad", style: "margin-top:20px" }, el("span", { class: "label", style: "color:var(--brand-text);font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase", text: "Sources" }), sourceChips(d.snapshot.sources || []), text),
+      el("p", { class: "note", text: "Shared by its author. Their private forecasts stay private." })));
   } catch (e) { app.replaceChildren(errBox("Shared research unavailable", e.message)); }
 }
 
