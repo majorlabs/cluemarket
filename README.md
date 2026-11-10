@@ -83,7 +83,7 @@ Open **https://www.oncluemarket.xyz**. Nothing needs signing in until step 5.
 
 <p align="center"><img src="docs/images/phone.png" alt="The home page on a phone, with the tab bar at the bottom" width="260"></p>
 
-On a phone, Markets, Ask Clue, Portfolio and Journal sit in a tab bar at the bottom of the screen, so every page is one tap away. Clue comes in a dark and a light look, and the sun or moon button in the header switches between them.
+On a phone, Markets, Ask Clue, Portfolio and Journal sit in a tab bar at the bottom of the screen, so every page is one tap away. Clue opens in its light look, and there's a dark one too, and the sun or moon button in the header switches between them.
 
 ## Quick start
 
@@ -179,11 +179,6 @@ The app's own README, with a file-by-file table, is in [clue-agent/README.md](cl
 ## Contributing and security
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. To report a vulnerability, follow [SECURITY.md](SECURITY.md); please do not open a public issue for one.
-
-## Good to know
-
-- Clue is not a trading venue, an oracle or financial advice. A forecast here is not a trade.
-- Trading follows Polymarket's own location rules. Clue checks the visitor's own location and never helps get around it.
 
 ## License
 
