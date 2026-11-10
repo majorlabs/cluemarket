@@ -26,6 +26,13 @@ const ai = http.createServer((req, res) => {
       chunk({ choices: [{ delta: { content: 'Answer: not yet clear, but the latest report from' }, finish_reason: 'length' }] });
       return res.end('data: [DONE]\n\n');
     }
+    if (mode === 'stall') {                                                                           // the model searches, starts answering, then goes quiet
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { nearai_tool_result: { status: 'ok', output: 'https://example.org/evidence' } } }] })}\n\n`);
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'The evidence so far' } }] })}\n\n`);
+      setTimeout(() => res.end(), 8000);
+      return;
+    }
     if (mode === 'preamble') {                                                                        // the model says what it will do, searches, then answers
       res.writeHead(200, { 'Content-Type': 'text/event-stream' });
       const chunk = (o) => res.write(`data: ${JSON.stringify(o)}\n\n`);
@@ -47,7 +54,7 @@ const ai = http.createServer((req, res) => {
 await new Promise((r) => ai.listen(0, '127.0.0.1', r));
 const dir = await mkdtemp(join(tmpdir(), 'clue-rj-'));
 const port = 31000 + Math.floor(Math.random() * 10000), base = `http://127.0.0.1:${port}`;
-const env = { ...process.env, PORT: String(port), CLUE_DATA_DIR: dir, NEAR_AI_API_KEY: 'k', NEAR_AI_BASE: `http://127.0.0.1:${ai.address().port}/v1`, CLUE_FREE_RESEARCH_PER_DAY: '10', CLUE_AI_DAILY_USD: '5' };
+const env = { ...process.env, PORT: String(port), CLUE_DATA_DIR: dir, NEAR_AI_API_KEY: 'k', NEAR_AI_BASE: `http://127.0.0.1:${ai.address().port}/v1`, CLUE_FREE_RESEARCH_PER_DAY: '10', CLUE_AI_DAILY_USD: '5', CLUE_RESEARCH_DEADLINE_MS: '4000' };
 for (const k of ['DATABASE_URL', 'BETTER_AUTH_URL', 'BETTER_AUTH_SECRET']) delete env[k];
 const server = spawn(process.execPath, ['server.mjs'], { env, stdio: process.env.DEBUG_SERVER ? 'inherit' : 'ignore' });
 after(async () => { server.kill(); await new Promise((r) => server.once('exit', r)); ai.close(); await rm(dir, { recursive: true, force: true }); });
@@ -157,4 +164,16 @@ test('an answer that ran out of room is tried again, not saved half-written', as
   assert.equal(j.status, 'done');
   assert.match(j.content, /Evidence is thin/);
   assert.doesNotMatch(j.content, /latest report from/);
+});
+
+test('an answer that never finishes stops at the deadline, says so plainly and costs no free research', async () => {
+  const cookie = signup('jade');
+  mode = 'stall';
+  const { researchId } = await (await start(cookie)).json();
+  let j; for (let i = 0; i < 100; i++) { j = await (await check(cookie, researchId)).json(); if (j.status !== 'running') break; await new Promise((r) => setTimeout(r, 200)); }
+  mode = 'slow';
+  assert.equal(j.status, 'failed');
+  assert.match(j.error, /taking longer than usual/);
+  const a = await (await fetch(base + '/api/research/allowance', { headers: { Cookie: cookie } })).json();
+  assert.equal(a.usedToday, 0);
 });

@@ -1354,7 +1354,7 @@ function mountWorkspace(container, ctx) {
     try {
       const start = await post("/api/research", { question, market: marketRef && marketRef.id ? { id: marketRef.id } : null });
       let d = null, hiccups = 0;
-      for (let i = 0; i < 100 && !d; i++) {
+      for (let i = 0; i < 180 && !d; i++) {
         await new Promise((r) => setTimeout(r, 3000));
         try {
           const j = await api(`/api/research/${encodeURIComponent(start.researchId)}`);
