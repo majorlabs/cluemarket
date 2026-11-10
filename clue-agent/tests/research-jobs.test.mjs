@@ -19,6 +19,21 @@ const ai = http.createServer((req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/event-stream' });
       res.write('data: {"choices":[{"delta":{"content":"Evidence is th'); return res.end();            // the answer is cut off mid-line
     }
+    if (mode === 'length-once' && calls % 2 === 1) {                                                  // the model ran out of room mid-answer
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      const chunk = (o) => res.write(`data: ${JSON.stringify(o)}\n\n`);
+      chunk({ choices: [{ delta: { nearai_tool_result: { status: 'ok', output: 'https://example.org/evidence' } } }] });
+      chunk({ choices: [{ delta: { content: 'Answer: not yet clear, but the latest report from' }, finish_reason: 'length' }] });
+      return res.end('data: [DONE]\n\n');
+    }
+    if (mode === 'preamble') {                                                                        // the model says what it will do, searches, then answers
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      const chunk = (o) => res.write(`data: ${JSON.stringify(o)}\n\n`);
+      chunk({ choices: [{ delta: { content: "I'll search for current context on this question." } }] });
+      chunk({ choices: [{ delta: { nearai_tool_result: { status: 'ok', output: 'https://example.org/evidence' } } }] });
+      chunk({ choices: [{ delta: { content: 'Evidence is mixed: https://example.org/evidence' }, finish_reason: 'stop' }] });
+      return res.end('data: [DONE]\n\n');
+    }
     setTimeout(() => {
       res.writeHead(200, { 'Content-Type': 'text/event-stream' });
       const chunk = (o) => res.write(`data: ${JSON.stringify(o)}\n\n`);
@@ -120,4 +135,26 @@ test('an answer that is always cut off fails plainly and costs no free research'
   assert.match(j.error, /didn.t come back complete/);
   const a = await (await fetch(base + '/api/research/allowance', { headers: { Cookie: cookie } })).json();
   assert.equal(a.usedToday, 0);
+});
+
+test('only what the model writes after it searches is kept as the answer', async () => {
+  const cookie = signup('hana');
+  mode = 'preamble';
+  const { researchId } = await (await start(cookie)).json();
+  const j = await untilFinished(cookie, researchId);
+  mode = 'slow';
+  assert.equal(j.status, 'done');
+  assert.match(j.content, /^Evidence is mixed/);
+  assert.doesNotMatch(j.content, /I'll search/);
+});
+
+test('an answer that ran out of room is tried again, not saved half-written', async () => {
+  const cookie = signup('ivan');
+  mode = 'length-once'; calls = 0;                                               // the next request is the first of a pair: it runs out of room
+  const { researchId } = await (await start(cookie)).json();
+  const j = await untilFinished(cookie, researchId);
+  mode = 'slow';
+  assert.equal(j.status, 'done');
+  assert.match(j.content, /Evidence is thin/);
+  assert.doesNotMatch(j.content, /latest report from/);
 });
