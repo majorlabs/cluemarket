@@ -83,7 +83,7 @@ Open **https://www.oncluemarket.xyz**. Nothing needs signing in until step 5.
 
 <p align="center"><img src="docs/images/phone.png" alt="The home page on a phone, with the tab bar at the bottom" width="260"></p>
 
-On a phone, Markets, Ask Clue, Portfolio and Journal sit in a tab bar at the bottom of the screen, so every page is one tap away. Clue comes in a dark and a light look, and the sun or moon button in the header switches between them.
+On a phone, Markets, Ask Clue, Portfolio and Journal sit in a tab bar at the bottom of the screen, so every page is one tap away. Clue opens in its light look, and there's a dark one too, and the sun or moon button in the header switches between them.
 
 ## Quick start
 
