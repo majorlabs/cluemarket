@@ -38,3 +38,9 @@ test('lookalikes and tricks do not pass', () => {
 test('no sources means no links at all', () => {
   assert.equal(cleanAnswer('go to https://anything.example/x', []), `go to ${REMOVED}`);
 });
+
+test('a markdown link to a page that was not a search result keeps its words and loses the address and the notice', () => {
+  const out = cleanAnswer('Fortune had it at $74,260 ([fortune.com](https://fortune.com/x)). CoinGecko ([coingecko.com](https://www.coingecko.com/en/coins/bitcoin)).', ['https://www.coingecko.com/en/coins/bitcoin']);
+  assert.equal(out, 'Fortune had it at $74,260 fortune.com. CoinGecko ([coingecko.com](https://www.coingecko.com/en/coins/bitcoin)).');
+  assert.doesNotMatch(out, /link removed/);
+});

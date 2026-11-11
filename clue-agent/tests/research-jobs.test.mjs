@@ -195,6 +195,7 @@ test('the AI is asked for a short answer in a fixed layout, not a long report', 
   const { researchId } = await (await start(cookie)).json();
   await untilFinished(cookie, researchId);
   assert.match(lastPrompt, /under 200 words/);
+  assert.match(lastPrompt, /For means evidence that the answer to the question is Yes/);
   assert.match(lastPrompt, /latest information/);
   assert.match(lastPrompt, /last 48 hours/);
   for (const h of ['## The short answer', '## For', '## Against', '## What to watch', '## How sure']) assert.ok(lastPrompt.includes(h), h);
