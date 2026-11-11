@@ -1051,12 +1051,13 @@ async function mountTicket(box, ctx) {
   // Before a deposit address is shown, read the real trading account from the wallet and fix the saved one if it differs.
   // This is the one place a wrong address would cost money, so it is checked, not trusted.
   async function confirmAccount(say) {
-    say("Checking your trading account…");
+    if (tradingSetup && tradingSetup.confirmedFor === user.id) return;                  // already checked on this page, so a second tap is quick
+    say("Checking your trading account. This can take a few seconds…");
     await loadTrading();
     const r = await window.clueTrading.balance();
-    if (!r.ok) throw new Error(r.error);
+    if (!r.ok) throw new Error(r.detail ? `${r.error} (${r.detail})` : r.error);
     if (isAddr(r.wallet) && r.wallet.toLowerCase() !== String(tradingSetup.wallet || "").toLowerCase()) tradingSetup = { ...tradingSetup, wallet: r.wallet, signer: r.signer };
-    tradingSetup = { ...tradingSetup, balance: r.balance }; rememberSetup(user.id, tradingSetup);
+    tradingSetup = { ...tradingSetup, balance: r.balance, confirmedFor: user.id }; rememberSetup(user.id, tradingSetup);
   }
 
   // ---- Adding money from NEAR or any other chain, carried by NEAR Intents ----
