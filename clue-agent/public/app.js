@@ -1337,7 +1337,8 @@ function mountWorkspace(container, ctx) {
   if (state.report) markDone();
 
   function showReport(r) {
-    const long = String(r.content || "").length > 1600;                 // a short answer is shown whole, a long one is folded
+    const readable = String(r.content || "").replace(/\(?\[[^\]]*\]\([^)]*\)\)?|https?:\/\/\S+/g, "x");   // a link counts as one character, since it shows as a short site name
+    const long = readable.length > 2200;                                    // a short answer is shown whole, a long one is folded
     const text = el("div", { class: long ? "report-text clamp" : "report-text" });
     renderAnswer(text, r.content, r.sources || []);
     const more = long ? el("button", { class: "btn small ghost", type: "button", text: "Read full research", onclick: () => { const c = text.classList.toggle("clamp"); more.textContent = c ? "Read full research" : "Show less"; } }) : null;
