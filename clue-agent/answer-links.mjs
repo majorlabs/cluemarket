@@ -12,9 +12,13 @@ function key(raw) {
   } catch { return null; }
 }
 
+const MD_LINK = /\(?\[([^\]\n]*)\]\((https?:\/\/[^)\s]+)\)\)?/g;
+
 export function cleanAnswer(content, sources) {
   const allowed = new Set((sources || []).map(key).filter(Boolean));
-  return String(content).replace(URL_RE, (m) => {
+  // A "[site](address)" link whose address was not a search result keeps just its words, with no address and no notice.
+  const text = String(content).replace(MD_LINK, (m, label, url) => { const k = key(url); return k && allowed.has(k) ? m : label.trim(); });
+  return text.replace(URL_RE, (m) => {
     const tail = (m.match(TRAILING) || [''])[0];
     const k = key(m);
     return k && allowed.has(k) ? m : REMOVED + tail;
