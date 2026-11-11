@@ -868,3 +868,12 @@ dialog .btn{height:48px;border-radius:14px}
 .top-row::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4)}
 @media(max-width:1020px){.main-nav{transform:none;left:0;right:0;margin:0 auto}}
 @media(max-width:560px){.ev-head{align-items:flex-start;gap:14px}.ev-head .thumb{width:52px;height:52px;border-radius:14px}.ev-head h1{font-size:26px}}
+
+/* Research answers: a short verdict first, then For, Against, What to watch and How sure, easy to take in at a glance */
+.report-text .ans-h{font-size:11.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--brand-text);margin:18px 0 6px}
+.report-text .ans-h:first-child{margin-top:4px}
+.report-text .ans-h:first-child + p{font-size:17px;line-height:1.5;font-weight:600;letter-spacing:-.01em;margin:0 0 4px}
+.report-text .ans-list{list-style:none;padding:0;margin:0}
+.report-text .ans-list li{position:relative;padding:8px 0 8px 18px;margin:0;border-top:1px solid var(--line,rgba(127,127,127,.2));line-height:1.55}
+.report-text .ans-list li:first-child{border-top:0}
+.report-text .ans-list li::before{content:"";position:absolute;left:2px;top:15px;width:6px;height:6px;border-radius:50%;background:var(--brand-text)}
