@@ -10,9 +10,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 
-let mode = 'slow', calls = 0;
+let mode = 'slow', calls = 0, lastPrompt = '';
 const ai = http.createServer((req, res) => {
-  req.resume(); req.on('end', () => {
+  let raw = ''; req.on('data', (c) => { raw += c; }); req.on('end', () => {
+    try { lastPrompt = JSON.parse(raw).messages[0].content; } catch { /* not a chat request */ }
     if (mode === 'down') { res.writeHead(500); return res.end('{}'); }
     calls++;
     if (mode === 'cut-once' && calls % 2 === 1 || mode === 'cut-always') {
@@ -176,4 +177,14 @@ test('an answer that never finishes stops at the deadline, says so plainly and c
   assert.match(j.error, /taking longer than usual/);
   const a = await (await fetch(base + '/api/research/allowance', { headers: { Cookie: cookie } })).json();
   assert.equal(a.usedToday, 0);
+});
+
+test("the AI is told today's date, so a question without a year means this year", async () => {
+  const cookie = signup('kofi');
+  mode = 'slow';
+  const { researchId } = await (await start(cookie)).json();
+  await untilFinished(cookie, researchId);
+  const today = new Date().toISOString().slice(0, 10);
+  assert.ok(lastPrompt.includes(`Today is ${today}`), lastPrompt.slice(-400));
+  assert.ok(lastPrompt.includes(String(new Date().getUTCFullYear())));
 });
