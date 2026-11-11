@@ -3,6 +3,7 @@
 //
 // Orders and Polymarket requests go from this browser straight to Polymarket, so Polymarket sees the user's real location.
 // The only thing our server does is sign the builder paperwork for the relayer (/api/pm/sign); the builder secret never reaches here.
+import { withDeadline } from './deadline.mjs';
 import { createSecureClient, remoteBuilderSigning, forkEnvironmentConfig, production, OrderSide, OrderType } from '@polymarket/client';
 import { fetchBalanceAllowance } from '@polymarket/client/actions';
 import { signerFrom } from '@polymarket/client/viem';
@@ -230,11 +231,15 @@ window.clueTrading.depositMinimums = async function depositMinimums() {
 };
 
 window.clueTrading.balance = async function balance() {
-  try {
-    const client = await openClient();
-    const b = await fetchBalanceAllowance(client, { assetType: 'COLLATERAL' });
-    return { ok: true, balance: dollars(b.balance), signer: client.account && client.account.signer, wallet: client.account && client.account.wallet };
-  } catch (e) {
-    return { ok: false, error: 'Could not read your balance right now. Try again in a minute.' };
+  // Each chain server gets its own fifteen seconds, then the next one is tried, so a slow phone connection or a busy server
+  // cannot leave the screen waiting for ever.
+  let last = null;
+  for (const rpc of RPCS) {
+    try {
+      const read = async () => { const client = await openClient(rpc); return { client, b: await fetchBalanceAllowance(client, { assetType: 'COLLATERAL' }) }; };
+      const { client, b } = await withDeadline(read(), 15000, 'Reading your balance');
+      return { ok: true, balance: dollars(b.balance), signer: client.account && client.account.signer, wallet: client.account && client.account.wallet };
+    } catch (e) { last = e; console.warn('balance read failed, trying the next server', rpc, e); }
   }
+  return { ok: false, error: 'Could not read your balance right now. Try again in a minute.', detail: describe('balance', last) };
 };
