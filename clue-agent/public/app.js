@@ -57,9 +57,10 @@ function thumb(m, cls = "") {
 function renderAnswer(target, text, allowed) {
   target.replaceChildren();
   const inline = (parent, line) => {
+    line = line.replace(/\(?\[[^\]]*\]\((https?:\/\/[^)\s]+)\)\)?/g, "$1");               // "[site](address)" becomes just the address, shown as the site name
     line.split(/\*\*([^*\n]+)\*\*/).forEach((part, i) => {
       if (!part) return;
-      if (i % 2) { const b = el("strong"); appendLinked(b, part, allowed); parent.append(b); } else appendLinked(parent, part, allowed);
+      if (i % 2) { const b = el("strong"); appendLinked(b, part, allowed, true); parent.append(b); } else appendLinked(parent, part, allowed, true);
     });
   };
   let para = [], list = null;
@@ -76,14 +77,14 @@ function renderAnswer(target, text, allowed) {
   flushPara(); flushList();
 }
 function linkify(target, text, allowed) { target.replaceChildren(); appendLinked(target, text, allowed); }
-function appendLinked(target, text, allowed) {
+function appendLinked(target, text, allowed, short = false) {
   const ok = allowed ? new Set(allowed.map((u) => { try { const x = new URL(u); return (x.origin + x.pathname.replace(/\/+$/, '')).toLowerCase(); } catch { return ''; } })) : null;
   let last = 0;
   for (const m of text.matchAll(/https?:\/\/[^\s<>)\]"']+/g)) {
     target.append(text.slice(last, m.index));
     let v = m[0], tail = "";
     while (/[.,;:]$/.test(v)) { tail = v.slice(-1) + tail; v = v.slice(0, -1); }
-    try { const u = new URL(v); const k = (u.origin + u.pathname.replace(/\/+$/, '')).toLowerCase(); if (ok && !ok.has(k)) target.append(v); else target.append(el("a", { href: u.href, target: "_blank", rel: "noopener noreferrer", text: v })); } catch { target.append(v); }
+    try { const u = new URL(v); const k = (u.origin + u.pathname.replace(/\/+$/, '')).toLowerCase(); if (ok && !ok.has(k)) target.append(v); else target.append(el("a", { href: u.href, target: "_blank", rel: "noopener noreferrer", text: short ? `${u.hostname.replace(/^www\./, "")} ↗` : v })); } catch { target.append(v); }
     target.append(tail);
     last = m.index + m[0].length;
   }
@@ -1336,12 +1337,13 @@ function mountWorkspace(container, ctx) {
   if (state.report) markDone();
 
   function showReport(r) {
-    const text = el("div", { class: "report-text clamp" });
+    const long = String(r.content || "").length > 1600;                 // a short answer is shown whole, a long one is folded
+    const text = el("div", { class: long ? "report-text clamp" : "report-text" });
     renderAnswer(text, r.content, r.sources || []);
-    const more = el("button", { class: "btn small ghost", type: "button", text: "Read full research", onclick: () => { const c = text.classList.toggle("clamp"); more.textContent = c ? "Read full research" : "Show less"; } });
+    const more = long ? el("button", { class: "btn small ghost", type: "button", text: "Read full research", onclick: () => { const c = text.classList.toggle("clamp"); more.textContent = c ? "Read full research" : "Show less"; } }) : null;
     reportBox.replaceChildren(
       el("span", { class: "label" }, "Sources"),
-      sourceChips(r.sources || []), text, more,
+      sourceChips(r.sources || []), text, ...(more ? [more] : []),
       el("p", { class: "muted small", style: "margin-top:8px", title: `Written by ${r.model}`, text: `Researched ${when(r.retrievedAt)}.` }));
     reportBox.hidden = false;
   }

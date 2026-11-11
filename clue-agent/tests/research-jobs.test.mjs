@@ -188,3 +188,12 @@ test("the AI is told today's date, so a question without a year means this year"
   assert.ok(lastPrompt.includes(`Today is ${today}`), lastPrompt.slice(-400));
   assert.ok(lastPrompt.includes(String(new Date().getUTCFullYear())));
 });
+
+test('the AI is asked for a short answer in a fixed layout, not a long report', async () => {
+  const cookie = signup('lena');
+  mode = 'slow';
+  const { researchId } = await (await start(cookie)).json();
+  await untilFinished(cookie, researchId);
+  assert.match(lastPrompt, /under 200 words/);
+  for (const h of ['## The short answer', '## For', '## Against', '## What to watch', '## How sure']) assert.ok(lastPrompt.includes(h), h);
+});
