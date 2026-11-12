@@ -283,22 +283,28 @@ async function openAssistants(fresh) {
     el("div", { class: "acct-addr" }, el("code", { text: fresh.token }), copyBtn(fresh.token))) : null;
   agentShow("keys", [
     el("h2", { text: "Connect your AI" }),
+    el("p", { class: "muted", text: "In Claude or ChatGPT, add a custom connector with this address. A Clue sign-in opens: approve it and you are connected. No key to copy." }),
+    el("div", { class: "acct-addr" }, el("span", { class: "label", text: "Connector address" }), el("code", { text: MCP_URL }), copyBtn(MCP_URL)),
+    snippet("Claude Code", `claude mcp add --transport http clue ${MCP_URL}`),
+    el("details", { class: "mcp-adv", open: Boolean(fresh?.token) }, el("summary", { text: "Advanced: connect with a key" }),
     el("p", { class: "muted", text: "Use Clue from Claude, Codex, Cursor or any assistant that supports MCP. It can search markets, run research with your free daily allowance, save forecasts to your Journal and read your Portfolio. It cannot place trades or move money." }),
     shown,
     snippet("Claude Code plugin (research and trading)", `export CLUE_KEY=${key}\nclaude plugin marketplace add majorlabs/cluemarket\nclaude plugin install clue@clue`),
     snippet("Claude Code (research only)", `claude mcp add --transport http clue ${MCP_URL} --header "Authorization: Bearer ${key}"`),
     snippet("Codex (~/.codex/config.toml)", `[mcp_servers.clue]\nurl = "${MCP_URL}"\nhttp_headers = { "Authorization" = "Bearer ${key}" }`),
     snippet("Cursor and others (mcp.json)", JSON.stringify({ mcpServers: { clue: { url: MCP_URL, headers: { Authorization: `Bearer ${key}` } } } }, null, 2)),
-    el("h3", { text: "Your keys" }), list,
+    ),
+    el("h3", { text: "Connected AIs and keys" }), list,
     el("div", { class: "mcp-make" }, label, make),
     el("label", { class: "mcp-trade" }, trade, el("span", { text: "Can trade: lets this key ask for trades through Assistant trading, within your limits. Leave it off for research only." })),
     el("div", { class: "actions", "data-dialog-only": "1" }, el("button", { class: "btn ghost", type: "button", text: "Back", onclick: openAccountMenu }), el("button", { class: "btn ghost", type: "button", text: "Close", onclick: () => dialog.close() }))]);
   try {
     const { keys } = await api("/api/agent-keys");
     list.replaceChildren(...(keys.length ? keys.map((k) => el("div", { class: "mcp-key" },
-      el("div", {}, el("strong", { text: k.label }), el("span", { class: `mcp-scope ${k.canTrade ? "trade" : ""}`, text: k.canTrade ? "Can trade" : "Read only" }), el("div", { class: "muted small", text: `Made ${when(k.createdAt)}${k.lastUsedAt ? ` · last used ${when(k.lastUsedAt)}` : " · not used yet"}` })),
-      el("button", { class: "btn small", type: "button", style: "color:var(--no)", text: "Remove", onclick: async (ev) => { ev.currentTarget.disabled = true; try { await api(`/api/agent-keys/${k.id}`, { method: "DELETE" }); } catch { /* already gone */ } openAssistants(); } })))
-      : [el("p", { class: "muted", text: "No keys yet. Make one, then paste it into your assistant." })]));
+      el("div", {}, el("strong", { text: k.label }), el("span", { class: `mcp-scope ${k.canTrade ? "trade" : ""}`, text: k.canTrade ? "Can trade" : "Read only" }), k.connected ? el("span", { class: "mcp-scope", text: "Connected" }) : null, el("div", { class: "muted small", text: `Made ${when(k.createdAt)}${k.lastUsedAt ? ` · last used ${when(k.lastUsedAt)}` : " · not used yet"}` })),
+      el("button", { class: "btn small", type: "button", style: "color:var(--no)", text: k.connected ? "Disconnect" : "Remove", onclick: async (ev) => { ev.currentTarget.disabled = true; try { await api(`/api/agent-keys/${k.id}`, { method: "DELETE" }); } catch { /* already gone */ } openAssistants(); } })))
+      : [el("p", { class: "muted", text: "Nothing connected yet." })]),
+      keys.length ? el("button", { class: "btn small", type: "button", style: "color:var(--no)", text: "Disconnect all AIs", onclick: async (ev) => { if (!confirm("Disconnect every AI app and key from your account?")) return; ev.currentTarget.disabled = true; try { await api("/api/agent-keys", { method: "DELETE" }); } catch { /* try again */ } openAssistants(); } }) : null);
   } catch (e) { list.replaceChildren(el("p", { class: "err", text: e.message })); }
 }
 // Assistant trading: the person connects their own OutLayer agent wallet and sets their own limits. Their assistant trades
@@ -380,6 +386,7 @@ async function route() {
   if (parts[0] === "ask") { setNav("ask"); return askView(qs, stale); }
   if (parts[0] === "saved") { setNav("saved"); return savedView(parts[1], stale); }
   if (parts[0] === "agents") { setNav("agents"); return agentsView(); }
+  if (parts[0] === "connect") { setNav(""); return connectView(parts[1] || ""); }
   if (parts[0] === "docs") { setNav(""); return docsView(parts[1]); }
   if (parts[0] === "portfolio") { setNav("portfolio"); return portfolioView(stale); }
   if (parts[0] === "card") { setNav(""); return cardView(parts[1] || ""); }
@@ -439,18 +446,19 @@ const DOCS = [
   ["agents", "Agents: use Clue from your AI", [
     "Clue works inside Claude, Codex, Cursor and other AI assistants. You chat as you normally would, and your assistant uses Clue for you.",
     ["ul", "“How is my portfolio doing?”", "“Research the Fed's December decision and save my call at 70%.”", "“Make a PnL card for my biggest position.” (the card arrives as a picture in the chat)", "“What changed since my calls?” and “How good are my calls?”", "“Buy $5 of Yes on this market.” (with assistant trading switched on)"],
-    ["ol", "Open Agents and make a key. Leave Can trade off for research only.", "Copy the setup for your assistant: Claude Code, Codex, or Cursor and others.", "Ask away. The key works as you: your Journal, your Portfolio, your limits."],
+    ["ol", "In Claude or ChatGPT, open Settings, then Connectors, and add a custom connector with the address https://www.oncluemarket.xyz/api/mcp. In Claude Code, run: claude mcp add --transport http clue https://www.oncluemarket.xyz/api/mcp", "A Clue page opens. Sign in, choose whether it may also trade, and tap Approve.", "Ask away. It works as you: your Journal, your Portfolio, your limits. Disconnect it any time from Agents."],
+    "There is no key to copy. Apps that cannot sign in this way can use a key instead: open Agents, then Advanced: connect with a key."
     "For Claude Code, the Clue plugin adds everything in one install, with the commands /clue:research, /clue:portfolio, /clue:card, /clue:record, /clue:brief and /clue:trade:",
     ["code", "export CLUE_KEY=your_key\nclaude plugin marketplace add majorlabs/cluemarket\nclaude plugin install clue@clue"],
   ]],
   ["assistant-trading", "Assistant trading", [
     "Your assistant can trade for you with an agent wallet on OutLayer, NEAR's secure custody for AI agents. The wallet's keys stay in OutLayer's secure hardware, and you choose the limits.",
-    ["ol", "At app.outlayer.ai, open Custody, then Wallets, and create a wallet. In its policy, allow evm_sign, leave the other capabilities off, and save.", "In Clue, open Agents, then Assistant trading. Paste the wallet key (it starts with wk_), set your most per order and most per day, and switch it on.", "Make a key with Can trade ticked and install the Clue plugin.", "Ask your assistant for trading_status, fund the trading account it shows (or use Add money), and run setup_trading once.", "Ask for a trade. Your assistant shows you the market, the amount and the worst price, and waits for your yes."],
+    ["ol", "At app.outlayer.ai, open Custody, then Wallets, and create a wallet. In its policy, allow evm_sign, leave the other capabilities off, and save.", "In Clue, open Agents, then Assistant trading. Paste the wallet key (it starts with wk_), set your most per order and most per day, and switch it on.", "Connect your AI with “Also let it trade” ticked, or make a key with Can trade ticked for the Clue plugin.", "Ask your assistant for trading_status, fund the trading account it shows (or use Add money), and run setup_trading once.", "Ask for a trade. Your assistant shows you the market, the amount and the worst price, and waits for your yes."],
     "Every order is checked by Clue before your wallet signs it: it must fit your limits and be close to the live market price, or it is refused. Clue signs only Polymarket sign-in, orders and Polymarket's trading permissions. It never signs transfers or withdrawals. Orders are sent to Polymarket from your own computer.",
     "Everything your assistant asks for shows under Assistant trading, signed or refused, with the reason. Switch it off there at any time, remove the key, or freeze the wallet on OutLayer.",
   ]],
   ["safety", "How your money and keys are kept safe", [
-    ["ul", "Your trading wallet is yours. Clue never holds your money.", "Orders go from your own device or computer to Polymarket.", "Assistant keys are stored only as a fingerprint, and are shown once when made. Remove one at any time.", "Keys are read-only unless you tick Can trade.", "An OutLayer wallet key is stored sealed and is never shown again. Clue checks your limits and the live price on every order, and refuses anything else.", "Every request from your assistant is logged where you can see it."],
+    ["ul", "Your trading wallet is yours. Clue never holds your money.", "Orders go from your own device or computer to Polymarket.", "Connecting an AI is a sign-in you approve. Nothing to copy, and you can disconnect any app from Agents, or all of them at once.", "A connected AI is read-only unless you tick Also let it trade.", "An OutLayer wallet key is stored sealed and is never shown again. Clue checks your limits and the live price on every order, and refuses anything else.", "Every request from your assistant is logged where you can see it."],
   ]],
   ["faq", "Questions people ask", [
     ["ul", "Do I need crypto to start? No. Sign in with email or Google and add money from any of the supported chains.", "What does 39¢ mean? Traders put the outcome at about 39%. Each share pays $1 if it comes in.", "Why did my research take a while? Clue searches for the latest news first. Most answers take under a minute.", "My deposit has not arrived. It stays at the top of Add money with its status. If it cannot finish, it goes back to your refund address automatically.", "Can my AI spend more than I allow? No. Your limits per order and per day are checked by Clue before anything is signed, and your wallet only holds what you put in it."],
@@ -475,6 +483,37 @@ function docsView(section) {
     ...DOCS.map(([id, title, blocks]) => el("section", { class: "card docs-sec", id: `docs-${id}` }, el("h2", { text: title }), ...blocks.map(block))));
   app.replaceChildren(el("div", { class: "docs-page" }, toc, body));
   if (section) { const t = document.getElementById(`docs-${section}`); if (t) requestAnimationFrame(() => t.scrollIntoView({ block: "start" })); }
+}
+
+/* ---------- connect: an AI app asks to use Clue for this person ---------- */
+async function connectView(id) {
+  app.replaceChildren(el("p", { class: "loading", role: "status", text: "Opening the request…" }));
+  let r;
+  try { r = await api(`/api/oauth/request/${encodeURIComponent(id)}`); }
+  catch (e) { app.replaceChildren(el("div", { class: "card empty connect-card" }, el("h2", { text: "This request has expired" }), el("p", { class: "muted", text: "Go back to your AI app and connect Clue again." }))); return; }
+  const card = el("section", { class: "card connect-card" });
+  const head = [el("img", { src: "/assets/clue-mark.svg", alt: "", width: "48", height: "48" }), el("h1", { text: `Connect ${r.app} to Clue` }),
+    el("p", { class: "muted", text: `${r.app} is asking to use your Clue account. It will send you back to ${r.returnsTo} when you are done.` })];
+  if (!user) {
+    card.replaceChildren(...head, el("button", { class: "btn primary", type: "button", text: "Sign in to continue", onclick: () => openAccountDialog(`Sign in to connect ${r.app}.`) }));
+    app.replaceChildren(card);
+    document.addEventListener("clue:account", () => { if (location.hash.startsWith("#/connect/")) route(); }, { once: true });
+    return;
+  }
+  const trade = el("input", { type: "checkbox", "aria-label": "Also let it trade" });   // off unless the person ticks it, whatever the app asked for
+  const msg = el("p", { class: "err", role: "alert" });
+  const go = async (approve, ev) => {
+    card.querySelectorAll("button").forEach((b) => { b.disabled = true; }); ev.currentTarget.textContent = approve ? "Connecting…" : "Going back…";
+    try { const d = await post("/api/oauth/approve", { id, approve, canTrade: trade.checked }); location.href = d.redirect; }
+    catch (e) { msg.textContent = e.message; card.querySelectorAll("button").forEach((b) => { b.disabled = false; }); }
+  };
+  card.replaceChildren(...head,
+    el("div", { class: "connect-can" }, el("b", { text: `${r.app} will be able to` }),
+      el("ul", {}, ...["Search markets and read their chances", "Run research with your free daily allowance", "Save calls to your Journal and read it", "Read your Portfolio and make PnL cards"].map((t) => el("li", { text: t })))),
+    el("label", { class: "connect-trade" }, trade, el("span", {}, el("b", { text: "Also let it trade" }), el("small", { class: "muted", text: " Orders only within the limits you set under Agents, Assistant trading. It can never move money out." }))),
+    el("div", { class: "connect-actions" }, el("button", { class: "btn primary", type: "button", text: "Approve", onclick: (ev) => go(true, ev) }), el("button", { class: "btn", type: "button", text: "Cancel", onclick: (ev) => go(false, ev) })),
+    msg, el("p", { class: "muted small", text: "You can disconnect it at any time from Agents." }));
+  app.replaceChildren(card);
 }
 
 /* ---------- agents: use Clue from an AI assistant, and let it trade within your limits ---------- */

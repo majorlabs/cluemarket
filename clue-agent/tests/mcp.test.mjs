@@ -115,6 +115,6 @@ test('one person cannot remove another person\'s key, and keys are capped', asyn
   const k = (await site('POST', '/api/agent-keys', fay, {})).body;
   assert.equal((await site('DELETE', '/api/agent-keys/' + k.id, gus)).status, 404);
   assert.equal((await rpc(k.token, 'ping', {})).status, 200);
-  for (let i = 0; i < 4; i++) assert.equal((await site('POST', '/api/agent-keys', fay, {})).status, 201);
+  for (let i = 0; i < 19; i++) assert.equal((await site('POST', '/api/agent-keys', fay, {})).status, 201);   // up to 20, one per connected app
   assert.equal((await site('POST', '/api/agent-keys', fay, {})).status, 400);
 });

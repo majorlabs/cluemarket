@@ -4,23 +4,28 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 export const KEY_PREFIX = 'clue_ak_';
-export const MAX_KEYS = 5;
+export const MAX_KEYS = 20;
 const hash = (token) => createHash('sha256').update(String(token)).digest('hex');
 const looksLikeKey = (t) => typeof t === 'string' && t.startsWith(KEY_PREFIX) && /^[a-z0-9_]{40,80}$/.test(t);
 
-export async function createKey(store, userId, label, { now = new Date(), canTrade = false } = {}) {
+export async function createKey(store, userId, label, { now = new Date(), canTrade = false, clientId = null } = {}) {
   const name = String(label || 'My assistant').trim().slice(0, 60) || 'My assistant';
   const live = await store.all('SELECT id FROM agent_keys WHERE user_id=? AND revoked_at IS NULL', userId);
   if (live.length >= MAX_KEYS) throw Object.assign(new Error(`You can have up to ${MAX_KEYS} assistant keys. Remove one first.`), { status: 400 });
   const token = KEY_PREFIX + randomBytes(24).toString('hex');
   const id = randomUUID();
-  await store.run('INSERT INTO agent_keys (id,user_id,token_hash,label,created_at,can_trade) VALUES (?,?,?,?,?,?)', id, userId, hash(token), name, now.toISOString(), canTrade ? 1 : 0);
+  await store.run('INSERT INTO agent_keys (id,user_id,token_hash,label,created_at,can_trade,client_id) VALUES (?,?,?,?,?,?,?)', id, userId, hash(token), name, now.toISOString(), canTrade ? 1 : 0, clientId);
   return { id, label: name, token, canTrade: Boolean(canTrade), createdAt: now.toISOString() };
 }
 
 export async function listKeys(store, userId) {
-  return (await store.all('SELECT id, label, created_at, last_used_at, can_trade FROM agent_keys WHERE user_id=? AND revoked_at IS NULL ORDER BY created_at DESC', userId))
-    .map((r) => ({ id: r.id, label: r.label, canTrade: Boolean(r.can_trade), createdAt: r.created_at, lastUsedAt: r.last_used_at || null }));
+  return (await store.all('SELECT id, label, created_at, last_used_at, can_trade, client_id FROM agent_keys WHERE user_id=? AND revoked_at IS NULL ORDER BY created_at DESC', userId))
+    .map((r) => ({ id: r.id, label: r.label, canTrade: Boolean(r.can_trade), connected: Boolean(r.client_id), createdAt: r.created_at, lastUsedAt: r.last_used_at || null }));
+}
+
+/** Disconnects every AI the person has connected, at once. */
+export async function revokeAll(store, userId, { now = new Date() } = {}) {
+  return (await store.run('UPDATE agent_keys SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL', now.toISOString(), userId)).changes || 0;
 }
 
 export async function revokeKey(store, userId, id, { now = new Date() } = {}) {
