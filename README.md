@@ -34,18 +34,18 @@ Clue puts it in one place. Pick a real market, read exactly how it resolves, ask
 
 | | |
 | --- | --- |
-| **Explore markets** | A live board of real prediction-market questions with category tabs, search and sorting (trending, volume, new, ending soon). Prices are what traders are paying, shown as chances. They are not Clue's forecast. |
+| **Explore markets** | A live board of real prediction-market questions with category tabs, search and sorting (trending, volume, new, ending soon). Prices are what traders are paying, shown as chances. |
 | **Read the exact question** | Every market page shows the market's own rules, who decides it, a price chart (1 day to all time) and the live orders with spread and depth. |
-| **Research with sources** | Ask any question, with or without a market. AI on NEAR AI Cloud searches the web and returns an answer with source links. Only links the search actually returned are kept. Answers are labelled as AI-written. Everyone gets 2 free researches a day. |
+| **Research with sources** | Ask any question, with or without a market. AI on NEAR AI Cloud searches the web for the latest news and numbers and returns a short answer you can take in at a glance: the short answer, the evidence for and against, what to watch, and how sure it is, with every claim linked to its source. Only links the search actually returned are kept. Everyone gets 2 free researches a day. |
 | **Forecast privately** | Set your probability, write why, list evidence for and against, and say what would change your mind. Each save is a dated update, and earlier ones are kept. |
-| **Journal** | Every forecast records the market's price at that moment. The Journal compares it with the market whenever you open it: price moves, gaps, closing dates and the result. When a market resolves, your forecast is scored against the market's price at the time and you can write what you learned. It makes no claim about your skill until at least 5 forecasts have resolved. |
+| **Journal** | Every forecast records the market's price at that moment. The Journal compares it with the market whenever you open it: price moves, gaps, closing dates and the result. When a market resolves, your forecast is scored against the market's price at the time and you can write what you learned. |
 | **Share** | Publish your research (never your private forecast) as a public page, and remove it any time. |
-| **Add money** | Put money in your trading account from **NEAR or another chain**. Pick a coin you hold (wNEAR, USDC or USDT on NEAR, USDC, ETH or SOL on other chains), see the price, and get a one-time deposit address. **NEAR Intents** swaps it and delivers USDC on Polygon to your own Polymarket deposit address, with live status and a refund address if it cannot finish. You can also send USDC straight from Solana or Polygon. |
-| **A wallet made for you** | Sign in with just an email and Clue makes you a wallet. It belongs to you and Clue never holds its keys. The profile icon in the corner shows it, with Copy and Disconnect. |
+| **Add money** | Put money in your trading account from **NEAR or another chain**. Pick a coin you hold (wNEAR, USDC or USDT on NEAR, USDC, ETH or SOL on other chains), see the price, and get a one-time deposit address. **NEAR Intents** swaps it and delivers USDC on Polygon to your own Polymarket deposit address, with live status and a refund address if it cannot finish. Every deposit stays on screen until it lands, even after a refresh: how long it has been, and when and where it goes back if it cannot finish. A deposit sent earlier can be added by pasting its address. You can also send USDC straight from Solana or Polygon. |
+| **A wallet made for you** | Sign in with just an email or Google and Clue makes you a wallet. It belongs to you and Clue never holds its keys. The profile icon in the corner shows it, with Copy and Disconnect. |
 | **Trade** | Buy Yes or No on the same page. The trade card walks the live orders and shows the shares you get, the price, the fee, and what you win or lose. A review box shows the order before anything is sent, then live steps follow it until it fills. Orders match on Polymarket's order book and are signed by your own wallet. |
 | **Portfolio** | Your total (cash plus what you hold), every position with shares, entry and current price, value and profit or loss, and your history. **Claim** your winnings on ended markets you called, see and **Cancel** open orders, and **Withdraw** your cash as USDC to your own wallet on Base, Ethereum, Arbitrum, Optimism or Polygon. |
-| **Share a call** | Turn a call into a 16:9 card (live, won or lost) with a code that opens the market, plus a post to go with it. On a phone the share sheet sends it to any app, and **Post on X** opens X with the text and link ready. |
-| **Sign in your way** | A NEAR wallet (a signed message, no transaction) or an email or Ethereum wallet. |
+| **Share a call** | Turn a call into a 16:9 card (live, won or lost) with a code that opens the same market, so people who see it can trade alongside you, plus a post to go with it. On a phone the share sheet sends it to any app, and **Post on X** opens X with the text and link ready. |
+| **Sign in your way** | Email, Google, an Ethereum wallet, or a NEAR wallet (a signed message, no transaction). |
 
 <table>
   <tr>
@@ -54,15 +54,15 @@ Clue puts it in one place. Pick a real market, read exactly how it resolves, ask
   </tr>
   <tr>
     <td align="center"><b>A market page</b>: the exact question, live prices and the trade card</td>
-    <td align="center"><b>The Portfolio</b>: positions, claim, share and withdraw (sample data)</td>
+    <td align="center"><b>The Portfolio</b>: cash, positions, share and withdraw</td>
   </tr>
   <tr>
     <td><img src="docs/images/journal.png" alt="The Journal comparing forecasts with the market" width="430"></td>
-    <td><img src="docs/images/share-card.png" alt="A share card for a call that came in" width="430"></td>
+    <td><img src="docs/images/share-card.png" alt="A share card for a live call on the Vikings at 39 cents" width="430"></td>
   </tr>
   <tr>
-    <td align="center"><b>The Journal</b>: your forecast next to the market, and what changed (sample data)</td>
-    <td align="center"><b>A share card</b>: a call that came in (sample data)</td>
+    <td align="center"><b>The Journal</b>: your forecast next to the market, and what changed</td>
+    <td align="center"><b>A share card</b>: a live call, ready to post on X</td>
   </tr>
 </table>
 
@@ -74,10 +74,10 @@ Open **https://www.oncluemarket.xyz**. Nothing needs signing in until step 5.
 2. **Open one.** Click any card, for example *Democratic Presidential Nominee 2028*. *You should see* the candidates ranked by probability, a price chart you can hover, and tabs for **Rules** and **Live orders**.
 3. **Read how it resolves.** Open the **Rules** tab. *You should see* the market's own wording and who decides it.
 4. **Size a trade.** In the **Trade** card pick Yes or No and enter an amount. *You should see* shares, price, fee and win/lose amounts.
-5. **Sign in.** Tap **Sign in** and choose a NEAR wallet or email. With email, you get a code and then a wallet of your own. *You should see* a round profile icon in the corner; tap it for your wallet address, Copy, Journal and Disconnect.
-6. **Research.** Open the research box on a market, or **Ask Clue**, and tap **Research with sources**. *You should see* a report with links you can open, and "N of 2 free researches left today".
+5. **Sign in.** Tap **Sign in** and choose email, Google, a wallet, or a NEAR wallet. With email or Google you get a wallet of your own. *You should see* a round profile icon in the corner; tap it for your wallet address, Copy, Journal and Disconnect.
+6. **Research.** Open the research box on a market, or **Ask Clue**, and tap **Research with sources**. *You should see* a clock while it works, then a short answer with the evidence for and against, what to watch and how sure it is, with links you can open, and "N of 2 free researches left today".
 7. **Forecast.** Set your probability, write why and what would change your mind, and tap **Save forecast**. *You should see* it in the **Journal** next to the market's price.
-8. **Add money.** In the Trade card open **Add money**, choose **NEAR & other chains**, pick a coin and an amount, and tap **See what I'd get**. *You should see* what you would receive and how long it takes. **Get my deposit address** then gives you the address to send to.
+8. **Add money.** In the Trade card open **Add money**, choose **NEAR & other chains**, pick a coin and an amount, and tap **See what I'd get**. *You should see* what you would receive and how long it takes. **Get my deposit address** then gives you the address to send to, and the deposit stays at the top of Add money until it lands.
 9. **Trade.** With cash in your account, tap **Review my order**, check the box, and place it. *You should see* live steps and then the result.
 10. **Open your Portfolio.** *You should see* your cash, your positions and your history, with **Claim**, **Cancel** and **Withdraw** where they apply.
 
