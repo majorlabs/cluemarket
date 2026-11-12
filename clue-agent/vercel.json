@@ -45,6 +45,15 @@
           "value": "frame-ancestors 'none'"
         }
       ]
+    },
+    {
+      "source": "/(privy|trading|card|ticket).js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, stale-while-revalidate=86400"
+        }
+      ]
     }
   ]
 }
