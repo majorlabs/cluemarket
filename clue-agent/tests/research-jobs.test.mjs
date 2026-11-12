@@ -10,10 +10,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 
-let mode = 'slow', calls = 0, lastPrompt = '';
+let mode = 'slow', calls = 0, lastPrompt = '', lastBody = {};
 const ai = http.createServer((req, res) => {
   let raw = ''; req.on('data', (c) => { raw += c; }); req.on('end', () => {
-    try { lastPrompt = JSON.parse(raw).messages[0].content; } catch { /* not a chat request */ }
+    try { lastBody = JSON.parse(raw); lastPrompt = lastBody.messages[0].content; } catch { /* not a chat request */ }
     if (mode === 'down') { res.writeHead(500); return res.end('{}'); }
     calls++;
     if (mode === 'cut-once' && calls % 2 === 1 || mode === 'cut-always') {
@@ -32,6 +32,14 @@ const ai = http.createServer((req, res) => {
       res.write(`data: ${JSON.stringify({ choices: [{ delta: { nearai_tool_result: { status: 'ok', output: 'https://example.org/evidence' } } }] })}\n\n`);
       res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'The evidence so far' } }] })}\n\n`);
       setTimeout(() => res.end(), 8000);
+      return;
+    }
+    if (mode === 'lingers') {                                                                          // the whole answer arrives, then the model carries on calling tools
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      const chunk = (o) => res.write(`data: ${JSON.stringify(o)}\n\n`);
+      chunk({ choices: [{ delta: { nearai_tool_result: { status: 'ok', output: 'https://example.org/evidence' } } }] });
+      chunk({ choices: [{ delta: { content: '## The short answer\nIt is close to the line.\n## For\n- One thing for. [example.org](https://example.org/evidence)\n## Against\n- One thing against.\n## What to watch\n- The noon candle.\n## How sure\nNot very: the sources disagree by a few hundred dollars and none shows the deciding candle.' } }] });
+      setTimeout(() => res.end(), 9000);
       return;
     }
     if (mode === 'preamble') {                                                                        // the model says what it will do, searches, then answers
@@ -211,4 +219,29 @@ test('a run that goes quiet is stopped and tried once more, and the second try i
   assert.equal(j.status, 'done');
   assert.match(j.content, /Evidence is thin/);
   assert.equal(j.allowance.usedToday, 1);
+});
+
+test('a whole answer is taken as soon as it is written, even if the model carries on calling tools', async () => {
+  const cookie = signup('noor');
+  mode = 'lingers';
+  const t0 = Date.now();
+  const { researchId } = await (await start(cookie)).json();
+  let j; for (let i = 0; i < 100; i++) { j = await (await check(cookie, researchId)).json(); if (j.status !== 'running') break; await new Promise((r) => setTimeout(r, 100)); }
+  mode = 'slow';
+  assert.equal(j.status, 'done');
+  assert.match(j.content, /## How sure/);
+  assert.match(j.content, /deciding candle/);
+  assert.ok(Date.now() - t0 < 3500, `took ${Date.now() - t0}ms: it should not have waited for the stream to end or the deadline (4s)`);
+  assert.equal(j.allowance.usedToday, 1);
+});
+
+test('the AI is told to think only a little, because the search results do the work and thinking is what makes research slow', async () => {
+  const cookie = signup('omar');
+  mode = 'slow';
+  const { researchId } = await (await start(cookie)).json();
+  await untilFinished(cookie, researchId);
+  assert.equal(lastBody.reasoning_effort, 'low');
+  assert.ok(lastBody.max_tokens <= 2000, `max_tokens ${lastBody.max_tokens}`);
+  assert.deepEqual(lastBody.tools, [{ type: 'web_context_search' }]);
+  assert.equal(lastBody.stream, true);
 });
