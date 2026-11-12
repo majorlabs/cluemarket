@@ -53,5 +53,7 @@ export async function trackDeposit(store, userId, address, readStatus, describeA
     depositAddress: address, send: { symbol: a.symbol, chain: a.chain, amount: s.quote.sendAmount, usd: s.quote.sendUsd },
     receive: { amount: s.quote.receiveAmount }, refundTo: s.quote.refundTo, deadline: s.quote.deadline,
   }, { now: created, state: s.state });
+  // If it was added before with a later start time than NEAR Intents reports, the real, earlier time wins.
+  await store.run('UPDATE fund_deposits SET created_at=? WHERE user_id=? AND deposit_address=? AND created_at>?', created.toISOString(), userId, address, created.toISOString());
   return { tracked: true, state: s.state };
 }
