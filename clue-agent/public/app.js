@@ -191,6 +191,18 @@ function loadTradingScript() {
   }).catch((e) => { tradingScript = null; throw e; });
   return tradingScript;
 }
+// The add-on that grants the one permission multi-outcome markets need (trading-extra-client.js).
+let tradingExtra = null;
+function loadTradingExtra() {
+  tradingExtra ||= new Promise((resolve, reject) => { const s = el("script", { src: "/trading-extra.js" }); s.onload = resolve; s.onerror = () => reject(new Error("Could not load trading. Check your connection and try again.")); document.head.append(s); }).catch((e) => { tradingExtra = null; throw e; });
+  return tradingExtra;
+}
+async function ensurePermissions(say = () => {}) {
+  const wallet = await myTradingWallet().catch(() => null);
+  if (!wallet) return { ok: true };
+  await loadTradingExtra();
+  return window.clueTradingExtra.ensureNegRisk(wallet, () => say("Adding a trading permission this market needs (one time)…"));
+}
 function loadTrading() {
   tradingLoading ||= (async () => { await loadPrivy(); await loadTradingScript(); })().catch((e) => { tradingLoading = null; throw e; });
   return tradingLoading;
@@ -553,7 +565,8 @@ async function sendAgentTrade(t, say = () => {}) {
   try {
     const cfg = await api("/api/pm/config").catch(() => ({ ordersLive: false, builderCode: null }));
     say("Opening your trading account…"); await loadTrading();
-    res = await window.clueTrading.order({ assetId: t.tokenId, spend: t.amount, maxPrice: t.maxPrice, builderCode: cfg.builderCode, send: cfg.ordersLive, onStep: (st) => say({ account: "Opening your trading account…", sign: "Signing with your wallet…", send: "Sending your order…", match: "Matching with sellers…" }[st] || "Working…") });
+    if (cfg.ordersLive) { const perm = await ensurePermissions(say); if (!perm.ok) { res = { ok: false, sent: false, error: perm.error, detail: perm.detail }; } }
+    if (!res) res = await window.clueTrading.order({ assetId: t.tokenId, spend: t.amount, maxPrice: t.maxPrice, builderCode: cfg.builderCode, send: cfg.ordersLive, onStep: (st) => say({ account: "Opening your trading account…", sign: "Signing with your wallet…", send: "Sending your order…", match: "Matching with sellers…" }[st] || "Working…") });
   } catch (e) { res = { ok: false, sent: false, error: e.message || "The order could not be placed." }; }
   const status = !res.ok ? "failed" : !res.sent ? "checked" : res.filled ? "filled" : "unfilled";
   const why = [res.error || res.note, res.detail ? `(${res.detail})` : ''].filter(Boolean).join(' ');
@@ -1384,6 +1397,7 @@ async function mountTicket(box, ctx) {
         show("working", steps.node); steps.advance("account");
       } else steps.advance("account");
       await loadTrading();
+      if (live) { const perm = await ensurePermissions(); if (!perm.ok) { steps.fail("account"); show("err", el("p", { text: perm.error }), perm.detail ? el("small", { class: "err-detail", text: `(${perm.detail})` }) : null); return; } }
       const res = await window.clueTrading.order({ assetId: ctx.token, spend: plan.spend, maxPrice: plan.maxPrice, builderCode: cfg.builderCode, send: live, onStep: (s) => steps.advance(s) });
       if (!res.ok) { steps.fail(); show("err", steps.node, ending("bad", res.sent ? "Not filled" : "Not placed"), el("p", { text: res.error }), res.detail ? el("small", { class: "err-detail", text: `(${res.detail})` }) : null); }
       else if (!res.sent) { steps.finish(); show("test", steps.node, ending("ok", "Checked. Your order is ready, and it was NOT sent."), line("Would spend", usd(plan.spend)), line("Worst price accepted", cents(plan.maxPrice)), line("Fills", "completely or not at all"),
