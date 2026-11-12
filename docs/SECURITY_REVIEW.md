@@ -67,3 +67,13 @@ Research and saved threads used to take the market's question and rules from the
 ## Trading: builder signing (8 Nov)
 
 `POST /api/pm/sign` signs Polymarket relayer requests with the builder secret so the browser never holds it. It signs only four relayer requests (deployed check, transaction parameters, transaction status, submit); a submit is signed only when its `from` is the signed-in user's own Privy wallet, looked up by the server; NEAR accounts and accounts without a wallet get nothing; each user is limited to 300 per hour; the origin check applies. Orders do not pass through the server: they go from the user's browser to Polymarket, so Polymarket sees the user's real location. The signature scheme is tested against Polymarket's own package.
+
+## Red team of the AI agent features (November 12)
+
+The same approach as above: the uncensored model on NEAR AI Cloud (`Qwen/Qwen3.8-27B-abliterated`) wrote attacks on the new agent features, and each was sent to a local copy of Clue's current code with stand-ins for OutLayer and Polymarket's prices, judged by what got through (signatures given, database changes, pages, server errors).
+
+- **Research prompt injection (re-run of the saved attacks):** 4 runs against the current pipeline. 3 passed. The first failed without a reason in the output; 3 runs after it passed, and the failure was not seen again.
+- **Agent tools (6 attacks):** budget raises with negative zero and prototype-pollution keys, trades without approval, slug traversal and SSRF, reading another person's trade, oversized and scripted forecast text. All refused with plain errors. No budget became active without the person, no trade left `pending` without them, and the server stayed up.
+- **Connector sign-in (10 attacks):** userinfo, backslash, look-alike (IDN), `javascript:` and `data:` return addresses, `localhost` subdomains, double-encoded slashes, oversized and right-to-left-override app names, plain PKCE and replay. No script ran on the approval page, and no code went to an unregistered or unsafe address. Look-alike domains show in their raw `xn--` form. **Two fixes:** invisible formatting characters (including right-to-left overrides) are now stripped from app names, and the approval page warns when an app uses a well-known name (Claude, ChatGPT, Gemini, Cursor, Copilot) but would return somewhere else. Test: `tests/oauth.test.mjs`.
+- **Agent wallet signing:** the model's answers for this area were malformed, so it is covered by the tests in `tests/agent-wallet.test.mjs` and the independent review (exact Polymarket shapes only, pinned domains, transfers and other spenders refused, price and limit checks).
+

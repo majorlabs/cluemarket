@@ -29,10 +29,20 @@ export function okRedirect(uri) {
   return u.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname);
 }
 
+// An app can call itself anything. When it uses the name of a well-known AI app but would send the person somewhere else,
+// the approval page says so plainly.
+const KNOWN = [[/claude|anthropic/i, ['claude.ai', 'claude.com', 'anthropic.com']], [/chat\s*gpt|openai/i, ['chatgpt.com', 'openai.com']], [/gemini|google/i, ['google.com', 'gemini.google.com']], [/cursor/i, ['cursor.com', 'cursor.sh']], [/copilot|github/i, ['github.com', 'githubcopilot.com']]];
+export function nameMismatch(name, host) {
+  const h = String(host).toLowerCase().replace(/:\d+$/, '');
+  if (['localhost', '127.0.0.1', '[::1]'].includes(h)) return null;          // an app on the person's own computer
+  for (const [re, hosts] of KNOWN) if (re.test(name) && !hosts.some((x) => h === x || h.endsWith('.' + x))) return `This app calls itself "${name}" but would send you back to ${h}, which is not where ${name.split(/\s+/)[0]} lives. Only approve if you started this yourself.`;
+  return null;
+}
+
 export async function register(store, body, { now = new Date() } = {}) {
   const uris = Array.isArray(body.redirect_uris) ? body.redirect_uris.map(String) : [];
   if (!uris.length || uris.length > 10 || !uris.every(okRedirect)) throw fail(400, 'invalid_redirect_uri', 'Each redirect address must be https, or on this computer.');
-  const name = String(body.client_name || 'AI app').replace(/\p{Cc}/gu, '').trim().slice(0, 60) || 'AI app';
+  const name = String(body.client_name || 'AI app').replace(/[\p{Cc}\p{Cf}\p{Co}\p{Cn}]/gu, '').trim().slice(0, 60) || 'AI app';
   const id = 'clue_app_' + randomUUID().replace(/-/g, '');
   await store.run('INSERT INTO oauth_clients (id,name,redirect_uris,created_at) VALUES (?,?,?,?)', id, name, JSON.stringify(uris), now.toISOString());
   return { client_id: id, client_name: name, redirect_uris: uris, token_endpoint_auth_method: 'none', grant_types: ['authorization_code'], response_types: ['code'], client_id_issued_at: Math.floor(now / 1000) };
@@ -64,7 +74,8 @@ export async function describeRequest(store, id, { now = new Date() } = {}) {
   const r = await store.get('SELECT client_id, redirect_uri, wants_trade, expires FROM oauth_requests WHERE id=?', String(id || ''));
   if (!r || r.expires < now.getTime()) throw fail(404, 'expired', 'This connection request has expired. Start again from your AI app.');
   const c = await client(store, r.client_id);
-  return { app: c?.name || 'AI app', returnsTo: new URL(r.redirect_uri).host, asksToTrade: Boolean(r.wants_trade) };
+  const app = c?.name || 'AI app', returnsTo = new URL(r.redirect_uri).host;
+  return { app, returnsTo, asksToTrade: Boolean(r.wants_trade), mismatch: nameMismatch(app, returnsTo) };
 }
 
 // The signed-in person approves (or turns down) the request. Approving gives the app a one-time code, good for five minutes.
