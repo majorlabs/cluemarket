@@ -447,7 +447,7 @@ const DOCS = [
     "Clue works inside Claude, Codex, Cursor and other AI assistants. You chat as you normally would, and your assistant uses Clue for you.",
     ["ul", "“How is my portfolio doing?”", "“Research the Fed's December decision and save my call at 70%.”", "“Make a PnL card for my biggest position.” (the card arrives as a picture in the chat)", "“What changed since my calls?” and “How good are my calls?”", "“Buy $5 of Yes on this market.” (with assistant trading switched on)"],
     ["ol", "In Claude or ChatGPT, open Settings, then Connectors, and add a custom connector with the address https://www.oncluemarket.xyz/api/mcp. In Claude Code, run: claude mcp add --transport http clue https://www.oncluemarket.xyz/api/mcp", "A Clue page opens. Sign in, choose whether it may also trade, and tap Approve.", "Ask away. It works as you: your Journal, your Portfolio, your limits. Disconnect it any time from Agents."],
-    "There is no key to copy. Apps that cannot sign in this way can use a key instead: open Agents, then Advanced: connect with a key."
+    "There is no key to copy. Apps that cannot sign in this way can use a key instead: open Agents, then Advanced: connect with a key.",
     "For Claude Code, the Clue plugin adds everything in one install, with the commands /clue:research, /clue:portfolio, /clue:card, /clue:record, /clue:brief and /clue:trade:",
     ["code", "export CLUE_KEY=your_key\nclaude plugin marketplace add majorlabs/cluemarket\nclaude plugin install clue@clue"],
   ]],
