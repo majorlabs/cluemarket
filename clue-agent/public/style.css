@@ -964,3 +964,4 @@ dialog .btn{height:48px;border-radius:14px}
 .approve-out p{margin:0}.approve-out.err p{color:var(--no)}.approve-out.ok p{color:var(--yes)}
 .agents-waiting:empty{display:none}
 a.aw-row{text-decoration:none;color:var(--ink)}
+.agent-toast{position:fixed;z-index:60;left:50%;transform:translateX(-50%);bottom:90px;width:min(420px,calc(100% - 32px));box-sizing:border-box;background:var(--surface);border:1px solid var(--line-strong);border-radius:14px;padding:12px 14px;display:grid;gap:4px;box-shadow:0 12px 40px -12px rgba(0,0,0,.35)}

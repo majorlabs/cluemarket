@@ -233,7 +233,7 @@ async function connectPrivy() {
 }
 async function refreshAccount() {
   try { user = (await api("/api/wallet/session"))?.user || null; } catch { user = null; }
-  drawAccountButton(); syncSavedSetup();
+  drawAccountButton(); syncSavedSetup(); if (user) startBudgetRunner();
   document.dispatchEvent(new CustomEvent("clue:account"));
   if (user && String(user.id).startsWith("privy:")) { try { const d = await api("/api/privy/wallet"); if (d.wallet) { myWallet = d.wallet; drawAccountButton(); } } catch { /* the button says Account until it is known */ } }
   if (!user) myWallet = null;
@@ -405,6 +405,7 @@ async function route() {
   if (parts[0] === "agents") { setNav("agents"); return agentsView(); }
   if (parts[0] === "connect") { setNav(""); return connectView(parts[1] || ""); }
   if (parts[0] === "approve") { setNav("agents"); return approveView(parts[1] || ""); }
+  if (parts[0] === "budget") { setNav("agents"); return budgetView(parts[1] || ""); }
   if (parts[0] === "docs") { setNav(""); return docsView(parts[1]); }
   if (parts[0] === "portfolio") { setNav("portfolio"); return portfolioView(stale); }
   if (parts[0] === "card") { setNav(""); return cardView(parts[1] || ""); }
@@ -473,6 +474,7 @@ const DOCS = [
     "Connect your AI with Also let it trade ticked. Then ask it to buy, for example \u201cPut $5 on Yes for the Fed hike.\u201d",
     ["ol", "Your AI finds the market, tells you the outcome, amount and worst price, and prepares the trade in Clue.", "It gives you a link. Open it on your phone or computer: Clue shows exactly what will be bought. Waiting trades also show at the top of Agents.", "Tap Approve. The order goes from your own device with your own trading account, just like a trade you place yourself. Or tap Decline.", "Your AI can see whether it filled. A trade nobody approves expires after 15 minutes."],
     "Your AI never places the order and never touches your money.",
+    "Want it hands-free? Tell your AI your budget, for example \u201c$20 a day, at most $5 a trade\u201d, and confirm it once in Clue. Trades inside it then go from your device while Clue is open, with no tap. Your AI can lower or pause it from the chat; only you can raise it. See it, pause it or resume it on Agents.",
   ]],
   ["assistant-trading", "Assistant trading (advanced): an agent wallet", [
     "Your assistant can trade for you with an agent wallet on OutLayer, NEAR's secure custody for AI agents. The wallet's keys stay in OutLayer's secure hardware, and you choose the limits.",
@@ -539,6 +541,71 @@ async function connectView(id) {
   app.replaceChildren(card);
 }
 
+/* ---------- sending an AI's trade from this device: the same checks and order as a trade placed by hand ---------- */
+async function sendAgentTrade(t, say = () => {}) {
+  say("Checking you can trade from here…");
+  const geo = await window.ClueTicket.checkGeoblock().catch(() => ({ state: "unknown" }));
+  if (geo.state === "blocked") return { status: "blocked", error: "Polymarket does not take orders from where you are right now, so nothing was sent." };
+  const wallet = await myTradingWallet().catch(() => null);
+  if (!wallet) return { status: "setup", error: "Set up trading on this account first: open any market and follow the steps." };
+  try { await post(`/api/agent-trades/${t.id}/start`, {}); } catch (e) { return { status: "gone", error: e.message }; }
+  let res;
+  try {
+    const cfg = await api("/api/pm/config").catch(() => ({ ordersLive: false, builderCode: null }));
+    say("Opening your trading account…"); await loadTrading();
+    res = await window.clueTrading.order({ assetId: t.tokenId, spend: t.amount, maxPrice: t.maxPrice, builderCode: cfg.builderCode, send: cfg.ordersLive, onStep: (st) => say({ account: "Opening your trading account…", sign: "Signing with your wallet…", send: "Sending your order…", match: "Matching with sellers…" }[st] || "Working…") });
+  } catch (e) { res = { ok: false, sent: false, error: e.message || "The order could not be placed." }; }
+  const status = !res.ok ? "failed" : !res.sent ? "checked" : res.filled ? "filled" : "unfilled";
+  try { await post(`/api/agent-trades/${t.id}/result`, { status, shares: res.shares, paid: res.paid, avgPrice: res.avgPrice, orderId: res.orderId, message: res.error || res.note }); } catch { /* the result still shows here */ }
+  return { status, ...res };
+}
+
+// While Clue is open, trades the AI queued inside the person's confirmed budget go from this device, one at a time, with no tap.
+let budgetRunner = null, budgetActive = false, budgetCheckedAt = 0;
+function startBudgetRunner() {
+  if (budgetRunner) return;
+  budgetRunner = setInterval(async () => {
+    if (!user || document.hidden) return;
+    try {
+      if (Date.now() - budgetCheckedAt > 60000) { budgetCheckedAt = Date.now(); budgetActive = Boolean((await api("/api/agent-budget")).budget?.active); }
+      if (!budgetActive) return;
+      const { trades } = await api("/api/agent-trades");
+      const next = trades.find((x) => x.status === "auto");
+      if (!next) return;
+      clearInterval(budgetRunner); budgetRunner = null;                     // one at a time
+      const toast = el("div", { class: "agent-toast", role: "status", "aria-live": "polite" }, el("b", { text: `Your AI: buying ${next.outcome}, $${Number(next.amount).toFixed(2)}` }), el("span", { class: "muted small", text: next.question || "" }));
+      document.body.append(toast);
+      const r = await sendAgentTrade(next, (m) => { toast.lastChild.textContent = m; });
+      if (r.status === "blocked" || r.status === "setup") { budgetActive = false; budgetCheckedAt = Date.now() + 9 * 60000; }   // say it once, then wait ten minutes
+      toast.lastChild.textContent = r.status === "filled" ? `Filled: ${Number(r.shares).toFixed(2)} shares for $${Number(r.paid).toFixed(2)}.` : r.error || r.note || "Not filled. Nothing was bought.";
+      setTimeout(() => toast.remove(), 9000);
+    } catch { /* try again on the next tick */ }
+    finally { if (!budgetRunner) startBudgetRunner(); }
+  }, 5000);
+}
+
+/* ---------- budget: confirm the trading budget the person asked their AI for ---------- */
+async function budgetView(id) {
+  const card = el("section", { class: "card connect-card" });
+  app.replaceChildren(card);
+  if (!user) {
+    card.replaceChildren(el("h1", { text: "Confirm your budget" }), el("button", { class: "btn primary", type: "button", text: "Sign in", onclick: () => openAccountDialog("Sign in to confirm your budget.") }));
+    document.addEventListener("clue:account", () => { if (location.hash.startsWith("#/budget/")) route(); }, { once: true });
+    return;
+  }
+  let d; try { d = await api("/api/agent-budget"); } catch (e) { card.replaceChildren(el("p", { class: "err", text: e.message })); return; }
+  const p = d.budget?.pending;
+  if (!p || p.id !== id) { card.replaceChildren(el("h1", { text: "Nothing to confirm" }), el("p", { class: "muted", text: "This budget request was already confirmed, dropped or replaced. Ask your AI again if you want to change it." }), el("a", { class: "btn small", href: "#/agents", text: "Open Agents" })); return; }
+  const row = (k, v) => el("div", { class: "tk-row" }, el("span", { class: "muted", text: k }), el("b", { class: "num", text: v }));
+  const msg = el("p", { class: "err", role: "alert" });
+  const act = async (path, ev) => { card.querySelectorAll("button").forEach((b) => { b.disabled = true; }); try { await post(path, { id }); location.hash = "#/agents"; } catch (e) { msg.textContent = e.message; card.querySelectorAll("button").forEach((b) => { b.disabled = false; }); } };
+  card.replaceChildren(el("h1", { text: "Confirm your AI's budget" }),
+    el("p", { class: "muted", text: "You asked your AI for this budget. Once you confirm, trades inside it go from your own device while Clue is open, without asking each time. Anything outside it still needs your Approve." }),
+    el("div", { class: "approve-box" }, row("Most per trade", `$${Number(p.perTrade).toFixed(2)}`), row("Most per day", `$${Number(p.perDay).toFixed(2)}`), p.note ? row("Your note", p.note) : null),
+    el("div", { class: "connect-actions" }, el("button", { class: "btn primary", type: "button", text: "Confirm budget", onclick: (ev) => act("/api/agent-budget/confirm", ev) }), el("button", { class: "btn", type: "button", text: "Not now", onclick: (ev) => act("/api/agent-budget/drop", ev) })),
+    msg, el("p", { class: "muted small", text: "Your AI can lower or pause the budget from the chat. Only you can raise it, here." }));
+}
+
 /* ---------- approve: a trade an AI prepared, approved here and sent from this device ---------- */
 async function approveView(id) {
   const card = el("section", { class: "card connect-card" });
@@ -558,31 +625,18 @@ async function approveView(id) {
     el("div", { class: "approve-box" }, row("Buy", t.outcome || "—"), el("p", { class: "approve-q", text: t.question || "" }), row("Spend", usd(t.amount)), row("Worst price", `${cents(t.maxPrice)} a share`), row("You get, at least", `${(t.amount / t.maxPrice).toFixed(2)} shares`)),
     el("p", { class: "muted small", text: "All or nothing: if it cannot fill completely at that price, nothing is bought and no money is spent." })];
   const ended = { filled: "Done. It filled.", unfilled: "It did not fill at that price. Nothing was bought.", failed: "It did not go through. Nothing was bought.", declined: "You declined this trade.", expired: "This trade expired before it was approved.", checked: "Checked. Real orders are not switched on for this account, so nothing was sent.", sending: "This trade is being sent." };
-  if (t.status !== "pending") { card.replaceChildren(...summary.slice(0, 1), el("div", { class: "approve-box" }, row("Buy", t.outcome || "—"), el("p", { class: "approve-q", text: t.question || "" }), row("Spend", usd(t.amount))), el("p", { text: ended[t.status] || t.status }), t.eventSlug ? el("a", { class: "btn small", href: `#/event/${encodeURIComponent(t.eventSlug)}`, text: "Open the market" }) : null); return; }
+  if (t.status !== "pending" && t.status !== "auto") { card.replaceChildren(...summary.slice(0, 1), el("div", { class: "approve-box" }, row("Buy", t.outcome || "—"), el("p", { class: "approve-q", text: t.question || "" }), row("Spend", usd(t.amount))), el("p", { text: ended[t.status] || t.status }), t.eventSlug ? el("a", { class: "btn small", href: `#/event/${encodeURIComponent(t.eventSlug)}`, text: "Open the market" }) : null); return; }
   const approveBtn = el("button", { class: "btn primary", type: "button", text: `Approve ${usd(t.amount)}` });
   const declineBtn = el("button", { class: "btn", type: "button", text: "Decline" });
   const say = (cls, text, ...more) => { out.className = `approve-out ${cls}`; out.replaceChildren(el("p", { text }), ...more); };
   declineBtn.onclick = async () => { approveBtn.disabled = declineBtn.disabled = true; try { await post(`/api/agent-trades/${t.id}/decline`, {}); say("muted", "Declined. Nothing was bought. You can tell your AI."); } catch (e) { say("err", e.message); } };
   approveBtn.onclick = async () => {
     approveBtn.disabled = declineBtn.disabled = true;
-    // The same checks as a trade placed by hand: where you are, that trading is set up on this account, then the order itself.
-    say("muted", "Checking you can trade from here…");
-    const geo = await window.ClueTicket.checkGeoblock().catch(() => ({ state: "unknown" }));
-    if (geo.state === "blocked") { say("err", "Polymarket does not take orders from where you are right now, so nothing was sent."); approveBtn.disabled = declineBtn.disabled = false; return; }
-    const wallet = await myTradingWallet().catch(() => null);
-    if (!wallet) { say("err", "Set up trading on this account first: open any market and follow the steps. Then come back to this link.", t.eventSlug ? el("a", { class: "btn small", href: `#/event/${encodeURIComponent(t.eventSlug)}`, text: "Open the market" }) : null); approveBtn.disabled = declineBtn.disabled = false; return; }
-    try { await post(`/api/agent-trades/${t.id}/start`, {}); } catch (e) { say("err", e.message); return; }
-    let res;
-    try {
-      const cfg = await api("/api/pm/config").catch(() => ({ ordersLive: false, builderCode: null }));
-      say("muted", "Opening your trading account…"); await loadTrading();
-      res = await window.clueTrading.order({ assetId: t.tokenId, spend: t.amount, maxPrice: t.maxPrice, builderCode: cfg.builderCode, send: cfg.ordersLive, onStep: (st) => say("muted", { account: "Opening your trading account…", sign: "Signing with your wallet…", send: "Sending your order…", match: "Matching with sellers…" }[st] || "Working…") });
-    } catch (e) { res = { ok: false, sent: false, error: e.message || "The order could not be placed." }; }
-    const status = !res.ok ? "failed" : !res.sent ? "checked" : res.filled ? "filled" : "unfilled";
-    try { await post(`/api/agent-trades/${t.id}/result`, { status, shares: res.shares, paid: res.paid, avgPrice: res.avgPrice, orderId: res.orderId, message: res.error || res.note }); } catch { /* the result still shows here */ }
-    if (status === "filled") say("ok", `Done. You bought ${Number(res.shares).toFixed(2)} shares for ${usd(res.paid)}. Your AI can see it now.`, el("a", { class: "btn small", href: "#/portfolio", text: "See your Portfolio" }));
-    else if (status === "checked") say("muted", ended.checked);
-    else say("err", res.error || (status === "unfilled" ? res.note || ended.unfilled : ended.failed));
+    const r = await sendAgentTrade(t, (m) => say("muted", m));
+    if (r.status === "blocked" || r.status === "setup") { say("err", r.error, r.status === "setup" && t.eventSlug ? el("a", { class: "btn small", href: `#/event/${encodeURIComponent(t.eventSlug)}`, text: "Open the market" }) : null); approveBtn.disabled = declineBtn.disabled = false; return; }
+    if (r.status === "filled") say("ok", `Done. You bought ${Number(r.shares).toFixed(2)} shares for ${usd(r.paid)}. Your AI can see it now.`, el("a", { class: "btn small", href: "#/portfolio", text: "See your Portfolio" }));
+    else if (r.status === "checked") say("muted", ended.checked);
+    else say("err", r.error || (r.status === "unfilled" ? r.note || ended.unfilled : ended.failed));
   };
   card.replaceChildren(...summary, el("div", { class: "connect-actions" }, approveBtn, declineBtn), out, el("p", { class: "muted small", text: `Expires ${new Date(t.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.` }));
 }
@@ -607,7 +661,19 @@ function agentsView() {
     el("p", { class: "muted small" }, "Make a key above first. For trading, tick Can trade and set up Assistant trading below. ", el("a", { href: "#/docs/agents", text: "Read the guide" })));
   const waiting = el("div", { class: "agents-waiting" });
   api("/api/agent-trades").then(({ trades }) => { if (!trades.length || !waiting.isConnected) return; waiting.replaceChildren(el("section", { class: "card agents-sec" }, el("h2", { text: "Waiting for your approval" }), ...trades.map((x) => el("a", { class: "aw-row", href: `#/approve/${x.id}` }, el("span", { text: `Buy ${x.outcome}` }), el("span", { class: "muted", text: (x.question || "").slice(0, 60) }), el("b", { text: `$${Number(x.amount).toFixed(2)}` }))))); }).catch(() => {});
-  app.replaceChildren(el("div", { class: "agents-page" }, intro, waiting, agentHosts.keys, plugin, agentHosts.wallet));
+  const budget = el("section", { class: "card agents-sec" });
+  const drawBudget = async () => {
+    let d; try { d = await api("/api/agent-budget"); } catch { return; }
+    const b = d.budget, row = (k, v) => el("div", { class: "tk-row" }, el("span", { class: "muted", text: k }), el("b", { class: "num", text: v }));
+    const btn = (text, path, cls = "btn small") => el("button", { class: cls, type: "button", text, onclick: async (ev) => { ev.currentTarget.disabled = true; try { await post(path, {}); } catch { /* shown on redraw */ } drawBudget(); } });
+    budget.replaceChildren(el("h2", { text: "Your AI's budget" }),
+      el("p", { class: "muted", text: "Tell your AI your budget in the chat, for example \u201c$20 a day, at most $5 a trade\u201d, and confirm it here. Trades inside it then go from this device while Clue is open, with no tap." }),
+      b && (b.active || b.paused) ? el("div", { class: "approve-box" }, row("Most per trade", `$${Number(b.perTrade).toFixed(2)}`), row("Most per day", `$${Number(b.perDay).toFixed(2)}`), row("Used today", `$${Number(d.usedToday).toFixed(2)}`), b.note ? row("Note", b.note) : null, row("Status", b.active ? "On" : "Paused")) : el("p", { class: "muted small", text: "No budget yet, so every trade needs your Approve." }),
+      b?.pending ? el("a", { class: "btn primary small", href: `#/budget/${b.pending.id}`, text: `Confirm new budget: $${b.pending.perTrade} a trade, $${b.pending.perDay} a day` }) : null,
+      b?.active ? btn("Pause", "/api/agent-budget/pause") : b?.paused ? btn("Resume", "/api/agent-budget/resume", "btn primary small") : null);
+  };
+  drawBudget();
+  app.replaceChildren(el("div", { class: "agents-page" }, intro, waiting, budget, agentHosts.keys, plugin, agentHosts.wallet));
   openAssistants(); openAgentWallet();
 }
 
