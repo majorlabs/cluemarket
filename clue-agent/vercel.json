@@ -47,7 +47,7 @@
       ]
     },
     {
-      "source": "/(privy|trading|card|ticket).js",
+      "source": "/(privy|trading|trading-extra|card|ticket).js",
       "headers": [
         {
           "key": "Cache-Control",
