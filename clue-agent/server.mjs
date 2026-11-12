@@ -116,7 +116,8 @@ const handler=async(req,res)=>{ try {
  const fromAgent=Boolean(req[AGENT_USER]);
  // Sign in with Clue for AI apps (oauth.mjs). Apps call these from their own servers or computers, so the browser checks below do not apply,
  // except to /api/oauth/approve, which the signed-in person's own page calls and which goes through every normal check.
- const pubBase=hosted ? publicOrigin : `http://${req.headers.host}`;
+ // The address the app reached us on (Vercel passes it along), if it is one of ours; otherwise the main address.
+ const pubBase=hosted ? (checkOrigin(`https://${String(req.headers['x-forwarded-host']||'').split(',')[0].trim()}`,publicOrigins) || publicOrigin) : `http://${req.headers.host}`;
  const oauthFail=(e)=>{ if(!e.oauth) throw e; return json(res,e.status||400,{error:e.oauth,error_description:e.message}); };
  if(!fromAgent && req.method==='GET' && (url.pathname==='/api/oauth/meta/resource' || url.pathname.startsWith('/.well-known/oauth-protected-resource'))) return json(res,200,resourceMetadata(pubBase));
  if(!fromAgent && req.method==='GET' && (url.pathname==='/api/oauth/meta/server' || url.pathname.startsWith('/.well-known/oauth-authorization-server'))) return json(res,200,serverMetadata(pubBase));
