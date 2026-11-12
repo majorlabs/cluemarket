@@ -146,10 +146,6 @@ export async function render(d) {
     ctx.fillStyle = INK; ctx.font = `700 52px ${SANS}`; ctx.fillText(value, x, sy + 64);
   });
 
-  // small print
-  ctx.fillStyle = SOFT; ctx.font = `500 22px ${SANS}`;
-  ctx.fillText('A prediction, not advice. Prices are what traders are paying, not facts.', M, H - 64);
-
   // the big number
   const ink = t.dark ? CREAM : INK;
   ctx.fillStyle = t.dark ? CREAM : CREAM; ctx.textAlign = 'left';
