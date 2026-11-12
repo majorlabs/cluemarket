@@ -120,6 +120,7 @@ document.addEventListener("keydown", (e) => {
 /* ---------- account ---------- */
 const dialog = $("account-dialog");
 function openAccountDialog(message) {
+  if (!user) { try { for (const k of Object.keys(localStorage)) if (k.startsWith("privy:") && k !== "privy:caid") localStorage.removeItem(k); } catch { /* storage blocked */ } loadPrivy().catch(() => {}); }
   dialog.replaceChildren(
     el("img", { class: "dlg-mark", src: document.documentElement.dataset.theme === "light" ? "/assets/clue-mark.svg" : "/assets/clue-mark-on-dark.svg", alt: "" }),
     el("h2", { text: "Sign in to Clue" }),
@@ -199,10 +200,17 @@ function loadPrivy() {
   })().catch((e) => { privyLoading = null; throw e; });
   return privyLoading;
 }
+// Privy keeps its own sign-in on this device. Clue forgets it whenever the person disconnects, and before they sign in again,
+// so tapping email or Google always asks which account instead of quietly reusing the last one.
+async function forgetPrivy() {
+  try { if (window.cluePrivy) await window.cluePrivy.logout(); } catch { /* already signed out */ }
+  try { for (const k of Object.keys(localStorage)) if (k.startsWith("privy:") && k !== "privy:caid") localStorage.removeItem(k); } catch { /* storage blocked */ }
+}
 async function connectPrivy() {
   const status = $("account-status"), btn = $("privy-connect");
-  btn.disabled = true; status.className = "status"; status.textContent = "Opening Privy…";
+  btn.disabled = true; status.className = "status"; status.textContent = "Opening sign-in…";
   try {
+    if (!user) await forgetPrivy();     // no one is signed in to Clue, so any Privy sign-in left on this device is stale
     await loadPrivy();
     dialog.close(); // Privy shows its own sign-in window
     const accessToken = await window.cluePrivy.login();
@@ -356,7 +364,7 @@ async function openAgentWallet() {
 async function signOut() {
   dialog.close();
   try { await post("/api/wallet/disconnect", {}); } catch { /* session may already be gone */ }
-  try { await window.cluePrivy?.logout(); } catch { /* not signed in with Privy */ }
+  await forgetPrivy();
   tradingSetup = null;
   await refreshAccount();
   if (location.hash.startsWith("#/saved")) route();
