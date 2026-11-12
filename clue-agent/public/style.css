@@ -892,3 +892,9 @@ dialog .btn{height:48px;border-radius:14px}
 .my-deposits.pending{margin:0 0 16px;padding:12px 14px;border:1px solid var(--line-strong);border-radius:12px;background:var(--surface)}
 .my-deposits.pending:empty{display:none}
 .my-deposits.pending .md-title{margin-bottom:2px}
+
+/* Portfolio on a phone: the Total card is the dark ink card in both themes, so its cream number can always be read, and a lone last card fills the row */
+.pf-root .pf-summary .pf-stat.big{background:radial-gradient(120% 120% at 100% 0%,rgba(255,106,45,.25),transparent 55%),linear-gradient(160deg,#13232d,#0b151b);color:#f6f1e7;border-color:rgba(255,255,255,.08)}
+.pf-root .pf-summary .pf-stat.big b{color:#f6f1e7}
+.pf-root .pf-summary .pf-stat.big small{color:rgba(246,241,231,.72)}
+@media(max-width:719px){.pf-root .pf-summary .pf-stat:last-child:nth-child(even){grid-column:1/-1}}
