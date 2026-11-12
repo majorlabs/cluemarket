@@ -7,6 +7,7 @@ import { userForToken } from './agent-keys.mjs';
 import { AGENT_USER } from './agent-user.mjs';
 import { cardPng, postText } from './card-server.mjs';
 import { propose, getTrade } from './agent-trades.mjs';
+import { getBudget, setBudget, pause as pauseBudget } from './agent-budget.mjs';
 
 export const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const SERVER_INFO = { name: 'clue', title: 'Clue', version: '1.0.0' };
@@ -39,6 +40,12 @@ export const TOOLS = [
     inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true, openWorldHint: true } },
   { name: 'propose_trade', title: 'Prepare a trade to approve', description: 'Prepare a buy for the person to approve in Clue. Nothing is bought until they tap Approve in Clue; the order then goes from their own device with their own trading account. Get token_id from get_market. max_price is the most to pay per share (0 to 1), usually a little above the current chance. Always confirm the market, outcome and amount with the person first. Needs a connection with trading allowed.',
     inputSchema: { type: 'object', properties: { token_id: { type: 'string' }, amount_usd: { type: 'number', minimum: 1, maximum: 10000 }, max_price: { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 1 } }, required: ['token_id', 'amount_usd', 'max_price'] }, annotations: { readOnlyHint: false, openWorldHint: true } },
+  { name: 'set_budget', title: 'Set a trading budget', description: 'Turn what the person said about their budget into numbers: most per trade and most per day in dollars, and an optional note such as "sports only". Raising or creating a budget needs the person to tap Confirm in Clue (a link is returned); lowering it applies at once. With a confirmed budget, trades inside it go without an Approve while Clue is open on their device. Only call this when the person asks for a budget.',
+    inputSchema: { type: 'object', properties: { per_trade: { type: 'number', minimum: 1 }, per_day: { type: 'number', minimum: 1 }, note: { type: 'string', maxLength: 200 } }, required: ['per_trade', 'per_day'] }, annotations: { readOnlyHint: false } },
+  { name: 'get_budget', title: 'Show the trading budget', description: 'The person\'s trading budget: most per trade, most per day, used today, and any change waiting for their confirmation.',
+    inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true } },
+  { name: 'pause_trading', title: 'Pause trading', description: 'Pause the budget, so every trade needs an Approve again. Use when the person asks to stop or pause.',
+    inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: false } },
   { name: 'trade_status', title: 'Check a trade', description: 'Whether a prepared trade is waiting, approved and filled, declined or expired, with what was bought.',
     inputSchema: { type: 'object', properties: { trade_id: { type: 'string' } }, required: ['trade_id'] }, annotations: { readOnlyHint: true } },
   { name: 'get_portfolio', title: 'Read the Portfolio', description: 'The person\'s trading account: cash, each position with its value and profit or loss, the total, and winnings ready to claim.',
@@ -130,14 +137,30 @@ const run = {
   },
   async propose_trade(a, d, u, ctx) {
     if (!ctx.canTrade) throw Object.assign(new Error('This connection can only read. To trade, disconnect Clue in this app and connect again with "Also let it trade" ticked.'), { toolError: true });
-    const { id, market } = await propose(store, u, ctx.keyId, a);
+    const { id, market, auto, budgetReason } = await propose(store, u, ctx.keyId, a);
     const link = `${ctx.base}/#/approve/${id}`;
+    if (auto) return { trade_id: id, status: 'queued within your budget', buy: `${market.outcome} on "${market.question}"`, amount: Number(a.amount_usd), worstPrice: Number(a.max_price), marketNow: market.price,
+      note: 'This fits the budget the person confirmed, so it goes from their own device as soon as Clue is open there (a tab on their computer or phone), with no tap. If Clue is not open, ask them to open oncluemarket.xyz. Call trade_status to see how it went. It expires in 15 minutes.', open: `${ctx.base}/#/agents` };
     return { trade_id: id, status: 'waiting for approval', approve: link, buy: `${market.outcome} on "${market.question}"`, amount: Number(a.amount_usd), worstPrice: Number(a.max_price), marketNow: market.price,
+      budget: budgetReason && budgetReason !== 'no-budget' ? `Outside the budget (${budgetReason}), so it needs an Approve.` : undefined,
       note: `Nothing is bought yet. Ask the person to open the approve link on their phone or computer and tap Approve; the order goes from their own device. It expires in 15 minutes. Call trade_status with trade_id to see how it went.` };
   },
+  async get_budget(a, d, u) {
+    const { budget, usedToday } = await getBudget(store, u);
+    if (!budget || (!budget.active && !budget.paused)) return { budget: null, pending: budget?.pending || null, note: 'No budget yet. Every trade needs an Approve in Clue. The person can set one by telling you, for example "$20 a day, at most $5 a trade".' };
+    return { ...budget, usedToday, leftToday: Math.max(0, Math.round((budget.perDay - usedToday) * 100) / 100) };
+  },
+  async set_budget(a, d, u, ctx) {
+    if (!ctx.canTrade) throw Object.assign(new Error('This connection can only read. Reconnect Clue with "Also let it trade" ticked to use a budget.'), { toolError: true });
+    const r = await setBudget(store, u, a);
+    if (r.applied) return { status: 'lowered', note: 'The budget is lower than before, so it applies straight away.' };
+    return { status: 'waiting for the person to confirm', confirm: `${ctx.base}/#/budget/${r.confirmId}`, perTrade: Number(a.per_trade), perDay: Number(a.per_day),
+      note: 'Only the person can set or raise a budget. Ask them to open the confirm link and tap Confirm. Until then, every trade needs an Approve.' };
+  },
+  async pause_trading(a, d, u) { await pauseBudget(store, u); return { paused: true, note: 'Your AI can no longer trade without an Approve. Resume in Clue, on the Agents page.' }; },
   async trade_status(a, d, u) {
     const t = await getTrade(store, u, a.trade_id);
-    const words = { pending: 'Waiting for the person to approve it in Clue.', sending: 'Approved; their device is sending the order now.', filled: 'Filled.', unfilled: 'Approved, but it did not fill at that price, so nothing was bought.', failed: 'Approved, but the order did not go through. Nothing was bought.', declined: 'The person declined it.', expired: 'Nobody approved it within 15 minutes, so it expired.', checked: 'Checked in Clue, but real orders are not switched on for this account, so nothing was sent.' };
+    const words = { pending: 'Waiting for the person to approve it in Clue.', auto: 'Inside the budget: it goes as soon as Clue is open on the person\'s device.', sending: 'Approved; their device is sending the order now.', filled: 'Filled.', unfilled: 'Approved, but it did not fill at that price, so nothing was bought.', failed: 'Approved, but the order did not go through. Nothing was bought.', declined: 'The person declined it.', expired: 'Nobody approved it within 15 minutes, so it expired.', checked: 'Checked in Clue, but real orders are not switched on for this account, so nothing was sent.' };
     return { ...t, meaning: words[t.status] || t.status };
   },
   async get_journal(a, d, u) { return ok(call(d, u, 'GET', '/api/journal')); },

@@ -6,6 +6,7 @@ import {initWalletAuth,walletSession,walletRoute} from './wallet-auth.mjs';
 import {findTradingWallet} from './trading-wallet.mjs';
 import {AGENT_USER} from './agent-user.mjs';
 import {createKey,listKeys,revokeKey,revokeAll,userForToken} from './agent-keys.mjs';
+import {getBudget,confirmBudget,dropPending,pause as pauseBudget,resume as resumeBudget} from './agent-budget.mjs';
 import {getTrade,listWaiting,start as tradeStart,decline as tradeDecline,finish as tradeFinish} from './agent-trades.mjs';
 import {resourceMetadata,serverMetadata,register as oauthRegister,authorize as oauthAuthorize,describeRequest as oauthDescribe,decide as oauthDecide,token as oauthToken,readForm} from './oauth.mjs';
 import {describeWallet,connectWallet,updateWallet,removeWallet,signFor} from './agent-wallet.mjs';
@@ -256,6 +257,21 @@ const handler=async(req,res)=>{ try {
    const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in first.'});
    const b=await getBody(req); return json(res,200,await oauthDecide(store,session.user.id,b.id,{approve:b.approve===true,canTrade:b.canTrade===true}));
   } catch(e) { if(e.oauth) return json(res,e.status||400,{error:e.message}); throw e; }
+ }
+ if(url.pathname==='/api/agent-budget' || url.pathname.startsWith('/api/agent-budget/')) {
+  // Only the signed-in person, on their own device, can confirm, drop, pause or resume a budget. Never an AI.
+  if(fromAgent) return json(res,403,{error:'Not allowed.'});
+  const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in to see this.'});
+  const owner=session.user.id, m=url.pathname.match(/^\/api\/agent-budget\/(confirm|drop|pause|resume)$/);
+  try {
+   if(req.method==='GET' && url.pathname==='/api/agent-budget') return json(res,200,await getBudget(store,owner));
+   if(req.method==='POST' && m){ const b=await getBody(req);
+    if(m[1]==='confirm') return json(res,200,await confirmBudget(store,owner,b.id));
+    if(m[1]==='drop') return json(res,200,await dropPending(store,owner));
+    if(m[1]==='pause') return json(res,200,await pauseBudget(store,owner));
+    if(m[1]==='resume') return json(res,200,await resumeBudget(store,owner)); }
+  } catch(e) { if(e.toolError) return json(res,e.status||400,{error:e.message}); throw e; }
+  return json(res,405,{error:'Method not allowed.'});
  }
  if(url.pathname==='/api/agent-trades' || url.pathname.startsWith('/api/agent-trades/')) {
   // Trades an AI prepared, approved or declined by the signed-in person on their own device. Never by an AI.

@@ -30,6 +30,8 @@ Market prices are what traders are paying, shown as chances. They are not Clue's
 
 With the hosted Clue connection (Claude app, ChatGPT), use `propose_trade`: confirm the market, outcome, amount and worst price with the person, then give them the approve link. They approve it in Clue, on their phone or computer, and the order goes from there. Check with `trade_status`.
 
+If the person states a budget ("$20 a day, at most $5 a trade"), call `set_budget` and give them the confirm link. Once confirmed, trades inside it are queued and go from their device while Clue is open. Lower it or `pause_trading` when they ask. Never raise a budget they did not ask for.
+
 With the plugin's `clue-trader` (Claude Code and an OutLayer agent wallet):
 
 1. Trading needs an assistant key made with **Can trade** ticked. Check `trading_status` first. If trading is off or no wallet is connected, tell the person to open Agents in Clue and set up Assistant trading. If `setUp` is false, run `setup_trading` once.
