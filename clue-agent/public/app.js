@@ -1173,11 +1173,15 @@ async function mountTicket(box, ctx) {
     // What is still on its way goes at the top, where a person waiting will look. Finished ones go below.
     const minePending = el("div", { class: "my-deposits pending" });
     const rowFor = (d) => {
-      const l = lineFor(d);
+      const l = lineFor(d), pending = !(d.final || d.expired);
+      const by = pending && d.deadline && Date.parse(d.deadline) > Date.now() ? new Date(d.deadline).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null;
       return el("div", { class: "md-row" },
         el("div", { class: "md-top" }, el("b", { text: `${d.send.amount} ${d.send.symbol} on ${d.send.chain}` }), el("small", { class: "muted", text: `${d.send.usd ? `about $${Number(d.send.usd).toFixed(2)} · ` : ""}${ago(d.createdAt)}` })),
         el("p", { class: `status ${l.cls}`, text: l.text }),
-        ...kids(d.final || d.expired ? null : el("div", { class: "acct-addr" }, el("code", { text: d.depositAddress }), copy(d.depositAddress))));
+        ...kids(
+          by ? el("p", { class: "small muted", text: `If it is not finished by ${by}, it is returned${d.refundTo ? ` to ${d.refundTo}` : " to your refund address"}.` }) : null,
+          pending ? el("div", { class: "acct-addr" }, el("code", { text: d.depositAddress }), copy(d.depositAddress)) : null,
+          pending ? el("a", { class: "small", href: `https://explorer.near-intents.org/transactions/${encodeURIComponent(d.depositAddress)}?referral=clue`, target: "_blank", rel: "noopener noreferrer", text: "See it on NEAR Intents ↗" }) : null));
     };
     function drawMine(list) {
       const onItsWay = list.filter((x) => !x.final && !x.expired), rest = list.filter((x) => x.final || x.expired).slice(0, 3);

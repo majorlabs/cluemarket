@@ -11,7 +11,7 @@ export async function saveDeposit(store, userId, q, { now = new Date(), id = ran
   await store.run(
     'INSERT INTO fund_deposits (id,user_id,deposit_address,deposit_memo,send_symbol,send_chain,send_amount,send_usd,receive_amount,refund_to,deadline,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id,deposit_address) DO NOTHING',
     id, userId, String(q.depositAddress), q.depositMemo || null, String(q.send.symbol), String(q.send.chain), String(q.send.amount), q.send.usd ?? null,
-    q.receive && q.receive.amount ? String(q.receive.amount) : null, q.refundTo || null, q.deadline || null, state, t, t);
+    q.receive && q.receive.amount ? String(q.receive.amount) : null, q.refundTo || null, q.swapDeadline || q.deadline || null, state, t, t);
   return true;
 }
 

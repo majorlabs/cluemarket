@@ -230,7 +230,9 @@ test('server: a real deposit is remembered and the list says where it is, even a
   assert.equal(first[0].receive.amount, '6.96');
   assert.equal(first[0].refundTo, NEAR_ACCOUNT);
   assert.equal(first[0].final, false);
-  assert.equal(first[0].expired, true);                                                        // the test quote's deadline is long past
+  assert.equal(first[0].expired, false);                                                       // the swap deadline is an hour from the quote, so it is still open
+  const hours = (Date.parse(first[0].deadline) - Date.now()) / 3600000;
+  assert.ok(hours > 0.9 && hours < 1.1, `the deadline saved should be about an hour away, got ${hours} hours`);
 
   state.statusBody = { status: 'PROCESSING' };                                                 // NEAR Intents is swapping it
   assert.equal(JSON.parse((await call('GET', '/api/fund/deposits', cookie)).text).deposits[0].state, 'swapping');

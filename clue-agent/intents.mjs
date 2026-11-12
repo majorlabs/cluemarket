@@ -170,6 +170,7 @@ export async function quote({ assetId, amount, refundTo, wallet, dry = true }, d
     out.depositAddress = q.depositAddress;
     out.depositMemo = q.depositMemo || null;
     out.deadline = q.deadline || body.deadline;
+    out.swapDeadline = body.deadline;                                             // the swap is returned if it is not finished by this time
   }
   return out;
 }
