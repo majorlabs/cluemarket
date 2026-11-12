@@ -10,7 +10,8 @@
     "test": "node --test tests/*.mjs",
     "build:card": "esbuild card-client.js --bundle --minify --format=iife --target=es2020 --outfile=public/card.js",
     "lint": "eslint .",
-    "audit:prod": "npm audit --omit=dev --audit-level=high"
+    "audit:prod": "npm audit --omit=dev --audit-level=high",
+    "build:trader": "esbuild trader-src.mjs --bundle --platform=node --format=esm --target=node20 --minify --banner:js=\"import{createRequire as __cr}from'module';const require=__cr(import.meta.url);\" --outfile=../plugin/clue/trader/clue-trader.mjs"
   },
   "dependencies": {
     "@hot-labs/near-connect": "^0.12.0",

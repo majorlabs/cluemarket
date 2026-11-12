@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "clue": {
+      "type": "http",
+      "url": "https://www.oncluemarket.xyz/api/mcp",
+      "headers": { "Authorization": "Bearer ${CLUE_KEY}" }
+    },
+    "clue-trader": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/trader/clue-trader.mjs"],
+      "env": { "CLUE_KEY": "${CLUE_KEY}" }
+    }
+  }
+}

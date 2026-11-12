@@ -1,10 +1,11 @@
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { store } from './auth.mjs';
+import { store, sealingKey } from './auth.mjs';
 import {initWalletAuth,walletSession,walletRoute} from './wallet-auth.mjs';
 import {AGENT_USER} from './agent-user.mjs';
-import {createKey,listKeys,revokeKey} from './agent-keys.mjs';
+import {createKey,listKeys,revokeKey,userForToken} from './agent-keys.mjs';
+import {describeWallet,connectWallet,updateWallet,removeWallet,signFor} from './agent-wallet.mjs';
 import {mcpRoute} from './mcp.mjs';
 import {privyRoute,privyWalletRoute} from './privy-auth.mjs';
 import {ordersLiveFor} from './orders-switch.mjs';
@@ -28,6 +29,7 @@ const publicOrigins=hosted ? allowedOrigins(publicOrigin) : [];
 const allowedHosts=hosted ? [...publicOrigins.map(o=>new URL(o).host),process.env.CLUE_SERVICE_HOST].filter(Boolean) : ['127.0.0.1:'+port,'localhost:'+port];
 if(hosted && (!publicOrigin.startsWith('https://') || !process.env.CLUE_SERVICE_HOST || !process.env.CLUE_SIGNUP_TOKEN || process.env.CLUE_SIGNUP_TOKEN.length < 32)) throw new Error('Hosted preview requires HTTPS, CLUE_SERVICE_HOST and a strong CLUE_SIGNUP_TOKEN.');
 const signUser=new HourlyBudget(1200);
+const agentSign=new HourlyBudget(600);   // signatures for assistant trading: sign-in, orders and permissions
 const fundUser=new HourlyBudget(30);
 const fundGlobal=new HourlyBudget(300);
 const depositUser=new HourlyBudget(10);   // real deposit addresses: a few per hour is plenty
@@ -111,6 +113,27 @@ const handler=async(req,res)=>{ try {
  // An assistant's call, passed on by the MCP route below. It never came from the network, so the browser checks do not apply.
  const fromAgent=Boolean(req[AGENT_USER]);
  if(url.pathname==='/api/mcp' && !fromAgent) return mcpRoute(req,res,{dispatch:(r,s)=>handler(r,s)});
+ // The local order sender that comes with the Clue plugin. It authenticates with the person's assistant key, not a browser
+ // cookie, so the browser checks below do not apply. It can only ask for signatures; it never sends anything to Polymarket from here.
+ if(!fromAgent && (url.pathname.startsWith('/api/agent/') || (url.pathname==='/api/pm/sign' && /^Bearer clue_ak_/.test(String(req.headers.authorization||''))))) {
+  const who=await userForToken(store,String(req.headers.authorization||'').replace(/^Bearer /,''));
+  if(!who) return json(res,401,{error:'Add your Clue assistant key.'});
+  if(req.method==='GET' && url.pathname==='/api/agent/wallet') return json(res,200,{...await describeWallet(store,who.userId),builderCode:process.env.POLYMARKET_BUILDER_CODE||null});
+  if(req.method==='POST' && url.pathname==='/api/agent/sign') {
+   if(!agentSign.take(who.userId)) return json(res,429,{error:'Too many requests. Try again in a little while.'});
+   const b=await getBody(req); return json(res,200,await signFor(store,sealingKey,who.userId,b.typedData));
+  }
+  if(req.method==='POST' && url.pathname==='/api/pm/sign') {
+   const w=(await describeWallet(store,who.userId)).wallet; if(!w?.enabled) return json(res,403,{error:'Assistant trading is switched off.'});
+   const b=await getBody(req); const check=checkSignRequest(b,w.address);
+   if(!check.ok) return json(res,check.status,{error:check.error});
+   if(!signUser.take(who.userId)) return json(res,429,{error:'Too many requests. Try again in a little while.'});
+   const key=process.env.POLYMARKET_BUILDER_API_KEY,secret=process.env.POLYMARKET_BUILDER_SECRET,passphrase=process.env.POLYMARKET_BUILDER_PASSPHRASE;
+   if(!key||!secret||!passphrase) return json(res,503,{error:'Trading is not switched on yet.'});
+   return json(res,200,builderHeaders(check,{key,secret,passphrase}));
+  }
+  return json(res,404,{error:'Not found'});
+ }
  if (!fromAgent && !allowedHosts.includes(req.headers.host)) return json(res,403,{error:'Invalid host'});
  const requestOrigin=hosted ? (checkOrigin(req.headers.origin,publicOrigins) || publicOrigin) : `http://${req.headers.host}`;
  if (!fromAgent && req.method!=='GET' && req.method!=='HEAD' && (hosted ? !checkOrigin(req.headers.origin,publicOrigins) : req.headers.origin !== requestOrigin)) return json(res,403,{error:'Invalid origin'});
@@ -189,6 +212,16 @@ const handler=async(req,res)=>{ try {
   const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in to get a funding quote.'});
   if(!fundUser.take(session.user.id)||!fundGlobal.take()) return json(res,429,{error:'Too many quotes. Try again in a little while.'});
   return json(res,200,await fundingQuote({source:url.searchParams.get('source'),amount:url.searchParams.get('amount'),address:url.searchParams.get('address')}));
+ }
+ if(url.pathname==='/api/agent-wallet') {
+  if(fromAgent) return json(res,403,{error:'Not allowed.'});
+  const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in first.'});
+  const owner=session.user.id;
+  if(req.method==='GET') return json(res,200,await describeWallet(store,owner));
+  if(req.method==='POST') return json(res,200,await connectWallet(store,sealingKey,owner,await getBody(req)));
+  if(req.method==='PATCH') return json(res,200,await updateWallet(store,owner,await getBody(req)));
+  if(req.method==='DELETE') return json(res,200,{removed:await removeWallet(store,owner)});
+  return json(res,405,{error:'Method not allowed.'});
  }
  if(url.pathname==='/api/agent-keys' || url.pathname.startsWith('/api/agent-keys/')) {
   // Keys are managed only from the signed-in page, never by an assistant.

@@ -99,7 +99,8 @@ test('a key cannot manage keys, trade or move money, and stops working once remo
   const eve = signup('eve');
   const made = (await site('POST', '/api/agent-keys', eve, {})).body;
   const asKey = (path, method = 'GET') => fetch(base + path, { method, headers: { Authorization: 'Bearer ' + made.token, 'Content-Type': 'application/json', Origin: base }, body: method === 'GET' ? undefined : '{}' }).then((r) => r.status);
-  for (const [p, m] of [['/api/agent-keys', 'GET'], ['/api/agent-keys', 'POST'], ['/api/pm/sign', 'POST'], ['/api/fund/deposits', 'GET'], ['/api/trading/account', 'GET'], ['/api/journal', 'GET']]) assert.equal(await asKey(p, m), 401, p);
+  for (const [p, m] of [['/api/agent-keys', 'GET'], ['/api/agent-keys', 'POST'], ['/api/fund/deposits', 'GET'], ['/api/trading/account', 'GET'], ['/api/journal', 'GET']]) assert.equal(await asKey(p, m), 401, p);
+  assert.equal(await asKey('/api/pm/sign', 'POST'), 403);                                      // assistant trading is off for this account
   assert.deepEqual((await tool(made.token, 'get_portfolio')).structuredContent.account, null);
   assert.equal((await site('DELETE', '/api/agent-keys/' + made.id, eve)).status, 200);
   assert.equal((await rpc(made.token, 'tools/list', {})).status, 401);

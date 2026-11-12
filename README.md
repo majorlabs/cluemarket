@@ -46,7 +46,8 @@ Clue puts it in one place. Pick a real market, read exactly how it resolves, ask
 | **Portfolio** | Your total (cash plus what you hold), every position with shares, entry and current price, value and profit or loss, and your history. **Claim** your winnings on ended markets you called, see and **Cancel** open orders, and **Withdraw** your cash as USDC to your own wallet on Base, Ethereum, Arbitrum, Optimism or Polygon. |
 | **Share a call** | Turn a call into a 16:9 card (live, won or lost) with a code that opens the same market, so people who see it can trade alongside you, plus a post to go with it. On a phone the share sheet sends it to any app, and **Post on X** opens X with the text and link ready. |
 | **Sign in your way** | Email, Google, an Ethereum wallet, or a NEAR wallet (a signed message, no transaction). |
-| **Use it from your AI assistant** | Connect Claude, Codex, Cursor or any MCP assistant from the account menu. It can search markets, run research, save forecasts to your Journal and read your Portfolio. It cannot trade or move money. |
+| **Use it from your AI assistant** | Connect Claude, Codex, Cursor or any MCP assistant from the account menu. It can search markets, run research, save forecasts to your Journal and read your Portfolio. |
+| **Let your assistant trade** | Connect your own OutLayer agent wallet on NEAR, set your own limits per order and per day, and your assistant can buy and sell through the Clue plugin. Orders go from your own computer, and Clue checks each one against your limits before your wallet signs it. |
 
 <table>
   <tr>
@@ -130,6 +131,26 @@ claude mcp add --transport http clue https://www.oncluemarket.xyz/api/mcp --head
 
 Tools: `search_markets`, `get_market`, `research`, `research_status`, `research_allowance`, `save_forecast`, `get_journal`, `get_portfolio`. Each one runs as you, through the same routes and limits as the site. A key cannot place trades, move money or make more keys, and you can remove it at any time.
 
+### The Clue plugin for Claude Code
+
+The plugin adds research, the Journal and trading to Claude Code in one install:
+
+```bash
+export CLUE_KEY=clue_ak_...
+claude plugin marketplace add majorlabs/cluemarket
+claude plugin install clue@clue
+```
+
+It brings the tools above, the commands `/clue:research`, `/clue:portfolio` and `/clue:trade`, a skill that teaches the assistant to research before a call and confirm every trade, and `clue-trader`, a small MCP server that runs on your computer and places orders.
+
+### Assistant trading with an OutLayer agent wallet
+
+1. At [app.outlayer.ai](https://app.outlayer.ai), create an agent wallet (Custody, Wallets). Its keys are held in OutLayer's secure hardware on NEAR. In its policy, allow `evm_sign` and save.
+2. In Clue, open the account menu, choose **Assistant trading**, paste the wallet key and set your limits per order and per day. Switch it on.
+3. Ask your assistant for `trading_status`, fund the trading account it shows with pUSD (or use **Add money**), and run `setup_trading` once.
+
+Clue keeps the wallet key sealed on its server. For each order, Clue checks your limits and has OutLayer sign. It signs only Polymarket sign-in, orders on Polymarket's exchanges, and permissions for Polymarket's own contracts, and refuses everything else, including transfers and withdrawals. The signed order is sent to Polymarket from your own computer. Switch assistant trading off in Clue, or freeze the wallet on OutLayer, at any time.
+
 ## How it works
 
 ```mermaid
@@ -171,6 +192,8 @@ Private research is isolated per account, and a test proves it by trying to read
 
 ```
 .
+├── .claude-plugin/          # plugin marketplace for Claude Code
+├── plugin/clue/            # the Clue plugin: MCP servers, skill, commands, local order sender
 ├── clue-agent/            the app: server, website and tests
 │   ├── server.mjs         HTTP server and all /api routes
 │   ├── public/            the website (HTML, JavaScript, CSS, fonts)
