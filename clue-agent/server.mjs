@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { store, sealingKey } from './auth.mjs';
 import {initWalletAuth,walletSession,walletRoute} from './wallet-auth.mjs';
+import {findTradingWallet} from './trading-wallet.mjs';
 import {AGENT_USER} from './agent-user.mjs';
 import {createKey,listKeys,revokeKey,revokeAll,userForToken} from './agent-keys.mjs';
 import {getTrade,listWaiting,start as tradeStart,decline as tradeDecline,finish as tradeFinish} from './agent-trades.mjs';
@@ -183,7 +184,14 @@ const handler=async(req,res)=>{ try {
  if(url.pathname==='/api/trading/account') {
   const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in first.'});
   const owner=session.user.id;
-  if(req.method==='GET'){const row=await store.get('SELECT wallet, signer FROM trading_accounts WHERE user_id=?',owner);return json(res,200,{account:row?{wallet:row.wallet,signer:row.signer||null}:null});}
+  if(req.method==='GET'){
+   let row=await store.get('SELECT wallet, signer FROM trading_accounts WHERE user_id=?',owner);
+   // Not saved yet (set up on another device, or before the server kept it): work it out from the person's own sign-in wallet,
+   // and keep it only if that trading account really exists on Polygon.
+   if(!row){ try { const signer=(await privyWalletRoute(owner)).wallet?.address; const wallet=signer?await findTradingWallet(signer):null;
+     if(wallet){ const now=new Date().toISOString(); await store.run('INSERT INTO trading_accounts (user_id,wallet,signer,created_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(user_id) DO NOTHING',owner,wallet,signer,now,now); row={wallet,signer}; } } catch(e){ console.log('trading account lookup failed',String(e.message||e).slice(0,120)); } }
+   return json(res,200,{account:row?{wallet:row.wallet,signer:row.signer||null}:null});
+  }
   if(req.method==='POST'){
    const b=await getBody(req); const addr=/^0x[0-9a-fA-F]{40}$/;
    if(!addr.test(String(b.wallet||''))) return json(res,400,{error:'That does not look like a trading account address.'});
