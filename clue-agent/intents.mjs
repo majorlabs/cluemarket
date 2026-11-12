@@ -195,7 +195,7 @@ export async function status(depositAddress, { fetchImpl = fetch, jwt = process.
   const quote = qr && qr.originAsset ? {
     originAssetId: String(qr.originAsset), sendAmount: String(sd.depositedAmountFormatted || (qt && qt.amountInFormatted) || ''),
     sendUsd: Number(sd.depositedAmountUsd) || Number(qt && qt.amountInUsd) || null, receiveAmount: (qt && qt.amountOutFormatted) || null,
-    refundTo: qr.refundTo || null, deadline: qr.deadline || null, createdAt: d.createdAt || null,
+    refundTo: qr.refundTo || null, deadline: qr.deadline || null, createdAt: d.quoteResponse.timestamp || d.createdAt || null,
   } : null;
   return { state, delivered: state === 'done' ? { amount: sd.amountOutFormatted || null, usd: Number(sd.amountOutUsd) || null } : null, ...(quote ? { quote } : {}) };
 }

@@ -282,9 +282,9 @@ test('server: a swap sent earlier can be added by its address, and then shows in
   // NEAR Intents knows it: 3 wNEAR, swapping, started a while ago
   const started = new Date(Date.now() - 20 * 60000).toISOString();
   state.statusBody = {
-    status: 'PROCESSING', createdAt: started,
+    status: 'PROCESSING',
     swapDetails: { depositedAmountFormatted: '3.0', depositedAmountUsd: '2.9985' },
-    quoteResponse: { quoteRequest: { originAsset: NEAR_ASSET, refundTo: NEAR_ACCOUNT, deadline: '2026-11-12T06:44:22.097Z' }, quote: { amountOutFormatted: '2.989361' } },
+    quoteResponse: { timestamp: started, quoteRequest: { originAsset: NEAR_ASSET, refundTo: NEAR_ACCOUNT, deadline: '2026-11-12T06:44:22.097Z' }, quote: { amountOutFormatted: '2.989361' } },
   };
   const added = JSON.parse((await call('POST', '/api/fund/deposits/track', cookie, { depositAddress: address })).text);
   assert.deepEqual([added.tracked, added.state], [true, 'swapping']);
@@ -298,6 +298,17 @@ test('server: a swap sent earlier can be added by its address, and then shows in
   // adding it again does not make a second one
   await call('POST', '/api/fund/deposits/track', cookie, { depositAddress: address });
   assert.equal(JSON.parse((await call('GET', '/api/fund/deposits', cookie)).text).deposits.length, 1);
+
+  // and if it was saved with a start time that was too late, adding it again puts the real, earlier one in
+  const earlier = new Date(Date.now() - 35 * 60000).toISOString();
+  state.statusBody.quoteResponse.timestamp = earlier;
+  await call('POST', '/api/fund/deposits/track', cookie, { depositAddress: address });
+  const fixed = JSON.parse((await call('GET', '/api/fund/deposits', cookie)).text).deposits;
+  assert.equal(fixed.length, 1);
+  assert.equal(fixed[0].createdAt, earlier);
+  state.statusBody.quoteResponse.timestamp = started;
+  await call('POST', '/api/fund/deposits/track', cookie, { depositAddress: address });
+  assert.equal(JSON.parse((await call('GET', '/api/fund/deposits', cookie)).text).deposits[0].createdAt, earlier);   // a later time never replaces an earlier one
 
   // and a person who is not signed in, or sends nonsense, gets a plain refusal
   assert.equal((await call('POST', '/api/fund/deposits/track', null, { depositAddress: address })).status, 401);
