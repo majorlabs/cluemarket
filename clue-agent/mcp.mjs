@@ -10,7 +10,7 @@ import { propose, getTrade } from './agent-trades.mjs';
 
 export const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const SERVER_INFO = { name: 'clue', title: 'Clue', version: '1.0.0' };
-const INSTRUCTIONS = 'Clue is a prediction market research desk. Search live markets, run sourced research on a question, save a forecast to the person\'s Journal, and read their Portfolio. Prices are shown as chances from 0 to 100. To trade, use propose_trade: the person approves it on their phone in Clue and the order goes from there; confirm the market, outcome and amount with them first. Research uses the person\'s free daily allowance and can take up to two minutes.';
+const INSTRUCTIONS = 'Clue is a prediction market research desk. Search live markets, run sourced research on a question, save a forecast to the person\'s Journal, and read their Portfolio. Prices are shown as chances from 0 to 100. To trade, use propose_trade: the person approves it in Clue on their own phone or computer, and the order goes from there; confirm the market, outcome and amount with them first. Research uses the person\'s free daily allowance and can take up to two minutes.';
 const RESEARCH_WAIT_MS = Number(process.env.CLUE_MCP_RESEARCH_WAIT_MS || 45000);
 const POLL_MS = Number(process.env.CLUE_MCP_POLL_MS || 2000);
 
@@ -37,7 +37,7 @@ export const TOOLS = [
     inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true } },
   { name: 'what_changed', title: 'What changed since my calls', description: 'For each call in the Journal: the person\'s chance, the market when they called it, the market now, and how far it moved. Biggest moves first.',
     inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true, openWorldHint: true } },
-  { name: 'propose_trade', title: 'Prepare a trade to approve', description: 'Prepare a buy for the person to approve on their phone. Nothing is bought until they tap Approve in Clue; the order then goes from their phone with their own trading account. Get token_id from get_market. max_price is the most to pay per share (0 to 1), usually a little above the current chance. Always confirm the market, outcome and amount with the person first. Needs a connection with trading allowed.',
+  { name: 'propose_trade', title: 'Prepare a trade to approve', description: 'Prepare a buy for the person to approve in Clue. Nothing is bought until they tap Approve in Clue; the order then goes from their own device with their own trading account. Get token_id from get_market. max_price is the most to pay per share (0 to 1), usually a little above the current chance. Always confirm the market, outcome and amount with the person first. Needs a connection with trading allowed.',
     inputSchema: { type: 'object', properties: { token_id: { type: 'string' }, amount_usd: { type: 'number', minimum: 1, maximum: 10000 }, max_price: { type: 'number', exclusiveMinimum: 0, exclusiveMaximum: 1 } }, required: ['token_id', 'amount_usd', 'max_price'] }, annotations: { readOnlyHint: false, openWorldHint: true } },
   { name: 'trade_status', title: 'Check a trade', description: 'Whether a prepared trade is waiting, approved and filled, declined or expired, with what was bought.',
     inputSchema: { type: 'object', properties: { trade_id: { type: 'string' } }, required: ['trade_id'] }, annotations: { readOnlyHint: true } },
@@ -133,11 +133,11 @@ const run = {
     const { id, market } = await propose(store, u, ctx.keyId, a);
     const link = `${ctx.base}/#/approve/${id}`;
     return { trade_id: id, status: 'waiting for approval', approve: link, buy: `${market.outcome} on "${market.question}"`, amount: Number(a.amount_usd), worstPrice: Number(a.max_price), marketNow: market.price,
-      note: `Nothing is bought yet. Ask the person to open the approve link on their phone and tap Approve; the order goes from their phone. It expires in 15 minutes. Call trade_status with trade_id to see how it went.` };
+      note: `Nothing is bought yet. Ask the person to open the approve link on their phone or computer and tap Approve; the order goes from their own device. It expires in 15 minutes. Call trade_status with trade_id to see how it went.` };
   },
   async trade_status(a, d, u) {
     const t = await getTrade(store, u, a.trade_id);
-    const words = { pending: 'Waiting for the person to approve on their phone.', sending: 'Approved; the phone is sending the order now.', filled: 'Filled.', unfilled: 'Approved, but it did not fill at that price, so nothing was bought.', failed: 'Approved, but the order did not go through. Nothing was bought.', declined: 'The person declined it.', expired: 'Nobody approved it within 15 minutes, so it expired.', checked: 'Checked on the phone, but real orders are not switched on for this account, so nothing was sent.' };
+    const words = { pending: 'Waiting for the person to approve it in Clue.', sending: 'Approved; their device is sending the order now.', filled: 'Filled.', unfilled: 'Approved, but it did not fill at that price, so nothing was bought.', failed: 'Approved, but the order did not go through. Nothing was bought.', declined: 'The person declined it.', expired: 'Nobody approved it within 15 minutes, so it expired.', checked: 'Checked in Clue, but real orders are not switched on for this account, so nothing was sent.' };
     return { ...t, meaning: words[t.status] || t.status };
   },
   async get_journal(a, d, u) { return ok(call(d, u, 'GET', '/api/journal')); },
