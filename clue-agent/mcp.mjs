@@ -57,11 +57,13 @@ const fail = (r) => { throw Object.assign(new Error(r.body?.error || `Clue retur
 const ok = async (p) => { const r = await p; if (r.status >= 400) fail(r); return r.body; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Polymarket's data service, version 2 (version 1 was retired).
 async function positions(wallet) {
-  const u = new URL('https://data-api.polymarket.com/positions'); u.searchParams.set('user', wallet); u.searchParams.set('sizeThreshold', '0.01'); u.searchParams.set('limit', '100');
+  const u = new URL('https://data-api.polymarket.com/v2/positions'); u.searchParams.set('user', wallet); u.searchParams.set('limit', '100');
   const r = await fetch(u, { signal: AbortSignal.timeout(12000), headers: { accept: 'application/json' } });
-  if (!r.ok) return null;
-  return (await r.json()).map((p) => ({ market: p.title, outcome: p.outcome, shares: p.size, avgPrice: p.avgPrice, currentPrice: p.curPrice, cost: p.initialValue, value: p.currentValue, pnl: p.cashPnl, pnlPercent: p.percentPnl, redeemable: Boolean(p.redeemable), slug: p.eventSlug || null, tokenId: p.asset || null }));
+  if (!r.ok) throw Object.assign(new Error('Polymarket\'s position data did not answer. Try again in a minute.'), { toolError: true });
+  const j = await r.json();
+  return (Array.isArray(j.data) ? j.data : []).filter((p) => Number(p.current_size) > 0.01 && !p.archived).map((p) => ({ market: p.title, outcome: p.outcome, shares: p.current_size, avgPrice: p.avg_price, currentPrice: p.current_price, cost: p.total_cost_usdc, value: p.current_value, pnl: p.total_pnl, pnlPercent: p.percent_pnl, redeemable: Boolean(p.redeemable), slug: p.event_slug || p.slug || null, tokenId: p.token_id || null }));
 }
 // pUSD, Polymarket's dollar, held by the trading account. Read straight from the chain.
 const PUSD = '0xC011a7E12a19f7B1f670d46F03B03f3342E82DFB';
@@ -83,7 +85,7 @@ export async function portfolioOf(wallet) {
   const p = list || [];
   const value = round(p.reduce((n, x) => n + (Number(x.value) || 0), 0)), cost = round(p.reduce((n, x) => n + (Number(x.cost) || 0), 0));
   const toClaim = round(p.filter((x) => x.redeemable).reduce((n, x) => n + (Number(x.value) || 0), 0));
-  return { cash, positionsValue: value, total: cash === null ? null : round(cash + value), profitOrLoss: round(value - cost), winningsToClaim: toClaim, positions: list };
+  return { cash: cash === null ? null : round(cash), positionsValue: value, total: cash === null ? null : round(cash + value), profitOrLoss: round(value - cost), winningsToClaim: toClaim, positions: list };
 }
 const run = {
   async search_markets(a, d, u) { const q = new URLSearchParams(); if (a.query) q.set('q', String(a.query)); if (a.sort) q.set('sort', String(a.sort)); const b = await ok(call(d, u, 'GET', '/api/events?' + q)); return { events: b.events.slice(0, 12).map(eventSummary), retrievedAt: b.retrievedAt }; },
