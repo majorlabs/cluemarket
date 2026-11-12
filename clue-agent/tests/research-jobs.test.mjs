@@ -27,7 +27,7 @@ const ai = http.createServer((req, res) => {
       chunk({ choices: [{ delta: { content: 'Answer: not yet clear, but the latest report from' }, finish_reason: 'length' }] });
       return res.end('data: [DONE]\n\n');
     }
-    if (mode === 'stall') {                                                                           // the model searches, starts answering, then goes quiet
+    if (mode === 'stall' || (mode === 'stall-once' && calls % 2 === 1)) {                                                                           // the model searches, starts answering, then goes quiet
       res.writeHead(200, { 'Content-Type': 'text/event-stream' });
       res.write(`data: ${JSON.stringify({ choices: [{ delta: { nearai_tool_result: { status: 'ok', output: 'https://example.org/evidence' } } }] })}\n\n`);
       res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'The evidence so far' } }] })}\n\n`);
@@ -59,7 +59,7 @@ const env = { ...process.env, PORT: String(port), CLUE_DATA_DIR: dir, NEAR_AI_AP
 for (const k of ['DATABASE_URL', 'BETTER_AUTH_URL', 'BETTER_AUTH_SECRET']) delete env[k];
 const server = spawn(process.execPath, ['server.mjs'], { env, stdio: process.env.DEBUG_SERVER ? 'inherit' : 'ignore' });
 after(async () => { server.kill(); await new Promise((r) => server.once('exit', r)); ai.close(); await rm(dir, { recursive: true, force: true }); });
-async function ready() { for (let i = 0; i < 100; i++) { try { if ((await fetch(base)).ok) return; } catch {} await new Promise((r) => setTimeout(r, 100)); } throw new Error('server failed to start'); }
+async function ready() { for (let i = 0; i < 400; i++) { try { if ((await fetch(base)).ok) return; } catch {} await new Promise((r) => setTimeout(r, 100)); } throw new Error('server failed to start'); }
 const signup = (name) => {
   const db = new Database(join(dir, 'clue.sqlite')); const token = randomBytes(32).toString('hex'); const now = new Date().toISOString();
   db.prepare('INSERT INTO user (id,name,email,emailVerified,createdAt,updatedAt) VALUES (?,?,?,?,?,?)').run(name, name + '.near', name + '@test.invalid', 0, now, now);
@@ -197,6 +197,18 @@ test('the AI is asked for a short answer in a fixed layout, not a long report', 
   assert.match(lastPrompt, /under 200 words/);
   assert.match(lastPrompt, /For means evidence that the answer to the question is Yes/);
   assert.match(lastPrompt, /latest information/);
+  assert.match(lastPrompt, /Never search more than three times in total/);
   assert.match(lastPrompt, /last 48 hours/);
   for (const h of ['## The short answer', '## For', '## Against', '## What to watch', '## How sure']) assert.ok(lastPrompt.includes(h), h);
+});
+
+test('a run that goes quiet is stopped and tried once more, and the second try is the answer', async () => {
+  const cookie = signup('mira');
+  mode = 'stall-once'; calls = 0;                                                  // the next request is the first of a pair: it goes quiet
+  const { researchId } = await (await start(cookie)).json();
+  let j; for (let i = 0; i < 150; i++) { j = await (await check(cookie, researchId)).json(); if (j.status !== 'running') break; await new Promise((r) => setTimeout(r, 200)); }
+  mode = 'slow';
+  assert.equal(j.status, 'done');
+  assert.match(j.content, /Evidence is thin/);
+  assert.equal(j.allowance.usedToday, 1);
 });

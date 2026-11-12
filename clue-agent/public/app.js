@@ -1354,7 +1354,11 @@ function mountWorkspace(container, ctx) {
     const question = q.value.trim();
     if (question.length < 5) { rStatus.className = "status err"; rStatus.textContent = "Write a question of at least 5 characters."; q.focus(); return; }
     if (!user) { openAccountDialog("Sign in to run research. It keeps your work private to you."); return; }
-    researchBtn.disabled = true; rStatus.className = "status"; rStatus.textContent = "Searching sources. This can take up to a minute…";
+    researchBtn.disabled = true; rStatus.className = "status";
+    // A clock, so a longer wait still shows that it is working and how long it has been.
+    const began = Date.now();
+    const tick = () => { const s = Math.round((Date.now() - began) / 1000); rStatus.textContent = `Searching sources… ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}. This usually takes one to two minutes.`; };
+    tick(); const clock = setInterval(tick, 1000);
     try {
       const start = await post("/api/research", { question, market: marketRef && marketRef.id ? { id: marketRef.id } : null });
       let d = null, hiccups = 0;
@@ -1372,7 +1376,7 @@ function mountWorkspace(container, ctx) {
       rStatus.className = "status ok"; rStatus.textContent = "Research complete. Save it with your forecast below.";
       if (state.threadId) { try { await ensureThread(true); } catch { /* user can save manually */ } }
     } catch (e) { rStatus.className = "status err"; rStatus.textContent = e.message; }
-    finally { researchBtn.disabled = false; }
+    finally { clearInterval(clock); researchBtn.disabled = false; }
   }
 
   async function ensureThread(newRevision = false) {
