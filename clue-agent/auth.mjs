@@ -67,6 +67,13 @@ CREATE TABLE IF NOT EXISTS agent_keys (
  FOREIGN KEY(user_id) REFERENCES "user"(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS agent_keys_user ON agent_keys(user_id);
+CREATE TABLE IF NOT EXISTS agent_trades (
+ id TEXT PRIMARY KEY, user_id TEXT NOT NULL, key_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, expires REAL NOT NULL,
+ token_id TEXT NOT NULL, side TEXT NOT NULL, amount REAL NOT NULL, max_price REAL NOT NULL, market_question TEXT, outcome TEXT, event_slug TEXT,
+ status TEXT NOT NULL, result TEXT,
+ FOREIGN KEY(user_id) REFERENCES "user"(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS agent_trades_user ON agent_trades(user_id, status);
 CREATE TABLE IF NOT EXISTS oauth_clients (id TEXT PRIMARY KEY, name TEXT NOT NULL, redirect_uris TEXT NOT NULL, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS oauth_requests (id TEXT PRIMARY KEY, client_id TEXT NOT NULL, redirect_uri TEXT NOT NULL, state TEXT, code_challenge TEXT NOT NULL, wants_trade INTEGER NOT NULL DEFAULT 0, expires REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS oauth_codes (code_hash TEXT PRIMARY KEY, client_id TEXT NOT NULL, user_id TEXT NOT NULL, redirect_uri TEXT NOT NULL, code_challenge TEXT NOT NULL, can_trade INTEGER NOT NULL DEFAULT 0, expires REAL NOT NULL);
