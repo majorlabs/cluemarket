@@ -530,9 +530,10 @@ async function connectView(id) {
   catch (e) { app.replaceChildren(el("div", { class: "card empty connect-card" }, el("h2", { text: "This request has expired" }), el("p", { class: "muted", text: "Go back to your AI app and connect Clue again." }))); return; }
   const card = el("section", { class: "card connect-card" });
   const head = [el("img", { src: "/assets/clue-mark.svg", alt: "", width: "48", height: "48" }), el("h1", { text: `Connect ${r.app} to Clue` }),
-    el("p", { class: "muted", text: `${r.app} is asking to use your Clue account. It will send you back to ${r.returnsTo} when you are done.` })];
+    el("p", { class: "muted", text: `${r.app} is asking to use your Clue account. It will send you back to ${r.returnsTo} when you are done.` }),
+    r.mismatch ? el("p", { class: "connect-warn", role: "alert", text: r.mismatch }) : null];
   if (!user) {
-    card.replaceChildren(...head, el("button", { class: "btn primary", type: "button", text: "Sign in to continue", onclick: () => openAccountDialog(`Sign in to connect ${r.app}.`) }));
+    card.replaceChildren(...kids(head), el("button", { class: "btn primary", type: "button", text: "Sign in to continue", onclick: () => openAccountDialog(`Sign in to connect ${r.app}.`) }));
     app.replaceChildren(card);
     document.addEventListener("clue:account", () => { if (location.hash.startsWith("#/connect/")) route(); }, { once: true });
     return;
@@ -544,7 +545,7 @@ async function connectView(id) {
     try { const d = await post("/api/oauth/approve", { id, approve, canTrade: trade.checked }); location.href = d.redirect; }
     catch (e) { msg.textContent = e.message; card.querySelectorAll("button").forEach((b) => { b.disabled = false; }); }
   };
-  card.replaceChildren(...head,
+  card.replaceChildren(...kids(head),
     el("div", { class: "connect-can" }, el("b", { text: `${r.app} will be able to` }),
       el("ul", {}, ...["Search markets and read their chances", "Run research with your free daily allowance", "Save calls to your Journal and read it", "Read your Portfolio and make PnL cards"].map((t) => el("li", { text: t })))),
     el("label", { class: "connect-trade" }, trade, el("span", {}, el("b", { text: "Also let it trade" }), el("small", { class: "muted", text: " Orders only within the limits you set under Agents, Assistant trading. It can never move money out." }))),

@@ -62,7 +62,7 @@ test('an AI app finds how to sign in from the connector address alone', async ()
 test('sign in, approve, and the app is connected as that person, read-only unless they chose trading', async () => {
   const ann = signup('ann');
   const c = await connect(ann);
-  assert.deepEqual(c.info, { app: 'Claude', returnsTo: 'claude.ai', asksToTrade: false });
+  assert.deepEqual(c.info, { app: 'Claude', returnsTo: 'claude.ai', asksToTrade: false, mismatch: null });
   assert.equal(c.back.origin + c.back.pathname, REDIRECT); assert.equal(c.back.searchParams.get('state'), 'xyz');
   const t = await swap({ grant_type: 'authorization_code', code: c.code, redirect_uri: REDIRECT, client_id: c.clientId, code_verifier: c.verifier });
   assert.equal(t.status, 200, JSON.stringify(t.body)); assert.equal(t.body.token_type, 'Bearer'); assert.equal(t.body.scope, 'research');
@@ -118,4 +118,20 @@ test('disconnect all cuts every app off at once', async () => {
   await site('POST', '/api/agent-keys', dee, { label: 'by hand' });
   assert.equal((await site('DELETE', '/api/agent-keys', dee)).body.disconnected, 2);
   assert.equal((await mcp(t.body.access_token, 'tools/list')).status, 401);
+});
+
+test('app names lose invisible tricks, and a famous name with someone else\'s address is flagged', async () => {
+  const reg = async (name, uri) => (await fetch(base + '/api/oauth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_name: name, redirect_uris: [uri] }) }).then(j)).body;
+  const rtl = await reg('Claude AI\u202Eevil\u200B', 'https://claude.ai/api/mcp/auth_callback');
+  assert.equal(rtl.client_name, 'Claude AIevil');
+  const { verifier, challenge } = pkce(); void verifier;
+  const ask = async (c, uri) => { const u = new URL(base + '/api/oauth/authorize'); for (const [k, v] of Object.entries({ response_type: 'code', client_id: c.client_id, redirect_uri: uri, code_challenge: challenge, code_challenge_method: 'S256' })) u.searchParams.set(k, v); const id = (await fetch(u, { redirect: 'manual' })).headers.get('location').split('#/connect/')[1]; return (await site('GET', `/api/oauth/request/${id}`, '')).body; };
+  const fake = await reg('Claude AI', 'https://evil.example/cb');
+  assert.match((await ask(fake, 'https://evil.example/cb')).mismatch, /calls itself "Claude AI" but would send you back to evil\.example/);
+  const real = await reg('Claude', 'https://claude.ai/api/mcp/auth_callback');
+  assert.equal((await ask(real, 'https://claude.ai/api/mcp/auth_callback')).mismatch, null);
+  const local = await reg('Claude Code', 'http://localhost:33418/callback');
+  assert.equal((await ask(local, 'http://localhost:33418/callback')).mismatch, null);
+  const gpt = await reg('ChatGPT', 'https://chatgpt.evil.example/cb');
+  assert.ok((await ask(gpt, 'https://chatgpt.evil.example/cb')).mismatch);
 });
