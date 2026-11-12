@@ -1173,11 +1173,15 @@ async function mountTicket(box, ctx) {
     // What is still on its way goes at the top, where a person waiting will look. Finished ones go below.
     const minePending = el("div", { class: "my-deposits pending" });
     const rowFor = (d) => {
-      const l = lineFor(d);
+      const l = lineFor(d), pending = !(d.final || d.expired);
+      const by = pending && d.deadline && Date.parse(d.deadline) > Date.now() ? new Date(d.deadline).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null;
       return el("div", { class: "md-row" },
         el("div", { class: "md-top" }, el("b", { text: `${d.send.amount} ${d.send.symbol} on ${d.send.chain}` }), el("small", { class: "muted", text: `${d.send.usd ? `about $${Number(d.send.usd).toFixed(2)} · ` : ""}${ago(d.createdAt)}` })),
         el("p", { class: `status ${l.cls}`, text: l.text }),
-        ...kids(d.final || d.expired ? null : el("div", { class: "acct-addr" }, el("code", { text: d.depositAddress }), copy(d.depositAddress))));
+        ...kids(
+          by ? el("p", { class: "small muted", text: `If it is not finished by ${by}, it is returned${d.refundTo ? ` to ${d.refundTo}` : " to your refund address"}.` }) : null,
+          pending ? el("div", { class: "acct-addr" }, el("code", { text: d.depositAddress }), copy(d.depositAddress)) : null,
+          pending ? el("a", { class: "small", href: `https://explorer.near-intents.org/transactions/${encodeURIComponent(d.depositAddress)}?referral=clue`, target: "_blank", rel: "noopener noreferrer", text: "See it on NEAR Intents ↗" }) : null));
     };
     function drawMine(list) {
       const onItsWay = list.filter((x) => !x.final && !x.expired), rest = list.filter((x) => x.final || x.expired).slice(0, 3);
@@ -1194,7 +1198,10 @@ async function mountTicket(box, ctx) {
       try {
         const s = await api(`/api/fund/intents/status?deposit=${encodeURIComponent(a)}`);
         if (s.state === "waiting") { oldOut.className = "status"; oldOut.textContent = "Nothing seen at this address yet. Check that you pasted the whole address, and that the money was sent to it."; }
-        else { const l = lineFor({ state: s.state, delivered: s.delivered && s.delivered.amount, createdAt: new Date().toISOString(), expired: false }); oldOut.className = `status ${l.cls}`; oldOut.textContent = l.text; }
+        else { const l = lineFor({ state: s.state, delivered: s.delivered && s.delivered.amount, createdAt: (s.quote && s.quote.createdAt) || new Date().toISOString(), expired: false }); oldOut.className = `status ${l.cls}`; oldOut.textContent = l.text;
+          // Keep it: it joins the list above, so it is still there after a refresh.
+          try { const t = await post("/api/fund/deposits/track", { depositAddress: a }); if (t && t.tracked) { oldOut.textContent += " It is now in your deposits above."; oldIn.value = ""; loadMine(); } } catch { /* the status above is still shown */ }
+        }
       } catch (e) { oldOut.className = "status err"; oldOut.textContent = e.message || "Could not check right now. Try again in a minute."; }
       oldBtn.disabled = false;
     } });

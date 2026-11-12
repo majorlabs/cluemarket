@@ -6,8 +6,8 @@ import {initWalletAuth,walletSession,walletRoute} from './wallet-auth.mjs';
 import {privyRoute,privyWalletRoute} from './privy-auth.mjs';
 import {ordersLiveFor} from './orders-switch.mjs';
 import {marketsByCondition,parseIds} from './markets-lookup.mjs';
-import {offered as intentsOffered,quote as intentsQuote,status as intentsStatus,limits as intentsLimits} from './intents.mjs';
-import {saveDeposit,listDeposits} from './deposits.mjs';
+import {offered as intentsOffered,quote as intentsQuote,status as intentsStatus,limits as intentsLimits,describeAsset as intentsDescribe} from './intents.mjs';
+import {saveDeposit,listDeposits,trackDeposit} from './deposits.mjs';
 import {allowedOrigins,checkOrigin} from './origins.mjs';
 import {cleanAnswer} from './answer-links.mjs';
 import {HourlyBudget} from './budget.mjs';
@@ -160,6 +160,13 @@ const app=http.createServer(async(req,res)=>{ try {
   // A real deposit address is noted, so the person can see where the deposit is even after a refresh. A failure here never blocks the deposit.
   if(!dry) await saveDeposit(store,session.user.id,quoted).catch(e=>console.error('could not note the deposit',e.message));
   return json(res,200,quoted);
+ }
+ if(req.method==='POST' && url.pathname==='/api/fund/deposits/track') {
+  const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in to see this.'});
+  if(!depositsUser.take(session.user.id)) return json(res,429,{error:'Too many requests. Try again in a little while.'});
+  const b=await getBody(req); const address=String(b.depositAddress||'').trim();
+  if(!/^[A-Za-z0-9_.:-]{10,120}$/.test(address)) return json(res,400,{error:'That deposit address does not look right.'});
+  return json(res,200,await trackDeposit(store,session.user.id,address,(a)=>intentsStatus(a),(id)=>intentsDescribe(id)));
  }
  if(req.method==='GET' && url.pathname==='/api/fund/deposits') {
   const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in to see this.'});

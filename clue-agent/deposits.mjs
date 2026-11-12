@@ -5,13 +5,13 @@ import { randomUUID } from 'node:crypto';
 const FINAL = new Set(['done', 'refunded', 'failed']);
 export const isFinal = (state) => FINAL.has(state);
 
-export async function saveDeposit(store, userId, q, { now = new Date(), id = randomUUID() } = {}) {
+export async function saveDeposit(store, userId, q, { now = new Date(), id = randomUUID(), state = 'waiting' } = {}) {
   if (!userId || !q || !q.depositAddress || !q.send) return false;
   const t = now.toISOString();
   await store.run(
     'INSERT INTO fund_deposits (id,user_id,deposit_address,deposit_memo,send_symbol,send_chain,send_amount,send_usd,receive_amount,refund_to,deadline,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id,deposit_address) DO NOTHING',
     id, userId, String(q.depositAddress), q.depositMemo || null, String(q.send.symbol), String(q.send.chain), String(q.send.amount), q.send.usd ?? null,
-    q.receive && q.receive.amount ? String(q.receive.amount) : null, q.refundTo || null, q.deadline || null, 'waiting', t, t);
+    q.receive && q.receive.amount ? String(q.receive.amount) : null, q.refundTo || null, q.swapDeadline || q.deadline || null, state, t, t);
   return true;
 }
 
@@ -41,4 +41,17 @@ export async function listDeposits(store, userId, readStatus, { now = Date.now()
     } catch { /* the saved state is shown, and the next look asks again */ }
   }));
   return rows.map((r) => shape(r, now));
+}
+
+/** Adds a deposit that was sent before the list existed, or from elsewhere, found by its address. Only what NEAR Intents itself reports is saved. */
+export async function trackDeposit(store, userId, address, readStatus, describeAsset, { now = new Date() } = {}) {
+  const s = await readStatus(address);
+  if (!s || !s.quote) return { tracked: false, state: s ? s.state : null };
+  const a = await Promise.resolve(describeAsset(s.quote.originAssetId)).catch(() => ({ symbol: 'coin', chain: '' }));
+  const created = s.quote.createdAt && Number.isFinite(Date.parse(s.quote.createdAt)) ? new Date(s.quote.createdAt) : now;
+  await saveDeposit(store, userId, {
+    depositAddress: address, send: { symbol: a.symbol, chain: a.chain, amount: s.quote.sendAmount, usd: s.quote.sendUsd },
+    receive: { amount: s.quote.receiveAmount }, refundTo: s.quote.refundTo, deadline: s.quote.deadline,
+  }, { now: created, state: s.state });
+  return { tracked: true, state: s.state };
 }
