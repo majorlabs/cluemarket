@@ -1,7 +1,7 @@
 import { betterAuth } from 'better-auth';
 import Database from 'better-sqlite3';
 import pg from 'pg';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
@@ -25,6 +25,8 @@ if (isPostgres) {
   database.pragma('journal_mode = WAL');
   database.pragma('foreign_keys = ON');
 }
+// Seals the assistant-wallet keys people connect (agent-wallet.mjs). Derived from the server secret, never stored.
+export const sealingKey = createHash('sha256').update('clue-agent-wallet:' + secret).digest();
 export const auth = betterAuth({ secret, baseURL: process.env.BETTER_AUTH_URL || `http://127.0.0.1:${port}`, database, emailAndPassword: { enabled: false, minPasswordLength: 10 } });
 await (await auth.$context).runMigrations();
 const schema = `CREATE TABLE IF NOT EXISTS research_threads (
@@ -65,6 +67,17 @@ CREATE TABLE IF NOT EXISTS agent_keys (
  FOREIGN KEY(user_id) REFERENCES "user"(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS agent_keys_user ON agent_keys(user_id);
+CREATE TABLE IF NOT EXISTS agent_wallets (
+ user_id TEXT PRIMARY KEY, provider TEXT NOT NULL, key_sealed TEXT NOT NULL, address TEXT NOT NULL,
+ enabled INTEGER NOT NULL DEFAULT 0, max_order REAL NOT NULL, max_day REAL NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ FOREIGN KEY(user_id) REFERENCES "user"(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS agent_orders (
+ id TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at TEXT NOT NULL, day TEXT NOT NULL, side TEXT NOT NULL,
+ token_id TEXT NOT NULL, usd REAL NOT NULL,
+ FOREIGN KEY(user_id) REFERENCES "user"(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS agent_orders_day ON agent_orders(user_id, day);
 CREATE TABLE IF NOT EXISTS research_results (
  id TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at TEXT NOT NULL,
  question TEXT NOT NULL, content TEXT NOT NULL, sources TEXT NOT NULL,

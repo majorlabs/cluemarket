@@ -1,0 +1,20 @@
+{
+  "name": "clue",
+  "version": "1.0.0",
+  "description": "Research prediction markets, keep a forecast journal and trade on Polymarket from your AI assistant, with your own OutLayer agent wallet and your own limits.",
+  "homepage": "https://www.oncluemarket.xyz",
+  "repository": "https://github.com/majorlabs/cluemarket",
+  "license": "MIT",
+  "keywords": [
+    "prediction markets",
+    "polymarket",
+    "near",
+    "outlayer",
+    "research",
+    "trading"
+  ],
+  "author": {
+    "name": "Clue",
+    "url": "https://www.oncluemarket.xyz"
+  }
+}

@@ -166,7 +166,7 @@ dl.facts dt{font-size:12px;color:var(--faint);margin-bottom:2px}dl.facts dd{marg
 .field{display:block;margin-top:14px}
 .field>span{display:block;font-weight:600;font-size:14px}
 .field>small{display:block;color:var(--muted);font-size:12.5px;margin:1px 0 6px}
-.field input[type=text],.field textarea,.ask-box textarea,.field input[type=number]{width:100%;background:var(--surface);border:1px solid var(--line-strong);border-radius:10px;padding:10px 12px;font-size:14.5px;line-height:1.45}
+.field input[type=text],.field textarea,.ask-box textarea,.field input[type=number],.field input[type=password]{width:100%;background:var(--surface);border:1px solid var(--line-strong);border-radius:10px;padding:10px 12px;font-size:14.5px;line-height:1.45}
 .field textarea{resize:vertical;min-height:72px}
 .field input:focus,.field textarea:focus,.ask-box textarea:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px #ed551b26}
 .prob{display:flex;align-items:center;gap:14px;margin-top:6px}
@@ -746,7 +746,7 @@ html[data-theme="light"] .card,html[data-theme="light"] .stat,html[data-theme="l
 .side-seg button{height:42px;font-size:14px}
 .side-seg button[aria-pressed="true"]:first-child{background:var(--yes-wash);color:var(--yes);box-shadow:0 0 0 1px rgba(46,230,160,.35) inset}
 .side-seg button[aria-pressed="true"]:nth-child(2){background:var(--no-wash);color:var(--no);box-shadow:0 0 0 1px rgba(255,107,97,.35) inset}
-.field input[type=text],.field textarea,.ask-box textarea,.field input[type=number],.intents input,.wd-amt input,.post-text{background:var(--bg-2);border:1px solid var(--line-strong);border-radius:12px;transition:border-color .2s,box-shadow .2s}
+.field input[type=text],.field textarea,.ask-box textarea,.field input[type=number],.field input[type=password],.intents input,.wd-amt input,.post-text{background:var(--bg-2);border:1px solid var(--line-strong);border-radius:12px;transition:border-color .2s,box-shadow .2s}
 .field input:focus,.field textarea:focus,.intents input:focus,.wd-amt input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 4px var(--brand-wash)}
 .ticket .field input[type=number],.ticket .field input[type=text]{height:52px;font-size:22px;font-family:var(--mono);letter-spacing:-.02em}
 .tk-row{padding:6px 0;border-bottom:1px dashed var(--line)}
@@ -908,3 +908,8 @@ dialog .btn{height:48px;border-radius:14px}
 .mcp-key{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line-strong);border-radius:12px;padding:10px 12px}
 .mcp-make{display:flex;gap:8px;margin-top:10px}
 .mcp-make input{flex:1;min-width:0}
+.aw-limits{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
+.aw-limits input,.mcp-make input{width:100%}
+.aw-steps{margin:10px 0 12px 18px;display:grid;gap:6px;font-size:14px}
+.aw-state{display:grid;gap:2px;border:1px solid var(--line-strong);border-radius:12px;padding:10px 12px;margin:12px 0}
+.aw-state.on b{color:var(--yes)}

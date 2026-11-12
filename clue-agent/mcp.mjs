@@ -13,7 +13,7 @@ const RESEARCH_WAIT_MS = Number(process.env.CLUE_MCP_RESEARCH_WAIT_MS || 170000)
 const POLL_MS = Number(process.env.CLUE_MCP_POLL_MS || 2000);
 
 const pct = (p) => (p === null || p === undefined || p === '' || !Number.isFinite(Number(p)) ? null : Math.round(Number(p) * 1000) / 10);
-const market = (m) => ({ id: String(m.id), question: m.question, outcomes: (m.outcomes || []).map((o, i) => ({ outcome: o, chance: pct(m.outcomePrices?.[i]) })), endDate: m.endDate || null, volume: m.volume ?? null, slug: m.marketSlug || null });
+const market = (m) => ({ id: String(m.id), question: m.question, outcomes: (m.outcomes || []).map((o, i) => ({ outcome: o, chance: pct(m.outcomePrices?.[i]), token_id: m.tokenIds?.[i] || null })), endDate: m.endDate || null, volume: m.volume ?? null, slug: m.marketSlug || null });
 const eventSummary = (e) => ({ slug: e.slug, title: e.title, url: `https://www.oncluemarket.xyz/#/event/${e.slug}`, markets: (e.markets || []).map(market) });
 
 export const TOOLS = [

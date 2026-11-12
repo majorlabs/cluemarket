@@ -1,0 +1,16 @@
+{
+  "name": "clue",
+  "owner": {
+    "name": "Clue"
+  },
+  "metadata": {
+    "description": "Clue: prediction market research, forecasts and trading for AI assistants."
+  },
+  "plugins": [
+    {
+      "name": "clue",
+      "source": "./plugin/clue",
+      "description": "Research prediction markets, keep a forecast journal and trade on Polymarket from your AI assistant, with your own OutLayer agent wallet and your own limits."
+    }
+  ]
+}

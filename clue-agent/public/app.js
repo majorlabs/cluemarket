@@ -250,6 +250,7 @@ function openAccountMenu() {
       el("a", { class: "btn", href: "#/portfolio", text: "Portfolio", onclick: () => dialog.close() }),
       el("a", { class: "btn", href: "#/saved", text: "Journal", onclick: () => dialog.close() }),
       el("button", { class: "btn", type: "button", text: "Connect an AI assistant", onclick: openAssistants }),
+      el("button", { class: "btn", type: "button", text: "Assistant trading", onclick: () => openAgentWallet() }),
       el("button", { class: "btn", type: "button", style: "color:var(--no)", text: "Disconnect", onclick: signOut }),
       el("button", { class: "btn ghost", type: "button", text: "Close", onclick: () => dialog.close() })));
   if (!dialog.open) dialog.showModal();
@@ -276,7 +277,8 @@ async function openAssistants(fresh) {
     el("h2", { text: "Connect an AI assistant" }),
     el("p", { class: "muted", text: "Use Clue from Claude, Codex, Cursor or any assistant that supports MCP. It can search markets, run research with your free daily allowance, save forecasts to your Journal and read your Portfolio. It cannot place trades or move money." }),
     shown,
-    snippet("Claude Code", `claude mcp add --transport http clue ${MCP_URL} --header "Authorization: Bearer ${key}"`),
+    snippet("Claude Code plugin (research and trading)", `export CLUE_KEY=${key}\nclaude plugin marketplace add majorlabs/cluemarket\nclaude plugin install clue@clue`),
+    snippet("Claude Code (research only)", `claude mcp add --transport http clue ${MCP_URL} --header "Authorization: Bearer ${key}"`),
     snippet("Codex (~/.codex/config.toml)", `[mcp_servers.clue]\nurl = "${MCP_URL}"\nhttp_headers = { "Authorization" = "Bearer ${key}" }`),
     snippet("Cursor and others (mcp.json)", JSON.stringify({ mcpServers: { clue: { url: MCP_URL, headers: { Authorization: `Bearer ${key}` } } } }, null, 2)),
     el("h3", { text: "Your keys" }), list,
@@ -290,6 +292,46 @@ async function openAssistants(fresh) {
       el("button", { class: "btn small", type: "button", style: "color:var(--no)", text: "Remove", onclick: async (ev) => { ev.currentTarget.disabled = true; try { await api(`/api/agent-keys/${k.id}`, { method: "DELETE" }); } catch { /* already gone */ } openAssistants(); } })))
       : [el("p", { class: "muted", text: "No keys yet. Make one, then paste it into your assistant." })]));
   } catch (e) { list.replaceChildren(el("p", { class: "err", text: e.message })); }
+}
+// Assistant trading: the person connects their own OutLayer agent wallet and sets their own limits. Their assistant trades
+// through the Clue plugin from their own computer; Clue checks each order against these limits before the wallet signs it.
+async function openAgentWallet() {
+  const msg = el("p", { class: "err", role: "alert" });
+  const body = el("div", {}, el("p", { class: "loading", role: "status", text: "Loading…" }));
+  dialog.replaceChildren(el("h2", { text: "Assistant trading" }),
+    el("p", { class: "muted", text: "Let your AI assistant buy and sell on Polymarket with your own OutLayer agent wallet, within limits you set. Orders go from your own computer through the Clue plugin, and Clue checks every order against your limits before your wallet signs it." }),
+    body, msg, el("div", { class: "actions" }, el("button", { class: "btn ghost", type: "button", text: "Back", onclick: openAccountMenu }), el("button", { class: "btn ghost", type: "button", text: "Close", onclick: () => dialog.close() })));
+  if (!dialog.open) dialog.showModal();
+  const send = async (method, data) => { msg.textContent = ""; try { await api("/api/agent-wallet", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(data || {}) }); openAgentWallet(); } catch (e) { msg.textContent = e.message; body.querySelectorAll("button").forEach((b) => { b.disabled = false; }); } };
+  const limitInputs = (w) => {
+    const per = el("input", { type: "number", min: "1", step: "1", inputmode: "decimal", value: w ? String(w.maxOrder) : "", placeholder: "e.g. 25", "aria-label": "Limit per order in dollars" });
+    const day = el("input", { type: "number", min: "1", step: "1", inputmode: "decimal", value: w ? String(w.maxDay) : "", placeholder: "e.g. 100", "aria-label": "Limit per day in dollars" });
+    return { per, day, node: el("div", { class: "aw-limits" }, el("label", { class: "field" }, el("span", { text: "Most per order ($)" }), per), el("label", { class: "field" }, el("span", { text: "Most per day ($)" }), day)) };
+  };
+  let w;
+  try { ({ wallet: w } = await api("/api/agent-wallet")); } catch (e) { body.replaceChildren(el("p", { class: "err", text: e.message })); return; }
+  if (!w) {
+    const key = el("input", { type: "password", autocomplete: "off", placeholder: "wk_…", "aria-label": "OutLayer wallet key" });
+    const L = limitInputs(null);
+    body.replaceChildren(
+      el("ol", { class: "aw-steps" },
+        el("li", {}, "Create an agent wallet at ", el("a", { href: "https://app.outlayer.ai", target: "_blank", rel: "noopener", text: "app.outlayer.ai" }), " (Custody, Wallets). In its policy, allow evm_sign and save."),
+        el("li", { text: "Paste the wallet key (it starts with wk_) and choose your limits." }),
+        el("li", { text: "Make a key under Connect an AI assistant, and install the Clue plugin." })),
+      el("label", { class: "field" }, el("span", { text: "OutLayer wallet key" }), key), L.node,
+      el("button", { class: "btn primary", type: "button", text: "Connect wallet", onclick: (ev) => { ev.currentTarget.disabled = true; send("POST", { key: key.value.trim(), maxOrder: Number(L.per.value), maxDay: Number(L.day.value) }); } }));
+    return;
+  }
+  const L = limitInputs(w);
+  body.replaceChildren(
+    el("div", { class: "acct-addr" }, el("span", { class: "label", text: "Agent wallet (OutLayer)" }), el("code", { text: w.address }), copyBtn(w.address)),
+    el("div", { class: `aw-state ${w.enabled ? "on" : ""}` }, el("b", { text: w.enabled ? "On: your assistant can trade" : "Off: your assistant cannot trade" }),
+      el("span", { class: "muted small", text: `Used today: $${w.spentToday} of $${w.maxDay}` })),
+    el("button", { class: `btn ${w.enabled ? "" : "primary"}`, type: "button", text: w.enabled ? "Switch off" : "Switch on", onclick: () => send("PATCH", { enabled: !w.enabled }) }),
+    L.node,
+    el("button", { class: "btn", type: "button", text: "Save limits", onclick: () => send("PATCH", { maxOrder: Number(L.per.value), maxDay: Number(L.day.value) }) }),
+    el("p", { class: "muted small", text: "To fund it, ask your assistant for trading_status. It gives the trading account address to send pUSD to, or to use with Add money." }),
+    el("button", { class: "btn small", type: "button", style: "color:var(--no)", text: "Disconnect wallet", onclick: () => send("DELETE") }));
 }
 async function signOut() {
   dialog.close();
