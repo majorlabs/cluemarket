@@ -267,3 +267,38 @@ test('server: a refunded or failed deposit says so, and stays that way', async (
   assert.deepEqual([d.state, d.final], ['refunded', true]);
   state.statusBody = { status: 'PENDING_DEPOSIT' };
 });
+
+test('server: a swap sent earlier can be added by its address, and then shows in the list like any other', async () => {
+  const cookie = signup('jori');
+  const address = 'c'.repeat(64);
+  // before it is found, a plain "waiting" answer adds nothing
+  state.statusBody = { status: 'PENDING_DEPOSIT' };
+  const none = JSON.parse((await call('POST', '/api/fund/deposits/track', cookie, { depositAddress: address })).text);
+  assert.equal(none.tracked, false);
+  assert.deepEqual(JSON.parse((await call('GET', '/api/fund/deposits', cookie)).text).deposits, []);
+
+  // NEAR Intents knows it: 3 wNEAR, swapping, started a while ago
+  const started = new Date(Date.now() - 20 * 60000).toISOString();
+  state.statusBody = {
+    status: 'PROCESSING', createdAt: started,
+    swapDetails: { depositedAmountFormatted: '3.0', depositedAmountUsd: '2.9985' },
+    quoteResponse: { quoteRequest: { originAsset: NEAR_ASSET, refundTo: NEAR_ACCOUNT, deadline: '2026-11-12T06:44:22.097Z' }, quote: { amountOutFormatted: '2.989361' } },
+  };
+  const added = JSON.parse((await call('POST', '/api/fund/deposits/track', cookie, { depositAddress: address })).text);
+  assert.deepEqual([added.tracked, added.state], [true, 'swapping']);
+  const list = JSON.parse((await call('GET', '/api/fund/deposits', cookie)).text).deposits;
+  assert.equal(list.length, 1);
+  assert.deepEqual([list[0].depositAddress, list[0].state, list[0].send.amount, list[0].send.symbol, list[0].send.chain], [address, 'swapping', '3.0', 'wNEAR', 'NEAR']);
+  assert.equal(list[0].receive.amount, '2.989361');
+  assert.equal(list[0].refundTo, NEAR_ACCOUNT);
+  assert.equal(list[0].createdAt, started);                                                     // it shows how long it has really been
+
+  // adding it again does not make a second one
+  await call('POST', '/api/fund/deposits/track', cookie, { depositAddress: address });
+  assert.equal(JSON.parse((await call('GET', '/api/fund/deposits', cookie)).text).deposits.length, 1);
+
+  // and a person who is not signed in, or sends nonsense, gets a plain refusal
+  assert.equal((await call('POST', '/api/fund/deposits/track', null, { depositAddress: address })).status, 401);
+  assert.equal((await call('POST', '/api/fund/deposits/track', cookie, { depositAddress: '../etc/passwd' })).status, 400);
+  state.statusBody = { status: 'PENDING_DEPOSIT' };
+});

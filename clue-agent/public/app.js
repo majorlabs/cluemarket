@@ -1194,7 +1194,10 @@ async function mountTicket(box, ctx) {
       try {
         const s = await api(`/api/fund/intents/status?deposit=${encodeURIComponent(a)}`);
         if (s.state === "waiting") { oldOut.className = "status"; oldOut.textContent = "Nothing seen at this address yet. Check that you pasted the whole address, and that the money was sent to it."; }
-        else { const l = lineFor({ state: s.state, delivered: s.delivered && s.delivered.amount, createdAt: new Date().toISOString(), expired: false }); oldOut.className = `status ${l.cls}`; oldOut.textContent = l.text; }
+        else { const l = lineFor({ state: s.state, delivered: s.delivered && s.delivered.amount, createdAt: (s.quote && s.quote.createdAt) || new Date().toISOString(), expired: false }); oldOut.className = `status ${l.cls}`; oldOut.textContent = l.text;
+          // Keep it: it joins the list above, so it is still there after a refresh.
+          try { const t = await post("/api/fund/deposits/track", { depositAddress: a }); if (t && t.tracked) { oldOut.textContent += " It is now in your deposits above."; oldIn.value = ""; loadMine(); } } catch { /* the status above is still shown */ }
+        }
       } catch (e) { oldOut.className = "status err"; oldOut.textContent = e.message || "Could not check right now. Try again in a minute."; }
       oldBtn.disabled = false;
     } });

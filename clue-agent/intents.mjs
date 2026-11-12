@@ -189,5 +189,21 @@ export async function status(depositAddress, { fetchImpl = fetch, jwt = process.
   if (!r.ok) throw fail('Could not check the status right now.', 502);
   const state = STATUS[d.status] || 'swapping';
   const sd = d.swapDetails || {};
-  return { state, delivered: state === 'done' ? { amount: sd.amountOutFormatted || null, usd: Number(sd.amountOutUsd) || null } : null };
+  // What NEAR Intents knows about the swap, so a person can add one that was sent earlier to their list of deposits.
+  const qr = d.quoteResponse && d.quoteResponse.quoteRequest, qt = d.quoteResponse && d.quoteResponse.quote;
+  const quote = qr && qr.originAsset ? {
+    originAssetId: String(qr.originAsset), sendAmount: String(sd.depositedAmountFormatted || (qt && qt.amountInFormatted) || ''),
+    sendUsd: Number(sd.depositedAmountUsd) || Number(qt && qt.amountInUsd) || null, receiveAmount: (qt && qt.amountOutFormatted) || null,
+    refundTo: qr.refundTo || null, deadline: qr.deadline || null, createdAt: d.createdAt || null,
+  } : null;
+  return { state, delivered: state === 'done' ? { amount: sd.amountOutFormatted || null, usd: Number(sd.amountOutUsd) || null } : null, ...(quote ? { quote } : {}) };
+}
+
+/** The coin and chain for an asset id, for showing a deposit that was found by its address. */
+export async function describeAsset(assetId, { fetchImpl = fetch } = {}) {
+  const { assets } = await offered({ fetchImpl });
+  const known = assets.find((x) => x.assetId === assetId);
+  if (known) return { symbol: known.symbol, chain: known.chainName };
+  const t = (await tokens(fetchImpl)).find((x) => x.assetId === assetId);
+  return t ? { symbol: String(t.symbol), chain: CHAINS[t.blockchain] || String(t.blockchain) } : { symbol: 'coin', chain: '' };
 }
