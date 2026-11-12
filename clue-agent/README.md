@@ -26,7 +26,14 @@ Run the tests from this folder: one of them starts `server.mjs` by relative path
 | `pm-sign.mjs` | Signs trading setup paperwork on the server, for the user's own wallet and a short fixed list of requests |
 | `answer-links.mjs`, `origins.mjs` | Removing links the web search did not return; the approved-origin check |
 | `public/` | The site: `app.js`, `ticket.js` (trade and portfolio maths), `style.css`, assets, fonts |
-| `privy-client.jsx`, `trading-client.js` | Sources of `public/privy.js` and `public/trading.js`. Rebuild with `npm run build:privy` and `npm run build:trading` |
+| `mcp.mjs` | The MCP server at `/api/mcp`: each tool calls Clue's own routes as the signed-in person |
+| `oauth.mjs`, `agent-keys.mjs`, `agent-user.mjs` | Connecting an AI agent by signing in (OAuth 2.1, PKCE, dynamic client registration), the keys it ends up holding, and the in-process marker for agent calls |
+| `agent-trades.mjs`, `agent-budget.mjs` | Trades an agent prepares and the person approves on their own device; the budget the person confirms |
+| `agent-wallet.mjs` | OutLayer agent wallets: the sealed key, limits, price checks and the exact shapes Clue will sign |
+| `trading-wallet.mjs` | Finds a person's Polymarket trading account from the wallet that owns it |
+| `card-client.js`, `card-server.mjs` | The share card, drawn in the browser and, for agents, on the server |
+| `trader-src.mjs` | Source of the Clue plugin's local order sender (`../plugin/clue/trader/clue-trader.mjs`) |
+| `privy-client.jsx`, `trading-client.js`, `trading-extra-client.js` | Sources of `public/privy.js`, `public/trading.js` and `public/trading-extra.js`. Rebuild with `npm run build:privy`, `build:trading`, `build:trading-extra`, `build:card` and `build:trader` |
 | `tests/` | Node tests (`node:test`) |
 
 ## Deploy

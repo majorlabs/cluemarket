@@ -13,6 +13,10 @@ Checked against Polymarket's docs on 2026-11-07, and built end to end since.
 
 ## What is built
 
+Since the hackathon build, trades can also start from an AI agent: the agent prepares a trade over MCP, the person approves it in Clue on their own device, and the order goes from there through the same steps below. A budget the person confirms lets trades inside it go without a tap while Clue is open.
+
+Multi-outcome (neg-risk) markets also need the trading account to give Polymarket's neg-risk adapter permission to use its pUSD and shares. Polymarket's own set-up leaves that out, so Clue checks it on Polygon before a real order and, only if it is missing, asks the person's wallet to grant it once (gasless).
+
 | Part | What it does |
 | - | - |
 | Trade card | Previews an order against the live book (fills, average price, fee, win and lose amounts) and shows a review box before anything is sent |

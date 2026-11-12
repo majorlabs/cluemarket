@@ -6,12 +6,14 @@
 
 <p align="center">
   <b>A clearer view of what comes next.</b><br>
-  Research any question, see where real prediction markets stand, record your own private forecast, trade it, and learn from what happens.
+  Research any question, see where real prediction markets stand, record your own private forecast, trade it, and learn from what happens. Now from your AI agent too.
 </p>
 
 <p align="center">
   <a href="https://www.oncluemarket.xyz">Live site</a> ·
   <a href="#try-it-in-five-minutes">Try it</a> ·
+  <a href="#use-clue-from-your-ai-agent">From your AI agent</a> ·
+  <a href="https://www.oncluemarket.xyz/#/docs">Docs</a> ·
   <a href="#quick-start">Run it yourself</a> ·
   <a href="docs/TRADING_PLAN.md">Trading plan</a> ·
   <a href="docs/SECURITY_REVIEW.md">Security</a>
@@ -46,8 +48,10 @@ Clue puts it in one place. Pick a real market, read exactly how it resolves, ask
 | **Portfolio** | Your total (cash plus what you hold), every position with shares, entry and current price, value and profit or loss, and your history. **Claim** your winnings on ended markets you called, see and **Cancel** open orders, and **Withdraw** your cash as USDC to your own wallet on Base, Ethereum, Arbitrum, Optimism or Polygon. |
 | **Share a call** | Turn a call into a 16:9 card (live, won or lost) with a code that opens the same market, so people who see it can trade alongside you, plus a post to go with it. On a phone the share sheet sends it to any app, and **Post on X** opens X with the text and link ready. |
 | **Sign in your way** | Email, Google, an Ethereum wallet, or a NEAR wallet (a signed message, no transaction). |
-| **Use it from your AI assistant** | Connect Claude, Codex, Cursor or any MCP assistant from the Agents page. It can search markets, run research, save forecasts to your Journal and read your Portfolio. |
-| **Let your assistant trade** | Connect your own OutLayer agent wallet on NEAR, set your own limits per order and per day, and your assistant can buy and sell through the Clue plugin. Orders go from your own computer, and Clue checks each one against your limits before your wallet signs it. |
+| **Use it from your AI agent** | Add Clue to Claude, ChatGPT or any AI agent app that supports connectors: sign in, approve, done, with no key to copy. Your agent can check markets, research them, save your calls, read your Portfolio, tell you what changed since each call and how your record compares with the market, and put a PnL card straight into the chat. |
+| **Trade from your AI agent** | Your agent prepares a trade, you approve it in Clue on your phone or computer, and the order goes from your own device. Tell your agent a budget in your own words and confirm it once: trades inside it then go through on their own while Clue is open. Your agent can lower or pause the budget; only you can raise it. |
+| **Agent wallets on NEAR** | For an agent that trades on its own, connect your OutLayer agent wallet and set your own limits per order and per day. Clue checks every order against them and the live price before the wallet signs it. |
+| **Agents page and Docs** | One page for your connected AI agents, your budget, trades waiting for approval and agent wallets, with a disconnect-all switch. A full guide lives at [oncluemarket.xyz/#/docs](https://www.oncluemarket.xyz/#/docs). |
 
 <table>
   <tr>
@@ -121,22 +125,26 @@ Settings (names only; never commit values):
 | `CLUE_ORDERS_LIVE`, `CLUE_ORDERS_LIVE_ADDRESSES` | `CLUE_ORDERS_LIVE=1` lets orders be sent for everyone. `CLUE_ORDERS_LIVE_ADDRESSES` is a comma-separated list of wallet addresses that can send real orders while everyone else sees the review step only |
 | `CLUE_PUBLIC_ORIGINS` | https addresses allowed to sign in (list them all, comma-separated) |
 
-## Use Clue from your AI assistant
+## Use Clue from your AI agent
 
-Clue is also an MCP server at `https://www.oncluemarket.xyz/api/mcp`. Sign in, open **Agents** and make a key. Then, for Claude Code:
+Clue is an MCP server at `https://www.oncluemarket.xyz/api/mcp`.
 
-```bash
-claude mcp add --transport http clue https://www.oncluemarket.xyz/api/mcp --header "Authorization: Bearer YOUR_KEY"
-```
+1. **Connect.** In Claude or ChatGPT, open Settings, then Connectors, and add a custom connector with that address. In Claude Code: `claude mcp add --transport http clue https://www.oncluemarket.xyz/api/mcp`.
+2. **Sign in and approve.** A Clue page opens. Sign in, tick **Also let it trade** if you want trading, and tap **Approve**. This is the standard connector sign-in (OAuth 2.1 with PKCE and dynamic client registration), so there is no key to copy. Each connected agent shows on the **Agents** page, where you can disconnect it, or all of them at once.
+3. **Ask.** "How is my portfolio doing?", "What are the chances on the Fed's December decision?", "Save my call at 92%", "Make a PnL card for my Fed position", "Put $1 on Yes".
 
-Tools: `search_markets`, `get_market`, `research`, `research_status`, `research_allowance`, `save_forecast`, `get_journal`, `get_portfolio`, `share_card`, `my_record`, `what_changed`. Each one runs as you, through the same routes and limits as the site. A key is read-only unless you tick **Can trade** when you make it. No key can move money out or make more keys, and you can remove one at any time.
+**Tools:** `search_markets`, `get_market`, `research`, `research_status`, `research_allowance`, `save_forecast`, `get_journal`, `my_record`, `what_changed`, `get_portfolio`, `share_card`, and with trading allowed `propose_trade`, `trade_status`, `set_budget`, `get_budget`, `pause_trading`. Each runs as you, through the same routes and limits as the site.
+
+**Trading from your agent.** `propose_trade` prepares a buy and returns an approve link. You open it in Clue on your phone or computer, check the market, amount and worst price, and tap **Approve**: the order goes from your own device with your own trading account, after the same location and set-up checks as any trade. The agent never places the order. A trade nobody approves expires after 15 minutes. With `set_budget` the agent turns what you say ("$20 a day, at most $5 a trade") into a budget that you confirm once in Clue; trades inside it then go from your device while Clue is open, with no tap. The agent can lower or pause the budget from the chat, but only you can create, raise or resume it.
+
+Apps that cannot sign in this way can use a key instead: **Agents**, then **Advanced: connect with a key**. Keys are read-only unless **Can trade** is ticked.
 
 ### The Clue plugin for Claude Code
 
 The plugin adds research, the Journal and trading to Claude Code in one install:
 
 ```bash
-export CLUE_KEY=clue_ak_...
+export CLUE_KEY=clue_ak_...      # a key with Can trade ticked, from Agents
 claude plugin marketplace add majorlabs/cluemarket
 claude plugin install clue@clue
 ```
@@ -163,6 +171,8 @@ flowchart LR
   S --> W[Privy: sign-in and your wallet]
   S --> K[NEAR: wallet key checks]
   U -->|trading setup and orders, from your own browser| M2[Market venue]
+  A[Your AI agent: Claude, ChatGPT, ...] -->|MCP, signed in as you| S
+  A -.->|prepares a trade; you approve in Clue| U
   U -->|sign in| W
   S --- D[(Postgres: your private research and forecasts)]
 ```
@@ -178,6 +188,7 @@ Trading setup and orders go from the user's own browser straight to the venue, s
 | **NEAR AI Cloud** | Runs the research model with web search, on its cheapest model, with a hard daily spending cap. |
 | **NEAR wallet sign-in** | You sign one message with your own wallet key. The server checks the signature and asks NEAR that the key is a full-access key for that account. No transaction, no funds move. |
 | **Rhea** | Gives prices for moving USDC from another chain into Clue. Prices only; the key stays on the server. |
+| **OutLayer agent wallets** | An agent that trades on its own uses its own OutLayer wallet on NEAR, with keys in secure hardware. Clue keeps the wallet key sealed and signs through OutLayer only Polymarket sign-in, orders on Polymarket's exchanges and Polymarket's own trading permissions, each checked against the person's limits and the live price. Transfers and withdrawals are refused. |
 | **NEAR Intents** | Carries money from NEAR or any other chain into your trading account: Clue asks its 1Click service for a price and a one-time deposit address, and NEAR Intents swaps the coin and delivers USDC on Polygon to your own Polymarket deposit address. Clue never holds the money. A refund address is required. It does not supply the market's liquidity: orders match on the venue's own order book. |
 
 ## Built with
@@ -186,7 +197,7 @@ Node.js, plain JavaScript front end, `better-auth` with SQLite or Postgres (`bet
 
 ## Security
 
-Private research is isolated per account, and a test proves it by trying to read, publish and delete another account's data. Saving and sharing research is limited to answers the server itself produced; links that did not come from the web search are removed; market text comes from the market, not the browser; the site cannot be framed by other sites; every state-changing request needs an approved origin; research has per-person and overall limits and a daily spending cap; and emails are never shown or sent back to the browser. The review used a model with its refusals removed (on NEAR AI Cloud) to attack Clue's own research pipeline, and each confirmed issue was fixed with a test. Read [docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md), including what is still open.
+Private research is isolated per account, and a test proves it by trying to read, publish and delete another account's data. Saving and sharing research is limited to answers the server itself produced; links that did not come from the web search are removed; market text comes from the market, not the browser; the site cannot be framed by other sites; every state-changing request needs an approved origin; research has per-person and overall limits and a daily spending cap; and emails are never shown or sent back to the browser. The review used a model with its refusals removed (on NEAR AI Cloud) to attack Clue's own research pipeline, and each confirmed issue was fixed with a test. For AI agents: connections are a sign-in the person approves (S256 PKCE, single-use codes, registered return addresses only) and are read-only unless trading is ticked; an agent can prepare a trade but only the person approves it, on their own device; budgets can only be raised by the person; every agent request to an OutLayer wallet is logged, and only requests in the exact shape Polymarket's software produces are signed. Read [docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md), including what is still open.
 
 ## Repository layout
 
