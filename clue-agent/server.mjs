@@ -27,6 +27,9 @@ const hosted=process.env.CLUE_HOSTED === '1';
 const host = hosted ? '0.0.0.0' : '127.0.0.1';
 const publicOrigin=hosted ? new URL(process.env.BETTER_AUTH_URL).origin : `http://127.0.0.1:${port}`;
 const publicOrigins=hosted ? allowedOrigins(publicOrigin) : [];
+// The address apps connect to: Clue's own domain when one is set up, rather than a hosting provider's name.
+const ownOrigins=publicOrigins.filter(o=>!/\.(vercel|railway)\.app$/.test(new URL(o).hostname));
+const connectOrigin=ownOrigins.find(o=>new URL(o).hostname.startsWith('www.')) || ownOrigins[0] || publicOrigin;
 const allowedHosts=hosted ? [...publicOrigins.map(o=>new URL(o).host),process.env.CLUE_SERVICE_HOST].filter(Boolean) : ['127.0.0.1:'+port,'localhost:'+port];
 if(hosted && (!publicOrigin.startsWith('https://') || !process.env.CLUE_SERVICE_HOST || !process.env.CLUE_SIGNUP_TOKEN || process.env.CLUE_SIGNUP_TOKEN.length < 32)) throw new Error('Hosted preview requires HTTPS, CLUE_SERVICE_HOST and a strong CLUE_SIGNUP_TOKEN.');
 const signUser=new HourlyBudget(1200);
@@ -117,7 +120,7 @@ const handler=async(req,res)=>{ try {
  // Sign in with Clue for AI apps (oauth.mjs). Apps call these from their own servers or computers, so the browser checks below do not apply,
  // except to /api/oauth/approve, which the signed-in person's own page calls and which goes through every normal check.
  // The address the app reached us on (Vercel passes it along), if it is one of ours; otherwise the main address.
- const pubBase=hosted ? (checkOrigin(`https://${String(req.headers['x-forwarded-host']||'').split(',')[0].trim()}`,publicOrigins) || publicOrigin) : `http://${req.headers.host}`;
+ const pubBase=hosted ? (checkOrigin(`https://${String(req.headers['x-forwarded-host']||'').split(',')[0].trim()}`,publicOrigins) || connectOrigin) : `http://${req.headers.host}`;
  const oauthFail=(e)=>{ if(!e.oauth) throw e; return json(res,e.status||400,{error:e.oauth,error_description:e.message}); };
  if(!fromAgent && req.method==='GET' && (url.pathname==='/api/oauth/meta/resource' || url.pathname.startsWith('/.well-known/oauth-protected-resource'))) return json(res,200,resourceMetadata(pubBase));
  if(!fromAgent && req.method==='GET' && (url.pathname==='/api/oauth/meta/server' || url.pathname.startsWith('/.well-known/oauth-authorization-server'))) return json(res,200,serverMetadata(pubBase));
