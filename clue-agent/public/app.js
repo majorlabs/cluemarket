@@ -156,6 +156,15 @@ function rememberSetup(id, t) {
   try { localStorage.setItem(setupKey(id), JSON.stringify({ signer: t.signer, wallet: t.wallet })); } catch { /* private window: the server still knows */ }
   post("/api/trading/account", { wallet: t.wallet, signer: t.signer }).catch(() => {});   // so a new phone or a cleared browser does not ask again
 }
+// Trading set up before the server kept it lives only on this device. Send it up once, so the person's AI and their other
+// devices can see the same trading account. Only the two public addresses go, as when it was first set up.
+let setupSynced = null;
+function syncSavedSetup() {
+  if (!user || setupSynced === user.id) return;
+  setupSynced = user.id;
+  const saved = savedSetup(user.id);
+  if (saved) api("/api/trading/account").then((d) => { if (!d.account) post("/api/trading/account", { wallet: saved.wallet, signer: saved.signer }).catch(() => {}); }).catch(() => {});
+}
 let accountLookup = { id: null, state: null };
 // A person's cash is the pUSD their trading account holds on Polygon. Anyone can read it from a public server: no sign-in step, so it shows at once.
 const CHAIN_READERS = ["https://polygon-bor-rpc.publicnode.com", "https://polygon.drpc.org"];
@@ -224,7 +233,7 @@ async function connectPrivy() {
 }
 async function refreshAccount() {
   try { user = (await api("/api/wallet/session"))?.user || null; } catch { user = null; }
-  drawAccountButton();
+  drawAccountButton(); syncSavedSetup();
   document.dispatchEvent(new CustomEvent("clue:account"));
   if (user && String(user.id).startsWith("privy:")) { try { const d = await api("/api/privy/wallet"); if (d.wallet) { myWallet = d.wallet; drawAccountButton(); } } catch { /* the button says Account until it is known */ } }
   if (!user) myWallet = null;
