@@ -556,8 +556,9 @@ async function sendAgentTrade(t, say = () => {}) {
     res = await window.clueTrading.order({ assetId: t.tokenId, spend: t.amount, maxPrice: t.maxPrice, builderCode: cfg.builderCode, send: cfg.ordersLive, onStep: (st) => say({ account: "Opening your trading account…", sign: "Signing with your wallet…", send: "Sending your order…", match: "Matching with sellers…" }[st] || "Working…") });
   } catch (e) { res = { ok: false, sent: false, error: e.message || "The order could not be placed." }; }
   const status = !res.ok ? "failed" : !res.sent ? "checked" : res.filled ? "filled" : "unfilled";
-  try { await post(`/api/agent-trades/${t.id}/result`, { status, shares: res.shares, paid: res.paid, avgPrice: res.avgPrice, orderId: res.orderId, message: res.error || res.note }); } catch { /* the result still shows here */ }
-  return { status, ...res };
+  const why = [res.error || res.note, res.detail ? `(${res.detail})` : ''].filter(Boolean).join(' ');
+  try { await post(`/api/agent-trades/${t.id}/result`, { status, shares: res.shares, paid: res.paid, avgPrice: res.avgPrice, orderId: res.orderId, message: why }); } catch { /* the result still shows here */ }
+  return { status, ...res, why };
 }
 
 // While Clue is open, trades the AI queued inside the person's confirmed budget go from this device, one at a time, with no tap.
@@ -636,7 +637,7 @@ async function approveView(id) {
     if (r.status === "blocked" || r.status === "setup") { say("err", r.error, r.status === "setup" && t.eventSlug ? el("a", { class: "btn small", href: `#/event/${encodeURIComponent(t.eventSlug)}`, text: "Open the market" }) : null); approveBtn.disabled = declineBtn.disabled = false; return; }
     if (r.status === "filled") say("ok", `Done. You bought ${Number(r.shares).toFixed(2)} shares for ${usd(r.paid)}. Your AI can see it now.`, el("a", { class: "btn small", href: "#/portfolio", text: "See your Portfolio" }));
     else if (r.status === "checked") say("muted", ended.checked);
-    else say("err", r.error || (r.status === "unfilled" ? r.note || ended.unfilled : ended.failed));
+    else say("err", r.error || (r.status === "unfilled" ? r.note || ended.unfilled : ended.failed), r.detail ? el("small", { class: "err-detail", text: `(${r.detail})` }) : null);
   };
   card.replaceChildren(...summary, el("div", { class: "connect-actions" }, approveBtn, declineBtn), out, el("p", { class: "muted small", text: `Expires ${new Date(t.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.` }));
 }
