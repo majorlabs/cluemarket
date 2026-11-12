@@ -1123,6 +1123,7 @@ async function mountTicket(box, ctx) {
       btn.disabled = true;
       let q;
       try { await confirmAccount(say); say("Getting your deposit address…"); q = await ask(false); } catch (e) { say(e.message, "err"); btn.disabled = false; return; }
+      loadMine();
       say("");
       const until = new Date(q.deadline);
       result.replaceChildren(...kids(
@@ -1155,6 +1156,58 @@ async function mountTicket(box, ctx) {
       return b;
     }
 
+    // ---- Every deposit, and where it is. It is read from the server, so it is still here after a refresh. ----
+    const mine = el("div", { class: "my-deposits" });
+    const ago = (iso) => { const s = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000)); return s < 90 ? "just now" : s < 5400 ? `${Math.round(s / 60)} min ago` : s < 129600 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} days ago`; };
+    const minsSince = (iso) => Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
+    const lineFor = (d) => {
+      if (d.state === "done") return { cls: "ok", text: `Done. ${d.delivered ? `${d.delivered} USDC` : "Your money"} is on its way to your trading account. Your balance shows it in a minute or two.` };
+      if (d.state === "refunded") return { cls: "err", text: "The swap could not finish, so your money was returned to your refund address." };
+      if (d.state === "failed") return { cls: "err", text: "The swap failed. If you sent money, it is returned to your refund address." };
+      if (d.state === "short") return { cls: "err", text: "You sent less than the amount. Send the rest, or it will be returned." };
+      if (d.expired) return { cls: "", text: "No deposit arrived before the deadline, so nothing was swapped. You can ignore this one." };
+      if (d.state === "waiting") return { cls: "working", text: "Waiting for your deposit to arrive…" };
+      const m = minsSince(d.createdAt);
+      return { cls: "working", text: m >= 5 ? `Still swapping, ${m} minutes so far. This is taking longer than usual, but your money is safe: it will arrive or be returned to your refund address.` : "Swapping it now. This usually takes a minute or two." };
+    };
+    // What is still on its way goes at the top, where a person waiting will look. Finished ones go below.
+    const minePending = el("div", { class: "my-deposits pending" });
+    const rowFor = (d) => {
+      const l = lineFor(d);
+      return el("div", { class: "md-row" },
+        el("div", { class: "md-top" }, el("b", { text: `${d.send.amount} ${d.send.symbol} on ${d.send.chain}` }), el("small", { class: "muted", text: `${d.send.usd ? `about $${Number(d.send.usd).toFixed(2)} · ` : ""}${ago(d.createdAt)}` })),
+        el("p", { class: `status ${l.cls}`, text: l.text }),
+        ...kids(d.final || d.expired ? null : el("div", { class: "acct-addr" }, el("code", { text: d.depositAddress }), copy(d.depositAddress))));
+    };
+    function drawMine(list) {
+      const onItsWay = list.filter((x) => !x.final && !x.expired), rest = list.filter((x) => x.final || x.expired).slice(0, 3);
+      minePending.replaceChildren(...(onItsWay.length ? [el("h4", { class: "md-title", text: onItsWay.length === 1 ? "Your deposit is on its way" : "Your deposits are on their way" }), ...onItsWay.map(rowFor)] : []));
+      mine.replaceChildren(...(rest.length ? [el("h4", { class: "md-title", text: "Recent deposits" }), ...rest.map(rowFor)] : []), oldBox);
+    }
+    // Sent one before this list existed, or from elsewhere? Paste its address and see where it is.
+    const oldIn = el("input", { type: "text", placeholder: "Paste the deposit address you sent to", "aria-label": "Deposit address", autocomplete: "off", spellcheck: "false" });
+    const oldOut = el("p", { class: "status", role: "status", "aria-live": "polite" });
+    const oldBtn = el("button", { class: "btn small", type: "button", text: "Check", onclick: async () => {
+      const a = oldIn.value.trim();
+      if (a.length < 10) { oldOut.className = "status err"; oldOut.textContent = "Paste the whole address you sent to."; return; }
+      oldBtn.disabled = true; oldOut.className = "status working"; oldOut.textContent = "Checking…";
+      try {
+        const s = await api(`/api/fund/intents/status?deposit=${encodeURIComponent(a)}`);
+        if (s.state === "waiting") { oldOut.className = "status"; oldOut.textContent = "Nothing seen at this address yet. Check that you pasted the whole address, and that the money was sent to it."; }
+        else { const l = lineFor({ state: s.state, delivered: s.delivered && s.delivered.amount, createdAt: new Date().toISOString(), expired: false }); oldOut.className = `status ${l.cls}`; oldOut.textContent = l.text; }
+      } catch (e) { oldOut.className = "status err"; oldOut.textContent = e.message || "Could not check right now. Try again in a minute."; }
+      oldBtn.disabled = false;
+    } });
+    const oldBox = el("details", { class: "md-old" }, el("summary", { text: "Sent one earlier? Check it by its address" }), el("div", { class: "md-old-row" }, oldIn, oldBtn), oldOut);
+    const seen = new Map(); let mineTimer = null;
+    async function loadMine() {
+      clearTimeout(mineTimer);
+      let d; try { d = await api("/api/fund/deposits"); } catch { return; }
+      const list = d.deposits || []; drawMine(list);
+      for (const x of list) { if (x.state === "done" && seen.has(x.id) && seen.get(x.id) !== "done") { setTimeout(refreshCash, 5000); setTimeout(refreshCash, 30000); } seen.set(x.id, x.state); }
+      if (list.some((x) => !x.final && !x.expired)) mineTimer = setTimeout(loadMine, 10000);       // keep looking while one is on its way
+    }
+
     amount.addEventListener("input", () => { quoteInfo = null; result.replaceChildren(); drawHint(); });
     refund.addEventListener("input", () => { edited = true; quoteInfo = null; result.replaceChildren(); });
 
@@ -1165,9 +1218,10 @@ async function mountTicket(box, ctx) {
       picked = assets[0].assetId;
       const field = (title, input, ...extra) => el("label", { class: "field" }, el("span", { text: title }), input, ...extra);
       out.replaceChildren(
+        minePending,
         el("p", { class: "small" }, "Send NEAR or a coin from another chain. ", el("b", { text: "NEAR Intents" }), " swaps it and delivers it to your trading account."),
-        el("div", { class: "field" }, el("span", { text: "Where is your money?" }), picker), field("How much?", amount, hint), field("If it can’t finish, return it to", refund, refundHint), price, result, status);
-      setRefundDefault(); drawHint(); drawPicker();
+        el("div", { class: "field" }, el("span", { text: "Where is your money?" }), picker), field("How much?", amount, hint), field("If it can’t finish, return it to", refund, refundHint), price, result, status, mine);
+      setRefundDefault(); drawHint(); drawPicker(); loadMine();
     }).catch((e) => out.replaceChildren(el("p", { class: "status err", text: e.message || "Adding money from other chains is not available right now." })));
     return out;
   }
@@ -1186,6 +1240,12 @@ async function mountTicket(box, ctx) {
     return box;
   }
 
+  // After a refresh, a deposit that is still on its way opens Add money by itself, so the person sees where it is.
+  let depositsAsked = false;
+  function watchDeposits() {
+    if (depositsAsked || !user) return; depositsAsked = true;
+    api("/api/fund/deposits").then((d) => { if ((d.deposits || []).some((x) => !x.final && !x.expired) && !depositOpen) { depositOpen = true; if (lastGeo) drawChecklist(lastGeo); } }).catch(() => {});
+  }
   function drawChecklist(geo) {
     const isPrivy = user && String(user.id || "").startsWith("privy:"), isNear = user && String(user.id || "").startsWith("near:");
     if (isPrivy && !tradingSetup) tradingSetup = savedSetup(user.id);
@@ -1218,6 +1278,7 @@ async function mountTicket(box, ctx) {
       } });
       line = strip("Trading isn't set up yet.", go);
     } else if (t) {
+      watchDeposits();
       if (t.balance == null && !t.cashFailed && !cashAsking) refreshCash();
       line = strip(t.balance != null ? el("button", { class: "as-text as-cash", type: "button", title: "Tap to refresh your balance", "aria-label": `Balance $${t.balance.toFixed(2)}. Tap to refresh.`, onclick: () => refreshCash(true) }, el("small", { class: "muted", text: "Balance ↻" }), el("b", { class: "num", text: `$${t.balance.toFixed(2)}` }))
         : t.cashFailed ? "Ready to trade" : "Checking your balance…", el("button", { class: "btn small", type: "button", text: depositOpen ? "Hide" : "Add money", onclick: () => { depositOpen = !depositOpen; drawChecklist(geo); } }), "ok");

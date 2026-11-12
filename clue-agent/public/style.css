@@ -877,3 +877,18 @@ dialog .btn{height:48px;border-radius:14px}
 .report-text .ans-list li{position:relative;padding:8px 0 8px 18px;margin:0;border-top:1px solid var(--line,rgba(127,127,127,.2));line-height:1.55}
 .report-text .ans-list li:first-child{border-top:0}
 .report-text .ans-list li::before{content:"";position:absolute;left:2px;top:15px;width:6px;height:6px;border-radius:50%;background:var(--brand-text)}
+
+/* Every deposit and where it is, inside Add money */
+.my-deposits{margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+.md-title{font-size:11.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--brand-text);margin:0 0 6px}
+.md-row{padding:10px 0;border-top:1px solid var(--line)}
+.md-title + .md-row{border-top:0}
+.md-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.md-row .status{margin:4px 0 0;line-height:1.5}
+.md-old{margin-top:12px}
+.md-old summary{cursor:pointer;font-size:13px;color:var(--muted)}
+.md-old-row{display:flex;gap:8px;margin-top:8px}
+.md-old-row input{flex:1;min-width:0;height:40px;border:1px solid var(--line-strong);border-radius:10px;padding:0 12px;background:var(--surface);color:var(--ink);font:inherit;font-size:13px}
+.my-deposits.pending{margin:0 0 16px;padding:12px 14px;border:1px solid var(--line-strong);border-radius:12px;background:var(--surface)}
+.my-deposits.pending:empty{display:none}
+.my-deposits.pending .md-title{margin-bottom:2px}
