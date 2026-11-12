@@ -4,7 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { store, sealingKey } from './auth.mjs';
 import {initWalletAuth,walletSession,walletRoute} from './wallet-auth.mjs';
 import {AGENT_USER} from './agent-user.mjs';
-import {createKey,listKeys,revokeKey,userForToken} from './agent-keys.mjs';
+import {createKey,listKeys,revokeKey,revokeAll,userForToken} from './agent-keys.mjs';
+import {resourceMetadata,serverMetadata,register as oauthRegister,authorize as oauthAuthorize,describeRequest as oauthDescribe,decide as oauthDecide,token as oauthToken,readForm} from './oauth.mjs';
 import {describeWallet,connectWallet,updateWallet,removeWallet,signFor} from './agent-wallet.mjs';
 import {mcpRoute} from './mcp.mjs';
 import {privyRoute,privyWalletRoute} from './privy-auth.mjs';
@@ -29,7 +30,8 @@ const publicOrigins=hosted ? allowedOrigins(publicOrigin) : [];
 const allowedHosts=hosted ? [...publicOrigins.map(o=>new URL(o).host),process.env.CLUE_SERVICE_HOST].filter(Boolean) : ['127.0.0.1:'+port,'localhost:'+port];
 if(hosted && (!publicOrigin.startsWith('https://') || !process.env.CLUE_SERVICE_HOST || !process.env.CLUE_SIGNUP_TOKEN || process.env.CLUE_SIGNUP_TOKEN.length < 32)) throw new Error('Hosted preview requires HTTPS, CLUE_SERVICE_HOST and a strong CLUE_SIGNUP_TOKEN.');
 const signUser=new HourlyBudget(1200);
-const agentSign=new HourlyBudget(600);   // signatures for assistant trading: sign-in, orders and permissions
+const agentSign=new HourlyBudget(600);
+const oauthReg=new HourlyBudget(300);   // new AI apps registering, all together   // signatures for assistant trading: sign-in, orders and permissions
 const fundUser=new HourlyBudget(30);
 const fundGlobal=new HourlyBudget(300);
 const depositUser=new HourlyBudget(10);   // real deposit addresses: a few per hour is plenty
@@ -112,7 +114,16 @@ const handler=async(req,res)=>{ try {
  if(req.method==='GET' && url.pathname==='/healthz') return json(res,200,{ok:true,service:'clue-api'});
  // An assistant's call, passed on by the MCP route below. It never came from the network, so the browser checks do not apply.
  const fromAgent=Boolean(req[AGENT_USER]);
- if(url.pathname==='/api/mcp' && !fromAgent) return mcpRoute(req,res,{dispatch:(r,s)=>handler(r,s)});
+ // Sign in with Clue for AI apps (oauth.mjs). Apps call these from their own servers or computers, so the browser checks below do not apply,
+ // except to /api/oauth/approve, which the signed-in person's own page calls and which goes through every normal check.
+ const pubBase=hosted ? publicOrigin : `http://${req.headers.host}`;
+ const oauthFail=(e)=>{ if(!e.oauth) throw e; return json(res,e.status||400,{error:e.oauth,error_description:e.message}); };
+ if(!fromAgent && req.method==='GET' && (url.pathname==='/api/oauth/meta/resource' || url.pathname.startsWith('/.well-known/oauth-protected-resource'))) return json(res,200,resourceMetadata(pubBase));
+ if(!fromAgent && req.method==='GET' && (url.pathname==='/api/oauth/meta/server' || url.pathname.startsWith('/.well-known/oauth-authorization-server'))) return json(res,200,serverMetadata(pubBase));
+ if(!fromAgent && req.method==='POST' && url.pathname==='/api/oauth/register') { if(!oauthReg.take('all')) return json(res,429,{error:'slow_down'}); try { return json(res,201,await oauthRegister(store,await getBody(req))); } catch(e) { return oauthFail(e); } }
+ if(!fromAgent && req.method==='GET' && url.pathname==='/api/oauth/authorize') { try { const r=await oauthAuthorize(store,url.searchParams); res.writeHead(302,{Location:r.redirect||`${pubBase}/#/connect/${r.request}`,'Cache-Control':'no-store'}); return res.end(); } catch(e) { return oauthFail(e); } }
+ if(!fromAgent && req.method==='POST' && url.pathname==='/api/oauth/token') { try { return json(res,200,await oauthToken(store,await readForm(req))); } catch(e) { return oauthFail(e); } }
+ if(url.pathname==='/api/mcp' && !fromAgent) return mcpRoute(req,res,{dispatch:(r,s)=>handler(r,s),resourceMetadataUrl:`${pubBase}/.well-known/oauth-protected-resource`});
  // The local order sender that comes with the Clue plugin. It authenticates with the person's assistant key, not a browser
  // cookie, so the browser checks below do not apply. It can only ask for signatures; it never sends anything to Polymarket from here.
  if(!fromAgent && (url.pathname.startsWith('/api/agent/') || (url.pathname==='/api/pm/sign' && /^Bearer clue_ak_/.test(String(req.headers.authorization||''))))) {
@@ -224,11 +235,21 @@ const handler=async(req,res)=>{ try {
   if(req.method==='DELETE') return json(res,200,{removed:await removeWallet(store,owner)});
   return json(res,405,{error:'Method not allowed.'});
  }
+ const oauthReqMatch=url.pathname.match(/^\/api\/oauth\/request\/([a-f0-9-]{36})$/);
+ if((oauthReqMatch && req.method==='GET') || (url.pathname==='/api/oauth/approve' && req.method==='POST')) {
+  if(fromAgent) return json(res,403,{error:'Not allowed.'});
+  try {
+   if(oauthReqMatch) return json(res,200,await oauthDescribe(store,oauthReqMatch[1]));
+   const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in first.'});
+   const b=await getBody(req); return json(res,200,await oauthDecide(store,session.user.id,b.id,{approve:b.approve===true,canTrade:b.canTrade===true}));
+  } catch(e) { if(e.oauth) return json(res,e.status||400,{error:e.message}); throw e; }
+ }
  if(url.pathname==='/api/agent-keys' || url.pathname.startsWith('/api/agent-keys/')) {
   // Keys are managed only from the signed-in page, never by an assistant.
   if(fromAgent) return json(res,403,{error:'Not allowed.'});
   const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in to connect an assistant.'});
   if(req.method==='GET' && url.pathname==='/api/agent-keys') return json(res,200,{keys:await listKeys(store,session.user.id)});
+  if(req.method==='DELETE' && url.pathname==='/api/agent-keys') return json(res,200,{disconnected:await revokeAll(store,session.user.id)});
   if(req.method==='POST' && url.pathname==='/api/agent-keys') { const body=await getBody(req); return json(res,201,await createKey(store,session.user.id,body.label,{canTrade:body.canTrade===true})); }
   const keyMatch=url.pathname.match(/^\/api\/agent-keys\/([a-f0-9-]{36})$/);
   if(req.method==='DELETE' && keyMatch) return json(res,(await revokeKey(store,session.user.id,keyMatch[1]))?200:404,{removed:true});

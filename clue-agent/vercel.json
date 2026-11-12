@@ -4,6 +4,22 @@
   "outputDirectory": "public",
   "rewrites": [
     {
+      "source": "/.well-known/oauth-protected-resource",
+      "destination": "https://clue-api-development.up.railway.app/api/oauth/meta/resource"
+    },
+    {
+      "source": "/.well-known/oauth-protected-resource/:path*",
+      "destination": "https://clue-api-development.up.railway.app/api/oauth/meta/resource"
+    },
+    {
+      "source": "/.well-known/oauth-authorization-server",
+      "destination": "https://clue-api-development.up.railway.app/api/oauth/meta/server"
+    },
+    {
+      "source": "/.well-known/oauth-authorization-server/:path*",
+      "destination": "https://clue-api-development.up.railway.app/api/oauth/meta/server"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://clue-api-development.up.railway.app/api/:path*"
     }

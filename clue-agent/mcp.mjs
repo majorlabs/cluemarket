@@ -199,12 +199,12 @@ async function handle(msg, ctx) {
   return rpcError(id, -32601, `Method not found: ${method}`);
 }
 
-export async function mcpRoute(req, res, { dispatch }) {
+export async function mcpRoute(req, res, { dispatch, resourceMetadataUrl }) {
   if (req.method === 'GET' || req.method === 'DELETE') return send(res, 405, { error: 'Use POST.' }, { Allow: 'POST' });
   if (req.method !== 'POST') return send(res, 405, { error: 'Use POST.' }, { Allow: 'POST' });
   const auth = String(req.headers.authorization || '');
   const who = auth.startsWith('Bearer ') ? await userForToken(store, auth.slice(7).trim()) : null;
-  if (!who) return send(res, 401, rpcError(null, -32001, 'Add your Clue assistant key: open Clue, then Agents, and make a key.'), { 'WWW-Authenticate': 'Bearer realm="clue"' });
+  if (!who) return send(res, 401, rpcError(null, -32001, 'Add your Clue assistant key: open Clue, then Agents, and make a key.'), { 'WWW-Authenticate': `Bearer realm="clue"${resourceMetadataUrl ? `, resource_metadata="${resourceMetadataUrl}"` : ''}` });
   let parsed;
   try { parsed = JSON.parse(await readBody(req)); } catch (e) { return send(res, e.status || 400, rpcError(null, -32700, e.status ? e.message : 'Parse error.')); }
   const ctx = { dispatch, userId: who.userId };

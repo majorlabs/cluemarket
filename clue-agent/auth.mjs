@@ -67,6 +67,9 @@ CREATE TABLE IF NOT EXISTS agent_keys (
  FOREIGN KEY(user_id) REFERENCES "user"(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS agent_keys_user ON agent_keys(user_id);
+CREATE TABLE IF NOT EXISTS oauth_clients (id TEXT PRIMARY KEY, name TEXT NOT NULL, redirect_uris TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS oauth_requests (id TEXT PRIMARY KEY, client_id TEXT NOT NULL, redirect_uri TEXT NOT NULL, state TEXT, code_challenge TEXT NOT NULL, wants_trade INTEGER NOT NULL DEFAULT 0, expires REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS oauth_codes (code_hash TEXT PRIMARY KEY, client_id TEXT NOT NULL, user_id TEXT NOT NULL, redirect_uri TEXT NOT NULL, code_challenge TEXT NOT NULL, can_trade INTEGER NOT NULL DEFAULT 0, expires REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS agent_wallets (
  user_id TEXT PRIMARY KEY, provider TEXT NOT NULL, key_sealed TEXT NOT NULL, address TEXT NOT NULL,
  enabled INTEGER NOT NULL DEFAULT 0, max_order REAL NOT NULL, max_day REAL NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
@@ -86,6 +89,7 @@ CREATE TABLE IF NOT EXISTS research_results (
 )`;
 if (isPostgres) await database.query(schema); else database.exec(schema);
 // An assistant key can trade only if the person ticked that when making it. Keys made before this can only read.
+if (isPostgres) await database.query('ALTER TABLE agent_keys ADD COLUMN IF NOT EXISTS client_id TEXT'); else if (!database.prepare('PRAGMA table_info(agent_keys)').all().some(x => x.name === 'client_id')) database.exec('ALTER TABLE agent_keys ADD COLUMN client_id TEXT');
 if (isPostgres) await database.query('ALTER TABLE agent_keys ADD COLUMN IF NOT EXISTS can_trade INTEGER NOT NULL DEFAULT 0'); else if (!database.prepare('PRAGMA table_info(agent_keys)').all().some(x => x.name === 'can_trade')) database.exec('ALTER TABLE agent_keys ADD COLUMN can_trade INTEGER NOT NULL DEFAULT 0');
 if (isPostgres) await database.query('ALTER TABLE forecast_revisions ADD COLUMN IF NOT EXISTS market_snapshot TEXT'); else if (!database.prepare('PRAGMA table_info(forecast_revisions)').all().some(x => x.name === 'market_snapshot')) database.exec('ALTER TABLE forecast_revisions ADD COLUMN market_snapshot TEXT');
 for (const column of ['supporting_evidence','opposing_evidence']) { if (isPostgres) await database.query(`ALTER TABLE forecast_revisions ADD COLUMN IF NOT EXISTS ${column} TEXT NOT NULL DEFAULT ''`); else if (!database.prepare('PRAGMA table_info(forecast_revisions)').all().some(x => x.name === column)) database.exec(`ALTER TABLE forecast_revisions ADD COLUMN ${column} TEXT NOT NULL DEFAULT ''`); }
