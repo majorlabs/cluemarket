@@ -937,3 +937,17 @@ dialog .btn{height:48px;border-radius:14px}
 .agents-try .chip{font-size:13px;padding:6px 10px;border-radius:999px;background:var(--bg-2);border:1px solid var(--line);color:var(--ink)}
 .agents-sec h2{margin-top:0}
 @media(max-width:560px){.main-nav a{font-size:12px;padding:10px 2px}}
+.docs-page{display:grid;grid-template-columns:240px minmax(0,1fr);gap:16px;max-width:1080px;margin:0 auto 120px;align-items:start}
+.docs-toc{position:sticky;top:96px;display:grid;gap:2px;padding:14px}
+.docs-toc b{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.docs-toc a{text-decoration:none;color:var(--ink);font-size:14px;padding:6px 8px;border-radius:8px}
+.docs-toc a:hover{background:var(--bg-2)}
+.docs-body{display:grid;gap:16px;min-width:0}
+.docs-sec{padding:22px 22px;box-sizing:border-box;min-width:0;scroll-margin-top:96px}
+.docs-sec h1{margin:0 0 6px;font-size:32px;letter-spacing:-.03em}
+.docs-sec h2{margin:0 0 10px;font-size:22px;letter-spacing:-.02em}
+.docs-sec p,.docs-sec li{line-height:1.6;font-size:15px}
+.docs-sec ol,.docs-sec ul{padding-left:20px;display:grid;gap:6px}
+.docs-links{display:flex;flex-wrap:wrap;gap:8px}
+@media(max-width:860px){.docs-page{grid-template-columns:minmax(0,1fr)}.docs-toc{position:static;grid-template-columns:1fr 1fr}.docs-toc b{grid-column:1/-1}}
+.docs-sec p{margin:0 0 12px}.docs-sec ol,.docs-sec ul{margin:0 0 12px}
