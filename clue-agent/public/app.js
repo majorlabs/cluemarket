@@ -264,9 +264,10 @@ async function openAssistants(fresh) {
   const list = el("div", { class: "mcp-keys" }, el("p", { class: "muted", text: "Loading…" }));
   const make = el("button", { class: "btn primary", type: "button", text: "Make a key" });
   const label = el("input", { type: "text", maxlength: "60", placeholder: "Name it, e.g. Claude", "aria-label": "Key name" });
+  const trade = el("input", { type: "checkbox", "aria-label": "Can trade" });
   make.onclick = async () => {
     make.disabled = true;
-    try { const k = await post("/api/agent-keys", { label: label.value.trim() || "My assistant" }); openAssistants(k); }
+    try { const k = await post("/api/agent-keys", { label: label.value.trim() || "My assistant", canTrade: trade.checked }); openAssistants(k); }
     catch (e) { make.disabled = false; list.prepend(el("p", { class: "err", text: e.message })); }
   };
   const key = fresh?.token || "YOUR_KEY";
@@ -283,12 +284,13 @@ async function openAssistants(fresh) {
     snippet("Cursor and others (mcp.json)", JSON.stringify({ mcpServers: { clue: { url: MCP_URL, headers: { Authorization: `Bearer ${key}` } } } }, null, 2)),
     el("h3", { text: "Your keys" }), list,
     el("div", { class: "mcp-make" }, label, make),
+    el("label", { class: "mcp-trade" }, trade, el("span", { text: "Can trade: lets this key ask for trades through Assistant trading, within your limits. Leave it off for research only." })),
     el("div", { class: "actions" }, el("button", { class: "btn ghost", type: "button", text: "Back", onclick: openAccountMenu }), el("button", { class: "btn ghost", type: "button", text: "Close", onclick: () => dialog.close() })));
   if (!dialog.open) dialog.showModal();
   try {
     const { keys } = await api("/api/agent-keys");
     list.replaceChildren(...(keys.length ? keys.map((k) => el("div", { class: "mcp-key" },
-      el("div", {}, el("strong", { text: k.label }), el("div", { class: "muted small", text: `Made ${when(k.createdAt)}${k.lastUsedAt ? ` · last used ${when(k.lastUsedAt)}` : " · not used yet"}` })),
+      el("div", {}, el("strong", { text: k.label }), el("span", { class: `mcp-scope ${k.canTrade ? "trade" : ""}`, text: k.canTrade ? "Can trade" : "Read only" }), el("div", { class: "muted small", text: `Made ${when(k.createdAt)}${k.lastUsedAt ? ` · last used ${when(k.lastUsedAt)}` : " · not used yet"}` })),
       el("button", { class: "btn small", type: "button", style: "color:var(--no)", text: "Remove", onclick: async (ev) => { ev.currentTarget.disabled = true; try { await api(`/api/agent-keys/${k.id}`, { method: "DELETE" }); } catch { /* already gone */ } openAssistants(); } })))
       : [el("p", { class: "muted", text: "No keys yet. Make one, then paste it into your assistant." })]));
   } catch (e) { list.replaceChildren(el("p", { class: "err", text: e.message })); }
@@ -308,8 +310,8 @@ async function openAgentWallet() {
     const day = el("input", { type: "number", min: "1", step: "1", inputmode: "decimal", value: w ? String(w.maxDay) : "", placeholder: "e.g. 100", "aria-label": "Limit per day in dollars" });
     return { per, day, node: el("div", { class: "aw-limits" }, el("label", { class: "field" }, el("span", { text: "Most per order ($)" }), per), el("label", { class: "field" }, el("span", { text: "Most per day ($)" }), day)) };
   };
-  let w;
-  try { ({ wallet: w } = await api("/api/agent-wallet")); } catch (e) { body.replaceChildren(el("p", { class: "err", text: e.message })); return; }
+  let w, log = [];
+  try { ({ wallet: w, activity: log = [] } = await api("/api/agent-wallet")); } catch (e) { body.replaceChildren(el("p", { class: "err", text: e.message })); return; }
   if (!w) {
     const key = el("input", { type: "password", autocomplete: "off", placeholder: "wk_…", "aria-label": "OutLayer wallet key" });
     const L = limitInputs(null);
@@ -317,7 +319,7 @@ async function openAgentWallet() {
       el("ol", { class: "aw-steps" },
         el("li", {}, "Create an agent wallet at ", el("a", { href: "https://app.outlayer.ai", target: "_blank", rel: "noopener", text: "app.outlayer.ai" }), " (Custody, Wallets). In its policy, allow evm_sign and save."),
         el("li", { text: "Paste the wallet key (it starts with wk_) and choose your limits." }),
-        el("li", { text: "Make a key under Connect an AI assistant, and install the Clue plugin." })),
+        el("li", { text: "Make a key with Can trade ticked under Connect an AI assistant, and install the Clue plugin." })),
       el("label", { class: "field" }, el("span", { text: "OutLayer wallet key" }), key), L.node,
       el("button", { class: "btn primary", type: "button", text: "Connect wallet", onclick: (ev) => { ev.currentTarget.disabled = true; send("POST", { key: key.value.trim(), maxOrder: Number(L.per.value), maxDay: Number(L.day.value) }); } }));
     return;
@@ -331,7 +333,14 @@ async function openAgentWallet() {
     L.node,
     el("button", { class: "btn", type: "button", text: "Save limits", onclick: () => send("PATCH", { maxOrder: Number(L.per.value), maxDay: Number(L.day.value) }) }),
     el("p", { class: "muted small", text: "To fund it, ask your assistant for trading_status. It gives the trading account address to send pUSD to, or to use with Add money." }),
-    el("button", { class: "btn small", type: "button", style: "color:var(--no)", text: "Disconnect wallet", onclick: () => send("DELETE") }));
+    el("button", { class: "btn small", type: "button", style: "color:var(--no)", text: "Disconnect wallet", onclick: () => send("DELETE") }),
+    el("h3", { text: "What your assistant asked for" }),
+    log.length ? el("div", { class: "aw-log" }, ...log.map((x) => el("div", { class: `aw-row ${x.status}` },
+      el("span", { class: "num", text: new Date(x.at).toLocaleString([], { dateStyle: "short", timeStyle: "short" }) }),
+      el("span", { text: x.kind === "order" ? `${x.side === "SELL" ? "Sell" : "Buy"}${x.side === "BUY" ? ` $${Number(x.usd).toFixed(2)}` : ""}${x.price ? ` at ${Math.round(x.price * 100)}¢` : ""}` : x.kind === "signin" ? "Sign-in to Polymarket" : x.kind === "approval" ? "Trading permission" : `Request: ${x.kind}` }),
+      el("b", { text: x.status === "signed" ? "Signed" : x.status === "refused" ? "Refused" : x.status === "pending" ? "Signing" : "Failed" }),
+      x.reason ? el("small", { class: "muted", text: x.reason }) : null)))
+      : el("p", { class: "muted small", text: "Nothing yet. Every request your assistant makes shows here, signed or refused." }));
 }
 async function signOut() {
   dialog.close();
@@ -366,11 +375,28 @@ async function route() {
   if (parts[0] === "ask") { setNav("ask"); return askView(qs, stale); }
   if (parts[0] === "saved") { setNav("saved"); return savedView(parts[1], stale); }
   if (parts[0] === "portfolio") { setNav("portfolio"); return portfolioView(stale); }
+  if (parts[0] === "card") { setNav(""); return cardView(parts[1] || ""); }
   setNav("board");
   buildCategories(qs.get("q") ? null : qs.get("tag") || "");
   return boardView(qs.get("tag") || "", qs.get("q") || "", stale, qs.get("sort") || "trending");
 }
 window.addEventListener("hashchange", route);
+
+/* ---------- a share card made by an assistant: the link carries the call's numbers, the card is drawn here ---------- */
+function cardFromLink(code) {
+  let d; try { d = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(code.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0)))); } catch { return null; }
+  const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : undefined), t = (v, max) => (typeof v === "string" ? v.slice(0, max) : undefined);
+  if (!d || !["won", "lost", "open", "placed"].includes(d.kind) || !t(d.question, 300) || !(n(d.entry) > 0 && n(d.entry) < 1)) return null;
+  return { kind: d.kind, question: t(d.question, 300), side: t(d.side, 60) || "Yes", entry: n(d.entry), shares: n(d.shares) || 0, paid: n(d.paid), now: n(d.now), payout: n(d.payout), eventSlug: /^[a-z0-9-]{1,200}$/.test(d.eventSlug || "") ? d.eventSlug : undefined };
+}
+function cardView(code) {
+  const data = cardFromLink(code);
+  if (!data) { app.replaceChildren(el("div", { class: "card empty" }, el("h2", { text: "This card link does not work" }), el("p", { class: "muted", text: "Ask your assistant to make the card again." }), el("a", { class: "btn primary", href: "#/", text: "Go to Clue" }))); return; }
+  const into = el("div", { class: "share-panel" });
+  app.replaceChildren(el("div", { class: "card card-page" }, el("h2", { text: "Your card" }), el("p", { class: "muted", text: data.question }), into,
+    data.eventSlug ? el("a", { class: "btn small", href: `#/event/${encodeURIComponent(data.eventSlug)}`, text: "Open the market" }) : null));
+  openShare(data, into);
+}
 
 /* ---------- portfolio: what a person holds, and how it is doing ---------- */
 // Everything here is read from Polymarket's public data service for the person's own trading account (no sign-in step, so it is quick),

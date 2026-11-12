@@ -26,7 +26,7 @@ if (isPostgres) {
   database.pragma('foreign_keys = ON');
 }
 // Seals the assistant-wallet keys people connect (agent-wallet.mjs). Derived from the server secret, never stored.
-export const sealingKey = createHash('sha256').update('clue-agent-wallet:' + secret).digest();
+export const sealingKey = createHash('sha256').update('clue-agent-wallet:' + (process.env.CLUE_SEAL_SECRET || secret)).digest();
 export const auth = betterAuth({ secret, baseURL: process.env.BETTER_AUTH_URL || `http://127.0.0.1:${port}`, database, emailAndPassword: { enabled: false, minPasswordLength: 10 } });
 await (await auth.$context).runMigrations();
 const schema = `CREATE TABLE IF NOT EXISTS research_threads (
@@ -73,8 +73,8 @@ CREATE TABLE IF NOT EXISTS agent_wallets (
  FOREIGN KEY(user_id) REFERENCES "user"(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS agent_orders (
- id TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at TEXT NOT NULL, day TEXT NOT NULL, side TEXT NOT NULL,
- token_id TEXT NOT NULL, usd REAL NOT NULL,
+ id TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at TEXT NOT NULL, day TEXT NOT NULL, kind TEXT NOT NULL, side TEXT,
+ token_id TEXT, usd REAL NOT NULL DEFAULT 0, price REAL, status TEXT NOT NULL, reason TEXT,
  FOREIGN KEY(user_id) REFERENCES "user"(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS agent_orders_day ON agent_orders(user_id, day);
@@ -85,6 +85,8 @@ CREATE TABLE IF NOT EXISTS research_results (
  FOREIGN KEY(user_id) REFERENCES "user"(id) ON DELETE CASCADE
 )`;
 if (isPostgres) await database.query(schema); else database.exec(schema);
+// An assistant key can trade only if the person ticked that when making it. Keys made before this can only read.
+if (isPostgres) await database.query('ALTER TABLE agent_keys ADD COLUMN IF NOT EXISTS can_trade INTEGER NOT NULL DEFAULT 0'); else if (!database.prepare('PRAGMA table_info(agent_keys)').all().some(x => x.name === 'can_trade')) database.exec('ALTER TABLE agent_keys ADD COLUMN can_trade INTEGER NOT NULL DEFAULT 0');
 if (isPostgres) await database.query('ALTER TABLE forecast_revisions ADD COLUMN IF NOT EXISTS market_snapshot TEXT'); else if (!database.prepare('PRAGMA table_info(forecast_revisions)').all().some(x => x.name === 'market_snapshot')) database.exec('ALTER TABLE forecast_revisions ADD COLUMN market_snapshot TEXT');
 for (const column of ['supporting_evidence','opposing_evidence']) { if (isPostgres) await database.query(`ALTER TABLE forecast_revisions ADD COLUMN IF NOT EXISTS ${column} TEXT NOT NULL DEFAULT ''`); else if (!database.prepare('PRAGMA table_info(forecast_revisions)').all().some(x => x.name === column)) database.exec(`ALTER TABLE forecast_revisions ADD COLUMN ${column} TEXT NOT NULL DEFAULT ''`); }
 const memoryColumns = [['forecast_revisions','market_id','TEXT'],['forecast_revisions','outcome_index','INTEGER NOT NULL DEFAULT 0'],['forecast_revisions','market_price','REAL'],['forecast_revisions','market_question','TEXT'],['forecast_revisions','outcome_label','TEXT'],['research_threads','lesson',"TEXT NOT NULL DEFAULT ''"]];

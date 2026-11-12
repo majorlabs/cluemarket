@@ -118,6 +118,7 @@ const handler=async(req,res)=>{ try {
  if(!fromAgent && (url.pathname.startsWith('/api/agent/') || (url.pathname==='/api/pm/sign' && /^Bearer clue_ak_/.test(String(req.headers.authorization||''))))) {
   const who=await userForToken(store,String(req.headers.authorization||'').replace(/^Bearer /,''));
   if(!who) return json(res,401,{error:'Add your Clue assistant key.'});
+  if(!who.canTrade && !(req.method==='GET' && url.pathname==='/api/agent/wallet')) return json(res,403,{error:'This assistant key can only read. Make a key with "Can trade" ticked to let your assistant trade.'});
   if(req.method==='GET' && url.pathname==='/api/agent/wallet') return json(res,200,{...await describeWallet(store,who.userId),builderCode:process.env.POLYMARKET_BUILDER_CODE||null});
   if(req.method==='POST' && url.pathname==='/api/agent/sign') {
    if(!agentSign.take(who.userId)) return json(res,429,{error:'Too many requests. Try again in a little while.'});
@@ -228,7 +229,7 @@ const handler=async(req,res)=>{ try {
   if(fromAgent) return json(res,403,{error:'Not allowed.'});
   const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in to connect an assistant.'});
   if(req.method==='GET' && url.pathname==='/api/agent-keys') return json(res,200,{keys:await listKeys(store,session.user.id)});
-  if(req.method==='POST' && url.pathname==='/api/agent-keys') { const body=await getBody(req); return json(res,201,await createKey(store,session.user.id,body.label)); }
+  if(req.method==='POST' && url.pathname==='/api/agent-keys') { const body=await getBody(req); return json(res,201,await createKey(store,session.user.id,body.label,{canTrade:body.canTrade===true})); }
   const keyMatch=url.pathname.match(/^\/api\/agent-keys\/([a-f0-9-]{36})$/);
   if(req.method==='DELETE' && keyMatch) return json(res,(await revokeKey(store,session.user.id,keyMatch[1]))?200:404,{removed:true});
   return json(res,405,{error:'Method not allowed.'});

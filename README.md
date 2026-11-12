@@ -129,7 +129,7 @@ Clue is also an MCP server at `https://www.oncluemarket.xyz/api/mcp`. Sign in, o
 claude mcp add --transport http clue https://www.oncluemarket.xyz/api/mcp --header "Authorization: Bearer YOUR_KEY"
 ```
 
-Tools: `search_markets`, `get_market`, `research`, `research_status`, `research_allowance`, `save_forecast`, `get_journal`, `get_portfolio`. Each one runs as you, through the same routes and limits as the site. A key cannot place trades, move money or make more keys, and you can remove it at any time.
+Tools: `search_markets`, `get_market`, `research`, `research_status`, `research_allowance`, `save_forecast`, `get_journal`, `get_portfolio`, `share_card`, `my_record`, `what_changed`. Each one runs as you, through the same routes and limits as the site. A key is read-only unless you tick **Can trade** when you make it. No key can move money out or make more keys, and you can remove one at any time.
 
 ### The Clue plugin for Claude Code
 
@@ -141,15 +141,15 @@ claude plugin marketplace add majorlabs/cluemarket
 claude plugin install clue@clue
 ```
 
-It brings the tools above, the commands `/clue:research`, `/clue:portfolio` and `/clue:trade`, a skill that teaches the assistant to research before a call and confirm every trade, and `clue-trader`, a small MCP server that runs on your computer and places orders.
+It brings the tools above, the commands `/clue:research`, `/clue:portfolio`, `/clue:trade`, `/clue:card`, `/clue:record` and `/clue:brief`, a skill that teaches the assistant to research before a call and confirm every trade, and `clue-trader`, a small MCP server that runs on your computer and places orders.
 
 ### Assistant trading with an OutLayer agent wallet
 
 1. At [app.outlayer.ai](https://app.outlayer.ai), create an agent wallet (Custody, Wallets). Its keys are held in OutLayer's secure hardware on NEAR. In its policy, allow `evm_sign` and save.
-2. In Clue, open the account menu, choose **Assistant trading**, paste the wallet key and set your limits per order and per day. Switch it on.
+2. In Clue, open the account menu, choose **Assistant trading**, paste the wallet key and set your limits per order and per day. Switch it on, and make an assistant key with **Can trade** ticked.
 3. Ask your assistant for `trading_status`, fund the trading account it shows with pUSD (or use **Add money**), and run `setup_trading` once.
 
-Clue keeps the wallet key sealed on its server. For each order, Clue checks your limits and has OutLayer sign. It signs only Polymarket sign-in, orders on Polymarket's exchanges, and permissions for Polymarket's own contracts, and refuses everything else, including transfers and withdrawals. The signed order is sent to Polymarket from your own computer. Switch assistant trading off in Clue, or freeze the wallet on OutLayer, at any time.
+Clue keeps the wallet key sealed on its server. For each order, Clue checks your limits and the live market price (a buy far above it, or a sell far below it, is refused, and so is any order when the price cannot be read), then has OutLayer sign. Every request is logged and shown under Assistant trading. It signs only Polymarket sign-in, orders on Polymarket's exchanges, and permissions for Polymarket's own contracts, and refuses everything else, including transfers and withdrawals. The signed order is sent to Polymarket from your own computer. Switch assistant trading off in Clue, or freeze the wallet on OutLayer, at any time.
 
 ## How it works
 
