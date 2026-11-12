@@ -80,7 +80,7 @@ async function researchOnce(question, market) {
  const started=Date.now(), stop=new AbortController(), deadline=setTimeout(()=>stop.abort(),RESEARCH_DEADLINE_MS);
  let response, stream='', timedOut=false, early=false;
  try {
-  response=await fetch((process.env.NEAR_AI_BASE||'https://cloud-api.near.ai/v1')+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${process.env.NEAR_AI_API_KEY}`},body:JSON.stringify({model,messages:[{role:'user',content:prompt}],tools:[{type:'web_context_search'}],max_tokens:4000,stream:true}),signal:stop.signal});
+  response=await fetch((process.env.NEAR_AI_BASE||'https://cloud-api.near.ai/v1')+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${process.env.NEAR_AI_API_KEY}`},body:JSON.stringify({model,messages:[{role:'user',content:prompt}],tools:[{type:'web_context_search'}],max_tokens:2000,reasoning_effort:process.env.CLUE_RESEARCH_EFFORT||'low',stream:true}),signal:stop.signal});
   if (!response.ok) throw Object.assign(new Error('Research isn’t available right now. Please try again in a little while.'),{status:502});
   const decoder=new TextDecoder(); let sawSure=false;
   for await (const piece of response.body) {

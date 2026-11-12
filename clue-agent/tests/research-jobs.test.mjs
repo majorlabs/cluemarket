@@ -10,10 +10,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Database from 'better-sqlite3';
 
-let mode = 'slow', calls = 0, lastPrompt = '';
+let mode = 'slow', calls = 0, lastPrompt = '', lastBody = {};
 const ai = http.createServer((req, res) => {
   let raw = ''; req.on('data', (c) => { raw += c; }); req.on('end', () => {
-    try { lastPrompt = JSON.parse(raw).messages[0].content; } catch { /* not a chat request */ }
+    try { lastBody = JSON.parse(raw); lastPrompt = lastBody.messages[0].content; } catch { /* not a chat request */ }
     if (mode === 'down') { res.writeHead(500); return res.end('{}'); }
     calls++;
     if (mode === 'cut-once' && calls % 2 === 1 || mode === 'cut-always') {
@@ -233,4 +233,15 @@ test('a whole answer is taken as soon as it is written, even if the model carrie
   assert.match(j.content, /deciding candle/);
   assert.ok(Date.now() - t0 < 3500, `took ${Date.now() - t0}ms: it should not have waited for the stream to end or the deadline (4s)`);
   assert.equal(j.allowance.usedToday, 1);
+});
+
+test('the AI is told to think only a little, because the search results do the work and thinking is what makes research slow', async () => {
+  const cookie = signup('omar');
+  mode = 'slow';
+  const { researchId } = await (await start(cookie)).json();
+  await untilFinished(cookie, researchId);
+  assert.equal(lastBody.reasoning_effort, 'low');
+  assert.ok(lastBody.max_tokens <= 2000, `max_tokens ${lastBody.max_tokens}`);
+  assert.deepEqual(lastBody.tools, [{ type: 'web_context_search' }]);
+  assert.equal(lastBody.stream, true);
 });
