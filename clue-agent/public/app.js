@@ -710,6 +710,8 @@ async function myTradingWallet() {
   const saved = user ? savedSetup(user.id) : null; if (saved) return saved.wallet;
   try { const d = await api("/api/trading/account"); return d.account && isAddr(d.account.wallet) ? d.account.wallet : null; } catch { return null; }
 }
+// Waiting orders need the person's wallet to sign in to Polymarket, so they are read only when asked, and kept for the visit.
+let ordersCache = null;   // { user, orders, titles, at }
 async function portfolioView(stale) {
   const T = window.ClueTicket;
   if (!user) {
@@ -738,7 +740,7 @@ async function portfolioView(stale) {
     summary.replaceChildren(
       stat("Total", positions || cash !== null ? pfUsd(total) : "…", "big"),
       stat("Cash", cash === null ? "…" : pfUsd(cash)),
-      stat("In calls", pfUsd(t.value), "", `${t.open} open`),
+      stat("In calls", pfUsd(t.value), "", `${t.open} position${t.open === 1 ? "" : "s"}`),
       stat("Open profit", pfSigned(t.openPnl), t.openPnl > 0 ? "pos" : t.openPnl < 0 ? "neg" : ""),
       ...(t.toClaim > 0 ? [stat("Waiting for you", pfUsd(t.toClaim), "pos")] : []));
     const claimable = (positions || []).filter((p) => ["won", "partial"].includes(T.positionState(p)) && T.claimId(p));
@@ -794,9 +796,10 @@ async function portfolioView(stale) {
       await loadTrading(); pr.advance("account");
       const r = await window.clueTrading.openOrders();
       if (!r.ok) { ordersError = r; return; }
-      pr.advance("read"); orders = r.orders;
+      pr.advance("read"); orders = r.orders; ordersCache = { user: user && user.id, orders: r.orders, titles: null, at: Date.now() };
       const ids = [...new Set(orders.map((o) => o.conditionId).filter(Boolean))];
       if (ids.length) { try { titles = { ...titles, ...(await api(`/api/markets/by-condition?ids=${ids.join(",")}`)).markets }; } catch { /* the order still shows, without a name */ } }
+      if (ordersCache) ordersCache.titles = titles;
     } catch (e) { ordersError = { error: e.message }; }
     finally { ordersLoading = false; if (stale() || !root.isConnected) return; drawBody(); }
   }
@@ -832,8 +835,10 @@ async function portfolioView(stale) {
   function ordersBody() {
     if (ordersLoading) return null;
     if (ordersError) return [errBox("Couldn’t load your open orders", ordersError.error, loadOrders), ordersError.detail ? el("small", { class: "err-detail", text: `(${ordersError.detail})` }) : null];
-    if (!orders) return null;
-    if (!orders.length) return [el("div", { class: "card empty" }, el("h2", { text: "No open orders" }), el("p", { class: "muted", text: "Orders placed with Clue fill completely or not at all, so they never wait. An order shows here only if one is waiting on a market, for example one placed on Polymarket itself." }), el("button", { class: "btn small", type: "button", text: "Check again", onclick: loadOrders }))];
+    if (!orders) return [el("div", { class: "card empty" }, el("h2", { text: "Waiting orders" }),
+      el("p", { class: "muted", text: "Trades placed with Clue fill completely or not at all, so they never wait here. Your bought shares are under Positions. This tab shows orders still waiting on a market, for example one placed on Polymarket itself. Checking asks your wallet to sign in to Polymarket once." }),
+      el("button", { class: "btn small", type: "button", text: "Check for waiting orders", onclick: loadOrders }))];
+    if (!orders.length) return [el("div", { class: "card empty" }, el("h2", { text: "No waiting orders" }), el("p", { class: "muted", text: "Orders placed with Clue fill completely or not at all, so they never wait. An order shows here only if one is waiting on a market, for example one placed on Polymarket itself." }), el("button", { class: "btn small", type: "button", text: "Check again", onclick: loadOrders }))];
     const top = orders.length > 1 ? [el("div", { class: "pf-claimall" }, el("button", { class: "btn", type: "button", text: `Cancel all ${orders.length} orders`, onclick: (ev) => { ev.currentTarget.hidden = true; cancelThese(orders, allPanel, true); } }), allPanel)] : [];
     return [...top, ...orders.map(orderRow)];
   }
@@ -961,8 +966,8 @@ async function portfolioView(stale) {
     } catch (e) { if (stale()) return; if (!force && busy()) return; failed = e.message; }
     drawSummary(); drawBody();
   }
-  const seg = el("div", { class: "seg", role: "group", "aria-label": "Portfolio sections" }, [["positions", "Positions"], ["orders", "Open orders"], ["history", "History"]].map(([id, text], i) =>
-    el("button", { type: "button", text, "aria-pressed": String(i === 0), onclick: (ev) => { tab = id; seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", "false")); ev.currentTarget.setAttribute("aria-pressed", "true"); if (id === "orders" && orders === null && !ordersLoading) loadOrders(); else drawBody(); } })));
+  const seg = el("div", { class: "seg", role: "group", "aria-label": "Portfolio sections" }, [["positions", "Positions"], ["orders", "Waiting orders"], ["history", "History"]].map(([id, text], i) =>
+    el("button", { type: "button", text, "aria-pressed": String(i === 0), onclick: (ev) => { tab = id; seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", "false")); ev.currentTarget.setAttribute("aria-pressed", "true"); if (id === "orders" && orders === null && ordersCache && ordersCache.user === (user && user.id) && Date.now() - ordersCache.at < 10 * 60000) { orders = ordersCache.orders; titles = { ...titles, ...(ordersCache.titles || {}) }; } drawBody(); } })));
   const withdrawBtn = el("button", { class: "btn", type: "button", text: "Withdraw", onclick: () => { const p = withdrawPanel(); p.hidden = !p.hidden; if (!p.hidden) p.scrollIntoView({ block: "nearest", behavior: "smooth" }); } });
   root.append(el("h1", { class: "pf-h1", text: "Portfolio" }), summary, el("div", { class: "pf-actions" }, withdrawBtn), withdrawPanel(), claimAll, seg, body);
   withdrawPanel().hidden = true;
