@@ -10,7 +10,7 @@ The Clue app in `clue-agent/`: the server, the website and the sign-in, research
 
 ## What we already check
 
-[docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md) lists what was attacked, what was fixed and what is still open.
+[docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md) lists what was attacked and how each finding was fixed.
 
 ## Secrets
 

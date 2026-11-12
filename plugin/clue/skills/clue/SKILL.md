@@ -34,7 +34,7 @@ If the person states a budget ("$20 a day, at most $5 a trade"), call `set_budge
 
 With the plugin's `clue-trader` (Claude Code and an OutLayer agent wallet):
 
-1. Trading needs an assistant key made with **Can trade** ticked. Check `trading_status` first. If trading is off or no wallet is connected, tell the person to open Agents in Clue and set up Assistant trading. If `setUp` is false, run `setup_trading` once.
+1. Trading needs an agent key made with **Can trade** ticked. Check `trading_status` first. If trading is off or no wallet is connected, tell the person to open Agents in Clue and set up Agent wallet. If `setUp` is false, run `setup_trading` once.
 2. Get the outcome's `token_id` from `get_market`.
 3. Before every `buy` or `sell`, state the market, the outcome, the amount and the worst price, and wait for the person to say yes.
 4. Use `max_price` a little above the current chance for a buy (for example 0.42 when it shows 40%), and `min_price` a little below for a sell.

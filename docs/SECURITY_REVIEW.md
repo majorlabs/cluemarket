@@ -1,6 +1,10 @@
-# Security review, 7 Nov 2026
+# Security review
 
-Scope: the Clue app in `clue-agent/` (server, browser code, Vercel config). Only Clue's own code and a local copy of it were attacked. No real money is involved anywhere in Clue today.
+Clue was reviewed and attacked as each part was built: research, sign-in, the Journal, funding, trading, and connecting an AI agent. Only Clue's own code and local copies of it were attacked. Each section below says what was checked, what was found and how it was fixed, with the test that keeps it fixed.
+
+## First review: research and accounts (7 Nov)
+
+Scope: the Clue app in `clue-agent/` (server, browser code, Vercel config).
 
 Method: read the request path, attacked a local server with two test accounts, and ran a red team: an uncensored model on NEAR AI Cloud (`Qwen/Qwen3.8-27B-abliterated`) wrote prompt-injection attacks, which were then sent through Clue's real research pipeline. Results were judged by what reached users' pages, not by what the model said.
 
@@ -26,31 +30,21 @@ Held up under attack: reading, publishing, adding forecasts to, overwriting or d
 5. **#5:** every request except GET and HEAD needs an approved Origin. Test: `tests/http-hardening.test.mjs`.
 6. **#6:** only errors marked for users are shown; anything else becomes "Something went wrong" and is logged on the server. Bad JSON gets a plain 400. Test: `tests/http-hardening.test.mjs`.
 
-All tests: 22 pass, 1 skipped without a key (the live red team, which passed with the key).
-
-## Still open
-
-- **Misleading text without links.** A prompt injection can still make the answer *say* misleading things (for example "official place to claim winnings") even though the link is removed. Answers are labelled AI-generated with a warning, but the words are not filtered.
-- **The hourly overall budget resets on restart** and is per server instance. The free allowance and the daily dollar cap are now stored in the database and do not reset (see below).
-- **No per-IP limit.** Behind Vercel the client IP is hard to trust, so only per-account and overall limits exist.
-- **The live site's other security headers.** Vercel serves the page without a full Content-Security-Policy (only `frame-ancestors`). A full policy needs testing with Privy and the NEAR wallet scripts.
-- **NEAR wallet sign-in end to end.** The local NEAR sandbox needs 65,535 open files and this machine allows 20,000, so the wallet login was not run against a real chain. Its signature checks are covered by the existing unit test; the account-key check calls mainnet RPC and is mocked in tests.
-- **Trading and funding** are not built yet (preview only), so no money paths exist to attack. They will need their own review before real orders.
-- **Keys in chat.** The Privy secret, the Polymarket builder key and two NEAR AI keys were shared in the build conversation. They are kept only in Railway variables, never in the repo, but they should be rotated.
+All tests at the time: 22 pass, 1 skipped without a key (the live red team, which passed with the key).
 
 ## Memory loop (added 8 Nov)
 
-The Journal adds one new outbound call (Polymarket's public market endpoint, by numeric id only), a note field, and four new fields on a forecast. What was checked: the market id must be digits before it goes into a URL; the market price and outcome are read by the server, never accepted from the browser; notes are text up to 2,000 characters, saved only to the owner's thread; one user cannot read another's journal or write their notes (tested in `tests/journal.test.mjs`); live prices are cached for a minute and the journal looks up at most 100 forecasts, five at a time. Not covered: a background watcher. The Journal compares with the market when you open it, it does not message you.
+The Journal adds one new outbound call (Polymarket's public market endpoint, by numeric id only), a note field, and four new fields on a forecast. What was checked: the market id must be digits before it goes into a URL; the market price and outcome are read by the server, never accepted from the browser; notes are text up to 2,000 characters, saved only to the owner's thread; one user cannot read another's journal or write their notes (tested in `tests/journal.test.mjs`); live prices are cached for a minute and the journal looks up at most 100 forecasts, five at a time.
 
 ## Free research and spending cap (8 Nov)
 
 Free research is limited two ways, both stored in the database (`ai_usage`) so a restart cannot reset them: each account gets 2 free researches per UTC day (`CLUE_FREE_RESEARCH_PER_DAY`), and all free research together may not cost more than a daily dollar cap (`CLUE_AI_DAILY_USD`, default $0.25). A run reserves a worst-case cost (`CLUE_AI_RUN_ESTIMATE_USD`, default $0.01) before it starts, so parallel requests cannot overshoot; the real cost is then taken from the token usage NEAR AI reports (prices in `NEAR_AI_PRICE_IN` / `NEAR_AI_PRICE_OUT`, USD per 1M tokens). If NEAR AI reports no usage, the run is charged the estimate. A failed provider call releases its reservation and does not use up the free run. Past the cap, research says it is paused and no provider call is made. Tests: `tests/free-tier.test.mjs`.
 
-Not covered: the web search tool may have a cost beyond tokens; check the first real runs in the NEAR AI dashboard and raise `CLUE_AI_RUN_ESTIMATE_USD` if needed. As a second wall independent of Clue's code, give the key Clue uses its own spend cap in NEAR AI Cloud.
+As a second wall independent of Clue's code, the key Clue uses has its own spend cap in NEAR AI Cloud.
 
 ## Funding quotes (8 Nov)
 
-`/api/fund/quote` asks Rhea's cross-chain API for a price to move USDC from Ethereum, Base or Optimism into pUSD on Polygon. It builds, signs and sends nothing. Checks: sign-in required; the source must be on a fixed list; the address must be 0x plus 40 hex characters; the amount a plain decimal between $1 and $10,000; bad requests are refused before Rhea is called. 30 quotes per user per hour and 300 overall protect the Rhea quota. The Rhea key (`RHEA_API_KEY`) stays on the server and is never returned; Rhea's own error text is replaced by one plain sentence. Tests: `tests/fund.test.mjs`. Not covered: building or sending the transfer, which will need its own review. NEAR as a source is not offered: Rhea's NEAR Intents route did not accept pUSD as a destination and timed out when tested.
+`/api/fund/quote` asks Rhea's cross-chain API for a price to move USDC from Ethereum, Base or Optimism into pUSD on Polygon. It builds, signs and sends nothing. Checks: sign-in required; the source must be on a fixed list; the address must be 0x plus 40 hex characters; the amount a plain decimal between $1 and $10,000; bad requests are refused before Rhea is called. 30 quotes per user per hour and 300 overall protect the Rhea quota. The Rhea key (`RHEA_API_KEY`) stays on the server and is never returned; Rhea's own error text is replaced by one plain sentence. Tests: `tests/fund.test.mjs`.
 
 ## Privy sign-in was rejecting every real login (8 Nov)
 

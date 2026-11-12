@@ -1,9 +1,9 @@
-// Clue's order sender. It runs on the person's own computer, as a small MCP server for their AI assistant, so every order
+// Clue's order sender. It runs on the person's own computer, as a small MCP server for their AI agent, so every order
 // goes to Polymarket from where the person really is. It holds no keys: each signature is asked of Clue, which checks the
 // person's own limits and has their OutLayer agent wallet sign. Built into ../plugin/clue/trader/clue-trader.mjs with
 // `npm run build:trader`.
 //
-// Needs CLUE_KEY (an assistant key from Clue's account menu). CLUE_URL defaults to https://www.oncluemarket.xyz.
+// Needs CLUE_KEY (an agent key from Clue's Agents page). CLUE_URL defaults to https://www.oncluemarket.xyz.
 import { createInterface } from 'node:readline';
 import { createSecureClient, remoteBuilderSigning, OrderSide, OrderType } from '@polymarket/client';
 import { fetchBalanceAllowance } from '@polymarket/client/actions';
@@ -16,7 +16,7 @@ const big = (_, v) => (typeof v === 'bigint' ? v.toString() : v);
 const num = (v) => Number(v || 0);
 
 async function clue(method, path, body) {
-  if (!KEY) throw Object.assign(new Error('Set CLUE_KEY to your Clue assistant key (Clue, account menu, Connect an AI assistant).'), { clue: true });
+  if (!KEY) throw Object.assign(new Error('Set CLUE_KEY to your Clue agent key (Clue, Agents, Advanced: connect with a key).'), { clue: true });
   const r = await fetch(BASE + path, { method, headers: { ...auth(), ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body, big) : undefined, signal: AbortSignal.timeout(30000) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw Object.assign(new Error(j.error || `Clue returned ${r.status}.`), { clue: true });
@@ -24,20 +24,20 @@ async function clue(method, path, body) {
 }
 
 let cached = null;
-async function walletInfo() { const w = await clue('GET', '/api/agent/wallet'); if (!w.wallet) throw Object.assign(new Error('No assistant wallet is connected. In Clue, open Agents and connect your OutLayer wallet.'), { clue: true }); return w; }
+async function walletInfo() { const w = await clue('GET', '/api/agent/wallet'); if (!w.wallet) throw Object.assign(new Error('No agent wallet is connected. In Clue, open Agents and connect your OutLayer wallet.'), { clue: true }); return w; }
 
 // A signer that never holds a key: Clue checks each request and OutLayer signs it.
 const signer = {
   async getAddress() { return (await walletInfo()).wallet.address; },
   async signTypedData(payload) { return (await clue('POST', '/api/agent/sign', { typedData: payload })).signature; },
-  async signMessage() { throw new Error('Clue does not sign plain messages for assistant wallets.'); },
-  async sendTransaction() { throw new Error('Assistant wallets only use gasless actions.'); },
+  async signMessage() { throw new Error('Clue does not sign plain messages for agent wallets.'); },
+  async sendTransaction() { throw new Error('Agent wallets only use gasless actions.'); },
 };
 
 async function client() {
   if (cached) return cached;
   const info = await walletInfo();
-  if (!info.wallet.enabled) throw Object.assign(new Error('Assistant trading is switched off. Switch it on in Clue: Agents, Assistant trading.'), { clue: true });
+  if (!info.wallet.enabled) throw Object.assign(new Error('Agent wallet is switched off. Switch it on in Clue: Agents, Agent wallet.'), { clue: true });
   const c = await createSecureClient({ signer, apiKey: remoteBuilderSigning({ url: BASE + '/api/pm/sign', headers: auth }) });
   cached = { c, info };
   return cached;
@@ -56,7 +56,7 @@ const result = (res) => {
 };
 
 const TOOLS = [
-  { name: 'trading_status', description: 'The connected assistant wallet, the trading account that holds its pUSD, its cash, whether it is set up, and the person\'s limits per order and per day.', inputSchema: { type: 'object', properties: {} } },
+  { name: 'trading_status', description: 'The connected agent wallet, the trading account that holds its pUSD, its cash, whether it is set up, and the person\'s limits per order and per day.', inputSchema: { type: 'object', properties: {} } },
   { name: 'setup_trading', description: 'One-time set-up of the trading account: creates it and gives Polymarket\'s exchanges permission to use its pUSD and shares. Gasless.', inputSchema: { type: 'object', properties: {} } },
   { name: 'buy', description: 'Buy an outcome with a dollar amount. All-or-nothing at no worse than max_price (0 to 1). Get token_id from Clue\'s search_markets or get_market. Clue refuses anything over the person\'s limits.', inputSchema: { type: 'object', properties: { token_id: { type: 'string' }, amount_usd: { type: 'number', exclusiveMinimum: 0 }, max_price: { type: 'number', exclusiveMinimum: 0, maximum: 1 } }, required: ['token_id', 'amount_usd', 'max_price'] } },
   { name: 'sell', description: 'Sell shares of an outcome the account holds. All-or-nothing at no less than min_price (0 to 1).', inputSchema: { type: 'object', properties: { token_id: { type: 'string' }, shares: { type: 'number', exclusiveMinimum: 0 }, min_price: { type: 'number', minimum: 0, maximum: 1 } }, required: ['token_id', 'shares', 'min_price'] } },
@@ -68,7 +68,7 @@ const run = {
   async trading_status() {
     const info = await walletInfo();
     const out = { signer: info.wallet.address, enabled: info.wallet.enabled, maxOrder: info.wallet.maxOrder, maxDay: info.wallet.maxDay, spentToday: info.wallet.spentToday };
-    if (!info.wallet.enabled) return { ...out, note: 'Assistant trading is switched off. Switch it on in Clue: Agents, Assistant trading.' };
+    if (!info.wallet.enabled) return { ...out, note: 'Agent wallet is switched off. Switch it on in Clue: Agents, Agent wallet.' };
     const { c } = await client();
     const state = await c.fetchTradingApprovalsState();
     const bal = await fetchBalanceAllowance(c, { assetType: 'COLLATERAL' });
