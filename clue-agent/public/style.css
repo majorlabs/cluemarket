@@ -898,3 +898,13 @@ dialog .btn{height:48px;border-radius:14px}
 .pf-root .pf-summary .pf-stat.big b{color:#f6f1e7}
 .pf-root .pf-summary .pf-stat.big small{color:rgba(246,241,231,.72)}
 @media(max-width:719px){.pf-root .pf-summary .pf-stat:last-child:nth-child(even){grid-column:1/-1}}
+.mcp-snip{margin-top:12px;border:1px solid var(--line-strong);border-radius:12px;overflow:hidden}
+.mcp-snip-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line-strong)}
+.mcp-snip-head .label{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--brand-text)}
+.mcp-snip pre{margin:0;padding:10px 12px;overflow-x:auto;max-width:100%}
+.mcp-snip code{font-family:var(--mono);font-size:12px;white-space:pre-wrap;word-break:break-all}
+.mcp-new{margin-top:12px}
+.mcp-keys{display:grid;gap:8px;margin-top:6px}
+.mcp-key{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--line-strong);border-radius:12px;padding:10px 12px}
+.mcp-make{display:flex;gap:8px;margin-top:10px}
+.mcp-make input{flex:1;min-width:0}

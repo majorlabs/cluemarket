@@ -1,6 +1,7 @@
 import {randomBytes,createHash} from 'node:crypto';
 import {PublicKey} from '@near-js/crypto';
 import {store,auth} from './auth.mjs';
+import {AGENT_USER} from './agent-user.mjs';
 const hash=x=>createHash('sha256').update(x).digest('hex');
 const cookie=(req,name)=>String(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(name+'='))?.slice(name.length+1);
 const str=x=>{const b=Buffer.from(x);const n=Buffer.alloc(4);n.writeUInt32LE(b.length);return Buffer.concat([n,b])};
@@ -11,7 +12,7 @@ export async function initWalletAuth(){
 }
 const setCookie=(res,name,value,secure,maxAge)=>res.setHeader('Set-Cookie',name+'='+value+'; Path=/; HttpOnly; SameSite=Lax; Max-Age='+maxAge+(secure?'; Secure':''));
 export async function startSession(res,origin,userId,label){const token=randomBytes(32).toString('hex');await store.run('INSERT INTO wallet_sessions VALUES (?,?,?,?)',hash(token),userId,label,Date.now()+604800000);setCookie(res,'clue_wallet',token,origin.startsWith('https:'),604800)}
-export async function walletSession(req){const token=cookie(req,'clue_wallet');if(!token)return null;const s=await store.get('SELECT user_id,account_id FROM wallet_sessions WHERE token=? AND expires>?',hash(token),Date.now());if(!s)return null;const hidden=String(s.user_id).startsWith('privy:');return {user:{id:s.user_id,name:hidden?'Account':s.account_id,email:hidden?'Account':s.account_id}}}
+export async function walletSession(req){if(req[AGENT_USER])return {user:{id:req[AGENT_USER],name:'Account',email:'Account'}};const token=cookie(req,'clue_wallet');if(!token)return null;const s=await store.get('SELECT user_id,account_id FROM wallet_sessions WHERE token=? AND expires>?',hash(token),Date.now());if(!s)return null;const hidden=String(s.user_id).startsWith('privy:');return {user:{id:s.user_id,name:hidden?'Account':s.account_id,email:hidden?'Account':s.account_id}}}
 export async function walletRoute(req,res,path,body,origin){
  const secure=origin.startsWith('https:');
  if(path==='/api/wallet/session'&&req.method==='GET')return await walletSession(req)||{};

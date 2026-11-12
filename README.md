@@ -46,6 +46,7 @@ Clue puts it in one place. Pick a real market, read exactly how it resolves, ask
 | **Portfolio** | Your total (cash plus what you hold), every position with shares, entry and current price, value and profit or loss, and your history. **Claim** your winnings on ended markets you called, see and **Cancel** open orders, and **Withdraw** your cash as USDC to your own wallet on Base, Ethereum, Arbitrum, Optimism or Polygon. |
 | **Share a call** | Turn a call into a 16:9 card (live, won or lost) with a code that opens the same market, so people who see it can trade alongside you, plus a post to go with it. On a phone the share sheet sends it to any app, and **Post on X** opens X with the text and link ready. |
 | **Sign in your way** | Email, Google, an Ethereum wallet, or a NEAR wallet (a signed message, no transaction). |
+| **Use it from your AI assistant** | Connect Claude, Codex, Cursor or any MCP assistant from the account menu. It can search markets, run research, save forecasts to your Journal and read your Portfolio. It cannot trade or move money. |
 
 <table>
   <tr>
@@ -118,6 +119,16 @@ Settings (names only; never commit values):
 | `CLUE_HOSTED`, `CLUE_SERVICE_HOST`, `CLUE_SIGNUP_TOKEN` | Hosted-mode switches |
 | `CLUE_ORDERS_LIVE`, `CLUE_ORDERS_LIVE_ADDRESSES` | `CLUE_ORDERS_LIVE=1` lets orders be sent for everyone. `CLUE_ORDERS_LIVE_ADDRESSES` is a comma-separated list of wallet addresses that can send real orders while everyone else sees the review step only |
 | `CLUE_PUBLIC_ORIGINS` | https addresses allowed to sign in (list them all, comma-separated) |
+
+## Use Clue from your AI assistant
+
+Clue is also an MCP server at `https://www.oncluemarket.xyz/api/mcp`. Sign in, open the account menu, choose **Connect an AI assistant** and make a key. Then, for Claude Code:
+
+```bash
+claude mcp add --transport http clue https://www.oncluemarket.xyz/api/mcp --header "Authorization: Bearer YOUR_KEY"
+```
+
+Tools: `search_markets`, `get_market`, `research`, `research_status`, `research_allowance`, `save_forecast`, `get_journal`, `get_portfolio`. Each one runs as you, through the same routes and limits as the site. A key cannot place trades, move money or make more keys, and you can remove it at any time.
 
 ## How it works
 
