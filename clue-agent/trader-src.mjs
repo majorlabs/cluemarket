@@ -24,7 +24,7 @@ async function clue(method, path, body) {
 }
 
 let cached = null;
-async function walletInfo() { const w = await clue('GET', '/api/agent/wallet'); if (!w.wallet) throw Object.assign(new Error('No assistant wallet is connected. In Clue, open the account menu, choose Assistant trading and connect your OutLayer wallet.'), { clue: true }); return w; }
+async function walletInfo() { const w = await clue('GET', '/api/agent/wallet'); if (!w.wallet) throw Object.assign(new Error('No assistant wallet is connected. In Clue, open Agents and connect your OutLayer wallet.'), { clue: true }); return w; }
 
 // A signer that never holds a key: Clue checks each request and OutLayer signs it.
 const signer = {
@@ -37,7 +37,7 @@ const signer = {
 async function client() {
   if (cached) return cached;
   const info = await walletInfo();
-  if (!info.wallet.enabled) throw Object.assign(new Error('Assistant trading is switched off. Switch it on in Clue: account menu, Assistant trading.'), { clue: true });
+  if (!info.wallet.enabled) throw Object.assign(new Error('Assistant trading is switched off. Switch it on in Clue: Agents, Assistant trading.'), { clue: true });
   const c = await createSecureClient({ signer, apiKey: remoteBuilderSigning({ url: BASE + '/api/pm/sign', headers: auth }) });
   cached = { c, info };
   return cached;
@@ -68,7 +68,7 @@ const run = {
   async trading_status() {
     const info = await walletInfo();
     const out = { signer: info.wallet.address, enabled: info.wallet.enabled, maxOrder: info.wallet.maxOrder, maxDay: info.wallet.maxDay, spentToday: info.wallet.spentToday };
-    if (!info.wallet.enabled) return { ...out, note: 'Assistant trading is switched off. Switch it on in Clue: account menu, Assistant trading.' };
+    if (!info.wallet.enabled) return { ...out, note: 'Assistant trading is switched off. Switch it on in Clue: Agents, Assistant trading.' };
     const { c } = await client();
     const state = await c.fetchTradingApprovalsState();
     const bal = await fetchBalanceAllowance(c, { assetType: 'COLLATERAL' });

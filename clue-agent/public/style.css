@@ -930,3 +930,10 @@ dialog .btn{height:48px;border-radius:14px}
 .share-row .btn{flex:1 1 auto;justify-content:center}
 .card-page{margin-bottom:120px}
 .card.card-page{padding:20px 18px;box-sizing:border-box;width:100%}
+.agents-page{display:grid;gap:16px;max-width:820px;margin:0 auto 120px}
+.agents-hero,.agents-sec{padding:22px 20px;box-sizing:border-box;min-width:0}
+.agents-hero h1{margin:0 0 6px;font-size:30px;letter-spacing:-.03em}
+.agents-try{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.agents-try .chip{font-size:13px;padding:6px 10px;border-radius:999px;background:var(--bg-2);border:1px solid var(--line);color:var(--ink)}
+.agents-sec h2{margin-top:0}
+@media(max-width:560px){.main-nav a{font-size:12px;padding:10px 2px}}

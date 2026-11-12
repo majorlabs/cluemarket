@@ -173,8 +173,8 @@ export function signFor(store, sealingKey, userId, td, opts = {}) { return seria
 
 async function signNow(store, sealingKey, userId, td, { now = new Date() } = {}) {
   const w = await store.get('SELECT key_sealed, address, enabled, max_order, max_day FROM agent_wallets WHERE user_id=?', userId);
-  if (!w) throw fail(404, 'No assistant wallet is connected. Connect one in Clue: account menu, Assistant trading.');
-  if (!w.enabled) throw fail(403, 'Assistant trading is switched off. Switch it on in Clue: account menu, Assistant trading.');
+  if (!w) throw fail(404, 'No assistant wallet is connected. Connect one in Clue: Agents, Assistant trading.');
+  if (!w.enabled) throw fail(403, 'Assistant trading is switched off. Switch it on in Clue: Agents, Assistant trading.');
   let what;
   try { what = classify(td, w.address); } catch (e) { await log(store, userId, now, { kind: String(td?.primaryType || 'unknown').slice(0, 40), status: 'refused', reason: e.message }); throw e; }
   let entry = null;

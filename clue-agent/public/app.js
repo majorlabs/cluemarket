@@ -249,8 +249,7 @@ function openAccountMenu() {
     el("div", { class: "actions", style: "flex-direction:column;align-items:stretch;margin-top:14px" },
       el("a", { class: "btn", href: "#/portfolio", text: "Portfolio", onclick: () => dialog.close() }),
       el("a", { class: "btn", href: "#/saved", text: "Journal", onclick: () => dialog.close() }),
-      el("button", { class: "btn", type: "button", text: "Connect an AI assistant", onclick: openAssistants }),
-      el("button", { class: "btn", type: "button", text: "Assistant trading", onclick: () => openAgentWallet() }),
+      el("a", { class: "btn", href: "#/agents", text: "Agents", onclick: () => dialog.close() }),
       el("button", { class: "btn", type: "button", style: "color:var(--no)", text: "Disconnect", onclick: signOut }),
       el("button", { class: "btn ghost", type: "button", text: "Close", onclick: () => dialog.close() })));
   if (!dialog.open) dialog.showModal();
@@ -260,6 +259,13 @@ function openAccountMenu() {
 const MCP_URL = `${location.origin}/api/mcp`;
 const copyBtn = (text, label = "Copy") => el("button", { class: "btn small", type: "button", text: label, onclick: async (ev) => { try { await navigator.clipboard.writeText(text); ev.currentTarget.textContent = "Copied"; } catch { ev.currentTarget.textContent = "Select and copy"; } } });
 const snippet = (title, text) => el("div", { class: "mcp-snip" }, el("div", { class: "mcp-snip-head" }, el("span", { class: "label", text: title }), copyBtn(text)), el("pre", {}, el("code", { text })));
+// Where the agent panels draw: a section of the Agents page when it is open, or the dialog otherwise.
+const agentHosts = { keys: null, wallet: null };
+function agentShow(which, nodes) {
+  const host = agentHosts[which];
+  if (host && host.isConnected) { host.replaceChildren(...kids(nodes.filter((n) => !(n && n.classList && n.classList.contains("actions") && n.dataset.dialogOnly)))); return true; }
+  dialog.replaceChildren(...kids(nodes)); if (!dialog.open) dialog.showModal(); return false;
+}
 async function openAssistants(fresh) {
   const list = el("div", { class: "mcp-keys" }, el("p", { class: "muted", text: "Loading…" }));
   const make = el("button", { class: "btn primary", type: "button", text: "Make a key" });
@@ -274,8 +280,8 @@ async function openAssistants(fresh) {
   const shown = fresh?.token ? el("div", { class: "mcp-new" },
     el("strong", { text: "Your new key. Copy it now: it will not be shown again." }),
     el("div", { class: "acct-addr" }, el("code", { text: fresh.token }), copyBtn(fresh.token))) : null;
-  dialog.replaceChildren(
-    el("h2", { text: "Connect an AI assistant" }),
+  agentShow("keys", [
+    el("h2", { text: "Connect your AI" }),
     el("p", { class: "muted", text: "Use Clue from Claude, Codex, Cursor or any assistant that supports MCP. It can search markets, run research with your free daily allowance, save forecasts to your Journal and read your Portfolio. It cannot place trades or move money." }),
     shown,
     snippet("Claude Code plugin (research and trading)", `export CLUE_KEY=${key}\nclaude plugin marketplace add majorlabs/cluemarket\nclaude plugin install clue@clue`),
@@ -285,8 +291,7 @@ async function openAssistants(fresh) {
     el("h3", { text: "Your keys" }), list,
     el("div", { class: "mcp-make" }, label, make),
     el("label", { class: "mcp-trade" }, trade, el("span", { text: "Can trade: lets this key ask for trades through Assistant trading, within your limits. Leave it off for research only." })),
-    el("div", { class: "actions" }, el("button", { class: "btn ghost", type: "button", text: "Back", onclick: openAccountMenu }), el("button", { class: "btn ghost", type: "button", text: "Close", onclick: () => dialog.close() })));
-  if (!dialog.open) dialog.showModal();
+    el("div", { class: "actions", "data-dialog-only": "1" }, el("button", { class: "btn ghost", type: "button", text: "Back", onclick: openAccountMenu }), el("button", { class: "btn ghost", type: "button", text: "Close", onclick: () => dialog.close() }))]);
   try {
     const { keys } = await api("/api/agent-keys");
     list.replaceChildren(...(keys.length ? keys.map((k) => el("div", { class: "mcp-key" },
@@ -300,10 +305,9 @@ async function openAssistants(fresh) {
 async function openAgentWallet() {
   const msg = el("p", { class: "err", role: "alert" });
   const body = el("div", {}, el("p", { class: "loading", role: "status", text: "Loading…" }));
-  dialog.replaceChildren(el("h2", { text: "Assistant trading" }),
+  agentShow("wallet", [el("h2", { text: "Assistant trading" }),
     el("p", { class: "muted", text: "Let your AI assistant buy and sell on Polymarket with your own OutLayer agent wallet, within limits you set. Orders go from your own computer through the Clue plugin, and Clue checks every order against your limits before your wallet signs it." }),
-    body, msg, el("div", { class: "actions" }, el("button", { class: "btn ghost", type: "button", text: "Back", onclick: openAccountMenu }), el("button", { class: "btn ghost", type: "button", text: "Close", onclick: () => dialog.close() })));
-  if (!dialog.open) dialog.showModal();
+    body, msg, el("div", { class: "actions", "data-dialog-only": "1" }, el("button", { class: "btn ghost", type: "button", text: "Back", onclick: openAccountMenu }), el("button", { class: "btn ghost", type: "button", text: "Close", onclick: () => dialog.close() }))]);
   const send = async (method, data) => { msg.textContent = ""; try { await api("/api/agent-wallet", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(data || {}) }); openAgentWallet(); } catch (e) { msg.textContent = e.message; body.querySelectorAll("button").forEach((b) => { b.disabled = false; }); } };
   const limitInputs = (w) => {
     const per = el("input", { type: "number", min: "1", step: "1", inputmode: "decimal", value: w ? String(w.maxOrder) : "", placeholder: "e.g. 25", "aria-label": "Limit per order in dollars" });
@@ -319,7 +323,7 @@ async function openAgentWallet() {
       el("ol", { class: "aw-steps" },
         el("li", {}, "Create an agent wallet at ", el("a", { href: "https://app.outlayer.ai", target: "_blank", rel: "noopener", text: "app.outlayer.ai" }), " (Custody, Wallets). In its policy, allow evm_sign and save."),
         el("li", { text: "Paste the wallet key (it starts with wk_) and choose your limits." }),
-        el("li", { text: "Make a key with Can trade ticked under Connect an AI assistant, and install the Clue plugin." })),
+        el("li", { text: "Make a key with Can trade ticked under Connect your AI, and install the Clue plugin." })),
       el("label", { class: "field" }, el("span", { text: "OutLayer wallet key" }), key), L.node,
       el("button", { class: "btn primary", type: "button", text: "Connect wallet", onclick: (ev) => { ev.currentTarget.disabled = true; send("POST", { key: key.value.trim(), maxOrder: Number(L.per.value), maxDay: Number(L.day.value) }); } }));
     return;
@@ -374,6 +378,7 @@ async function route() {
   if (parts[0] === "event" && parts[1]) { setNav("event"); return eventView(parts[1], qs.get("m"), stale); }
   if (parts[0] === "ask") { setNav("ask"); return askView(qs, stale); }
   if (parts[0] === "saved") { setNav("saved"); return savedView(parts[1], stale); }
+  if (parts[0] === "agents") { setNav("agents"); return agentsView(); }
   if (parts[0] === "portfolio") { setNav("portfolio"); return portfolioView(stale); }
   if (parts[0] === "card") { setNav(""); return cardView(parts[1] || ""); }
   setNav("board");
@@ -396,6 +401,28 @@ function cardView(code) {
   app.replaceChildren(el("div", { class: "card card-page" }, el("h2", { text: "Your card" }), el("p", { class: "muted", text: data.question }), into,
     data.eventSlug ? el("a", { class: "btn small", href: `#/event/${encodeURIComponent(data.eventSlug)}`, text: "Open the market" }) : null));
   openShare(data, into);
+}
+
+/* ---------- agents: use Clue from an AI assistant, and let it trade within your limits ---------- */
+function agentsView() {
+  const intro = el("section", { class: "card agents-hero" },
+    el("h1", { text: "Agents" }),
+    el("p", { class: "muted", text: "Use Clue from Claude, Codex, Cursor or any AI assistant. Ask it to research a market, save your call, check your Portfolio, make a PnL card, and, if you switch it on, trade within limits you set." }),
+    el("div", { class: "agents-try" }, ...["How is my portfolio doing?", "Research the Fed's December decision", "Make a PnL card for my biggest position", "What changed since my calls?"].map((t) => el("span", { class: "chip", text: `“${t}”` }))));
+  if (!user) {
+    app.replaceChildren(intro, el("div", { class: "card empty" }, el("h2", { text: "Sign in to connect your AI" }), el("p", { class: "muted", text: "Your assistant works as you: your Journal, your Portfolio, your limits." }), el("button", { class: "btn primary", type: "button", text: "Sign in", onclick: () => openAccountDialog("Sign in to connect your AI.") })));
+    document.addEventListener("clue:account", () => { if (location.hash.startsWith("#/agents")) route(); }, { once: true });
+    return;
+  }
+  agentHosts.keys = el("section", { class: "card agents-sec" });
+  agentHosts.wallet = el("section", { class: "card agents-sec" });
+  const plugin = el("section", { class: "card agents-sec" },
+    el("h2", { text: "The Clue plugin for Claude Code" }),
+    el("p", { class: "muted", text: "One install adds research, your Journal, your Portfolio, PnL cards and trading to Claude Code, with commands like /clue:research, /clue:portfolio, /clue:card, /clue:brief and /clue:trade." }),
+    snippet("Install", "export CLUE_KEY=YOUR_KEY\nclaude plugin marketplace add majorlabs/cluemarket\nclaude plugin install clue@clue"),
+    el("p", { class: "muted small", text: "Make a key above first. For trading, tick Can trade and set up Assistant trading below." }));
+  app.replaceChildren(el("div", { class: "agents-page" }, intro, agentHosts.keys, plugin, agentHosts.wallet));
+  openAssistants(); openAgentWallet();
 }
 
 /* ---------- portfolio: what a person holds, and how it is doing ---------- */
