@@ -204,7 +204,7 @@ export async function mcpRoute(req, res, { dispatch }) {
   if (req.method !== 'POST') return send(res, 405, { error: 'Use POST.' }, { Allow: 'POST' });
   const auth = String(req.headers.authorization || '');
   const who = auth.startsWith('Bearer ') ? await userForToken(store, auth.slice(7).trim()) : null;
-  if (!who) return send(res, 401, rpcError(null, -32001, 'Add your Clue assistant key: open Clue, then your account menu, then Connect an assistant.'), { 'WWW-Authenticate': 'Bearer realm="clue"' });
+  if (!who) return send(res, 401, rpcError(null, -32001, 'Add your Clue assistant key: open Clue, then Agents, and make a key.'), { 'WWW-Authenticate': 'Bearer realm="clue"' });
   let parsed;
   try { parsed = JSON.parse(await readBody(req)); } catch (e) { return send(res, e.status || 400, rpcError(null, -32700, e.status ? e.message : 'Parse error.')); }
   const ctx = { dispatch, userId: who.userId };

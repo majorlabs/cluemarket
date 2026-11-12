@@ -46,7 +46,7 @@ Clue puts it in one place. Pick a real market, read exactly how it resolves, ask
 | **Portfolio** | Your total (cash plus what you hold), every position with shares, entry and current price, value and profit or loss, and your history. **Claim** your winnings on ended markets you called, see and **Cancel** open orders, and **Withdraw** your cash as USDC to your own wallet on Base, Ethereum, Arbitrum, Optimism or Polygon. |
 | **Share a call** | Turn a call into a 16:9 card (live, won or lost) with a code that opens the same market, so people who see it can trade alongside you, plus a post to go with it. On a phone the share sheet sends it to any app, and **Post on X** opens X with the text and link ready. |
 | **Sign in your way** | Email, Google, an Ethereum wallet, or a NEAR wallet (a signed message, no transaction). |
-| **Use it from your AI assistant** | Connect Claude, Codex, Cursor or any MCP assistant from the account menu. It can search markets, run research, save forecasts to your Journal and read your Portfolio. |
+| **Use it from your AI assistant** | Connect Claude, Codex, Cursor or any MCP assistant from the Agents page. It can search markets, run research, save forecasts to your Journal and read your Portfolio. |
 | **Let your assistant trade** | Connect your own OutLayer agent wallet on NEAR, set your own limits per order and per day, and your assistant can buy and sell through the Clue plugin. Orders go from your own computer, and Clue checks each one against your limits before your wallet signs it. |
 
 <table>
@@ -123,7 +123,7 @@ Settings (names only; never commit values):
 
 ## Use Clue from your AI assistant
 
-Clue is also an MCP server at `https://www.oncluemarket.xyz/api/mcp`. Sign in, open the account menu, choose **Connect an AI assistant** and make a key. Then, for Claude Code:
+Clue is also an MCP server at `https://www.oncluemarket.xyz/api/mcp`. Sign in, open **Agents** and make a key. Then, for Claude Code:
 
 ```bash
 claude mcp add --transport http clue https://www.oncluemarket.xyz/api/mcp --header "Authorization: Bearer YOUR_KEY"
@@ -146,7 +146,7 @@ It brings the tools above, the commands `/clue:research`, `/clue:portfolio`, `/c
 ### Assistant trading with an OutLayer agent wallet
 
 1. At [app.outlayer.ai](https://app.outlayer.ai), create an agent wallet (Custody, Wallets). Its keys are held in OutLayer's secure hardware on NEAR. In its policy, allow `evm_sign` and save.
-2. In Clue, open the account menu, choose **Assistant trading**, paste the wallet key and set your limits per order and per day. Switch it on, and make an assistant key with **Can trade** ticked.
+2. In Clue, open **Agents**, then **Assistant trading**, paste the wallet key and set your limits per order and per day. Switch it on, and make an assistant key with **Can trade** ticked.
 3. Ask your assistant for `trading_status`, fund the trading account it shows with pUSD (or use **Add money**), and run `setup_trading` once.
 
 Clue keeps the wallet key sealed on its server. For each order, Clue checks your limits and the live market price (a buy far above it, or a sell far below it, is refused, and so is any order when the price cannot be read), then has OutLayer sign. Every request is logged and shown under Assistant trading. It signs only Polymarket sign-in, orders on Polymarket's exchanges, and permissions for Polymarket's own contracts, and refuses everything else, including transfers and withdrawals. The signed order is sent to Polymarket from your own computer. Switch assistant trading off in Clue, or freeze the wallet on OutLayer, at any time.
