@@ -37,7 +37,7 @@ const allowedHosts=hosted ? [...publicOrigins.map(o=>new URL(o).host),process.en
 if(hosted && (!publicOrigin.startsWith('https://') || !process.env.CLUE_SERVICE_HOST || !process.env.CLUE_SIGNUP_TOKEN || process.env.CLUE_SIGNUP_TOKEN.length < 32)) throw new Error('Hosted preview requires HTTPS, CLUE_SERVICE_HOST and a strong CLUE_SIGNUP_TOKEN.');
 const signUser=new HourlyBudget(1200);
 const agentSign=new HourlyBudget(600);
-const oauthReg=new HourlyBudget(300);   // new AI apps registering, all together   // signatures for assistant trading: sign-in, orders and permissions
+const oauthReg=new HourlyBudget(300);   // new AI apps registering, all together   // signatures for agent wallet trading: sign-in, orders and permissions
 const fundUser=new HourlyBudget(30);
 const fundGlobal=new HourlyBudget(300);
 const depositUser=new HourlyBudget(10);   // real deposit addresses: a few per hour is plenty
@@ -118,7 +118,7 @@ async function researchOnce(question, market) {
 const handler=async(req,res)=>{ try {
  const url=new URL(req.url,`http://${host}:${port}`);
  if(req.method==='GET' && url.pathname==='/healthz') return json(res,200,{ok:true,service:'clue-api'});
- // An assistant's call, passed on by the MCP route below. It never came from the network, so the browser checks do not apply.
+ // An AI agent's call, passed on by the MCP route below. It never came from the network, so the browser checks do not apply.
  const fromAgent=Boolean(req[AGENT_USER]);
  // Sign in with Clue for AI apps (oauth.mjs). Apps call these from their own servers or computers, so the browser checks below do not apply,
  // except to /api/oauth/approve, which the signed-in person's own page calls and which goes through every normal check.
@@ -131,19 +131,19 @@ const handler=async(req,res)=>{ try {
  if(!fromAgent && req.method==='GET' && url.pathname==='/api/oauth/authorize') { try { const r=await oauthAuthorize(store,url.searchParams); res.writeHead(302,{Location:r.redirect||`${pubBase}/#/connect/${r.request}`,'Cache-Control':'no-store'}); return res.end(); } catch(e) { return oauthFail(e); } }
  if(!fromAgent && req.method==='POST' && url.pathname==='/api/oauth/token') { try { return json(res,200,await oauthToken(store,await readForm(req))); } catch(e) { return oauthFail(e); } }
  if(url.pathname==='/api/mcp' && !fromAgent) return mcpRoute(req,res,{dispatch:(r,s)=>handler(r,s),resourceMetadataUrl:`${pubBase}/.well-known/oauth-protected-resource`,base:pubBase});
- // The local order sender that comes with the Clue plugin. It authenticates with the person's assistant key, not a browser
+ // The local order sender that comes with the Clue plugin. It authenticates with the person's agent key, not a browser
  // cookie, so the browser checks below do not apply. It can only ask for signatures; it never sends anything to Polymarket from here.
  if(!fromAgent && (url.pathname.startsWith('/api/agent/') || (url.pathname==='/api/pm/sign' && /^Bearer clue_ak_/.test(String(req.headers.authorization||''))))) {
   const who=await userForToken(store,String(req.headers.authorization||'').replace(/^Bearer /,''));
-  if(!who) return json(res,401,{error:'Add your Clue assistant key.'});
-  if(!who.canTrade && !(req.method==='GET' && url.pathname==='/api/agent/wallet')) return json(res,403,{error:'This assistant key can only read. Make a key with "Can trade" ticked to let your assistant trade.'});
+  if(!who) return json(res,401,{error:'Add your Clue agent key.'});
+  if(!who.canTrade && !(req.method==='GET' && url.pathname==='/api/agent/wallet')) return json(res,403,{error:'This agent key can only read. Make a key with "Can trade" ticked to let your AI agent trade.'});
   if(req.method==='GET' && url.pathname==='/api/agent/wallet') return json(res,200,{...await describeWallet(store,who.userId),builderCode:process.env.POLYMARKET_BUILDER_CODE||null});
   if(req.method==='POST' && url.pathname==='/api/agent/sign') {
    if(!agentSign.take(who.userId)) return json(res,429,{error:'Too many requests. Try again in a little while.'});
    const b=await getBody(req); return json(res,200,await signFor(store,sealingKey,who.userId,b.typedData));
   }
   if(req.method==='POST' && url.pathname==='/api/pm/sign') {
-   const w=(await describeWallet(store,who.userId)).wallet; if(!w?.enabled) return json(res,403,{error:'Assistant trading is switched off.'});
+   const w=(await describeWallet(store,who.userId)).wallet; if(!w?.enabled) return json(res,403,{error:'Agent wallet is switched off.'});
    const b=await getBody(req); const check=checkSignRequest(b,w.address);
    if(!check.ok) return json(res,check.status,{error:check.error});
    if(!signUser.take(who.userId)) return json(res,429,{error:'Too many requests. Try again in a little while.'});
@@ -288,9 +288,9 @@ const handler=async(req,res)=>{ try {
   return json(res,405,{error:'Method not allowed.'});
  }
  if(url.pathname==='/api/agent-keys' || url.pathname.startsWith('/api/agent-keys/')) {
-  // Keys are managed only from the signed-in page, never by an assistant.
+  // Keys are managed only from the signed-in page, never by an AI agent.
   if(fromAgent) return json(res,403,{error:'Not allowed.'});
-  const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in to connect an assistant.'});
+  const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in to connect an AI agent.'});
   if(req.method==='GET' && url.pathname==='/api/agent-keys') return json(res,200,{keys:await listKeys(store,session.user.id)});
   if(req.method==='DELETE' && url.pathname==='/api/agent-keys') return json(res,200,{disconnected:await revokeAll(store,session.user.id)});
   if(req.method==='POST' && url.pathname==='/api/agent-keys') { const body=await getBody(req); return json(res,201,await createKey(store,session.user.id,body.label,{canTrade:body.canTrade===true})); }

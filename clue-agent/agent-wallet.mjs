@@ -1,9 +1,9 @@
-// Assistant trading. A person connects their own OutLayer agent wallet (its keys live in OutLayer's secure hardware) and
-// sets their own limits. Their assistant can then ask Clue to sign Polymarket orders with that wallet. Clue signs only:
+// Agent wallet. A person connects their own OutLayer agent wallet (its keys live in OutLayer's secure hardware) and
+// sets their own limits. Their AI agent can then ask Clue to sign Polymarket orders with that wallet. Clue signs only:
 //   - Polymarket sign-in (ClobAuth) for that wallet,
 //   - orders on Polymarket's exchanges, a buy only if it fits the person's per-order and per-day limits,
 //   - the one-time approvals that let Polymarket's exchanges use the wallet's pUSD and shares.
-// Anything else, such as a transfer or a withdrawal, is refused. Clue never sends orders: the assistant sends the signed
+// Anything else, such as a transfer or a withdrawal, is refused. Clue never sends orders: the AI agent sends the signed
 // order to Polymarket from the person's own machine, so Polymarket sees where the person really is.
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from 'node:crypto';
 import { production } from '@polymarket/client';
@@ -173,8 +173,8 @@ export function signFor(store, sealingKey, userId, td, opts = {}) { return seria
 
 async function signNow(store, sealingKey, userId, td, { now = new Date() } = {}) {
   const w = await store.get('SELECT key_sealed, address, enabled, max_order, max_day FROM agent_wallets WHERE user_id=?', userId);
-  if (!w) throw fail(404, 'No assistant wallet is connected. Connect one in Clue: Agents, Assistant trading.');
-  if (!w.enabled) throw fail(403, 'Assistant trading is switched off. Switch it on in Clue: Agents, Assistant trading.');
+  if (!w) throw fail(404, 'No agent wallet is connected. Connect one in Clue: Agents, Agent wallet.');
+  if (!w.enabled) throw fail(403, 'Agent wallet is switched off. Switch it on in Clue: Agents, Agent wallet.');
   let what;
   try { what = classify(td, w.address); } catch (e) { await log(store, userId, now, { kind: String(td?.primaryType || 'unknown').slice(0, 40), status: 'refused', reason: e.message }); throw e; }
   let entry = null;

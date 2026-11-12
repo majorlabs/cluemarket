@@ -30,7 +30,7 @@
 
 Prediction markets put a price on questions like "Will the Fed cut rates?" A price is not an explanation. To form your own view you have to read the exact resolution rules, find evidence on both sides, remember what you thought and why, and notice when something changes. That work is scattered across a dozen tabs, and almost nobody keeps a record of their reasoning, so almost nobody learns from being right or wrong.
 
-Clue puts it in one place. Pick a real market, read exactly how it resolves, ask an AI research assistant to find sources for and against, write down your own probability and what would change your mind, trade it when you are sure, and come back to see how you did. Clue never decides an outcome: each market's own rules settle it. Your notes are private to you unless you choose to share one.
+Clue puts it in one place. Pick a real market, read exactly how it resolves, ask Clue's AI research to find sources for and against, write down your own probability and what would change your mind, trade it when you are sure, and come back to see how you did, or do all of it from your AI agent. Clue never decides an outcome: each market's own rules settle it. Your notes are private to you unless you choose to share one.
 
 ## What you can do
 
@@ -149,15 +149,15 @@ claude plugin marketplace add majorlabs/cluemarket
 claude plugin install clue@clue
 ```
 
-It brings the tools above, the commands `/clue:research`, `/clue:portfolio`, `/clue:trade`, `/clue:card`, `/clue:record` and `/clue:brief`, a skill that teaches the assistant to research before a call and confirm every trade, and `clue-trader`, a small MCP server that runs on your computer and places orders.
+It brings the tools above, the commands `/clue:research`, `/clue:portfolio`, `/clue:trade`, `/clue:card`, `/clue:record` and `/clue:brief`, a skill that teaches the AI agent to research before a call and confirm every trade, and `clue-trader`, a small MCP server that runs on your computer and places orders.
 
-### Assistant trading with an OutLayer agent wallet
+### Agent wallet with an OutLayer agent wallet
 
 1. At [app.outlayer.ai](https://app.outlayer.ai), create an agent wallet (Custody, Wallets). Its keys are held in OutLayer's secure hardware on NEAR. In its policy, allow `evm_sign` and save.
-2. In Clue, open **Agents**, then **Assistant trading**, paste the wallet key and set your limits per order and per day. Switch it on, and make an assistant key with **Can trade** ticked.
-3. Ask your assistant for `trading_status`, fund the trading account it shows with pUSD (or use **Add money**), and run `setup_trading` once.
+2. In Clue, open **Agents**, then **Agent wallet**, paste the wallet key and set your limits per order and per day. Switch it on, and make an agent key with **Can trade** ticked.
+3. Ask your AI agent for `trading_status`, fund the trading account it shows with pUSD (or use **Add money**), and run `setup_trading` once.
 
-Clue keeps the wallet key sealed on its server. For each order, Clue checks your limits and the live market price (a buy far above it, or a sell far below it, is refused, and so is any order when the price cannot be read), then has OutLayer sign. Every request is logged and shown under Assistant trading. It signs only Polymarket sign-in, orders on Polymarket's exchanges, and permissions for Polymarket's own contracts, and refuses everything else, including transfers and withdrawals. The signed order is sent to Polymarket from your own computer. Switch assistant trading off in Clue, or freeze the wallet on OutLayer, at any time.
+Clue keeps the wallet key sealed on its server. For each order, Clue checks your limits and the live market price (a buy far above it, or a sell far below it, is refused, and so is any order when the price cannot be read), then has OutLayer sign. Every request is logged and shown under Agent wallet. It signs only Polymarket sign-in, orders on Polymarket's exchanges, and permissions for Polymarket's own contracts, and refuses everything else, including transfers and withdrawals. The signed order is sent to Polymarket from your own computer. Switch agent wallet trading off in Clue, or freeze the wallet on OutLayer, at any time.
 
 ## How it works
 
@@ -197,7 +197,7 @@ Node.js, plain JavaScript front end, `better-auth` with SQLite or Postgres (`bet
 
 ## Security
 
-Private research is isolated per account, and a test proves it by trying to read, publish and delete another account's data. Saving and sharing research is limited to answers the server itself produced; links that did not come from the web search are removed; market text comes from the market, not the browser; the site cannot be framed by other sites; every state-changing request needs an approved origin; research has per-person and overall limits and a daily spending cap; and emails are never shown or sent back to the browser. The review used a model with its refusals removed (on NEAR AI Cloud) to attack Clue's own research pipeline, and each confirmed issue was fixed with a test. For AI agents: connections are a sign-in the person approves (S256 PKCE, single-use codes, registered return addresses only) and are read-only unless trading is ticked; an agent can prepare a trade but only the person approves it, on their own device; budgets can only be raised by the person; every agent request to an OutLayer wallet is logged, and only requests in the exact shape Polymarket's software produces are signed. Read [docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md), including what is still open.
+Private research is isolated per account, and a test proves it by trying to read, publish and delete another account's data. Saving and sharing research is limited to answers the server itself produced; links that did not come from the web search are removed; market text comes from the market, not the browser; the site cannot be framed by other sites; every state-changing request needs an approved origin; research has per-person and overall limits and a daily spending cap; and emails are never shown or sent back to the browser. The review used a model with its refusals removed (on NEAR AI Cloud) to attack Clue's own research pipeline, and each confirmed issue was fixed with a test. For AI agents: connections are a sign-in the person approves (S256 PKCE, single-use codes, registered return addresses only) and are read-only unless trading is ticked; an agent can prepare a trade but only the person approves it, on their own device; budgets can only be raised by the person; every agent request to an OutLayer wallet is logged, and only requests in the exact shape Polymarket's software produces are signed. Read [docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md) for every review, what it found and how it was fixed.
 
 ## Repository layout
 
@@ -211,7 +211,7 @@ Private research is isolated per account, and a test proves it by trying to read
 │   ├── tests/             automated tests
 │   └── *.mjs              server modules (sign-in, journal, research limits, ...)
 ├── docs/
-│   ├── SECURITY_REVIEW.md what was attacked, what was fixed, what is open
+│   ├── SECURITY_REVIEW.md what was attacked and how it was fixed
 │   ├── TRADING_PLAN.md    how trading works and what is built
 │   └── images/            screenshots used in this README
 ├── CONTRIBUTING.md

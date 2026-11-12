@@ -1,4 +1,4 @@
-// Clue over MCP: lets a person's AI assistant search markets, run research, keep the Journal and read the Portfolio for them.
+// Clue over MCP: lets a person's AI agent search markets, run research, keep the Journal and read the Portfolio for them.
 // Speaks MCP's Streamable HTTP transport (JSON-RPC over POST, plain JSON replies). Each tool is passed to one of Clue's own
 // routes, as the key's owner, so the same rules and limits apply as on the site. Nothing here can trade or move money.
 import { Readable } from 'node:stream';
@@ -244,7 +244,7 @@ export async function mcpRoute(req, res, { dispatch, resourceMetadataUrl, base =
   if (req.method !== 'POST') return send(res, 405, { error: 'Use POST.' }, { Allow: 'POST' });
   const auth = String(req.headers.authorization || '');
   const who = auth.startsWith('Bearer ') ? await userForToken(store, auth.slice(7).trim()) : null;
-  if (!who) return send(res, 401, rpcError(null, -32001, 'Add your Clue assistant key: open Clue, then Agents, and make a key.'), { 'WWW-Authenticate': `Bearer realm="clue"${resourceMetadataUrl ? `, resource_metadata="${resourceMetadataUrl}"` : ''}` });
+  if (!who) return send(res, 401, rpcError(null, -32001, 'Add your Clue agent key: open Clue, then Agents, and make a key.'), { 'WWW-Authenticate': `Bearer realm="clue"${resourceMetadataUrl ? `, resource_metadata="${resourceMetadataUrl}"` : ''}` });
   let parsed;
   try { parsed = JSON.parse(await readBody(req)); } catch (e) { return send(res, e.status || 400, rpcError(null, -32700, e.status ? e.message : 'Parse error.')); }
   const ctx = { dispatch, userId: who.userId, keyId: who.keyId, canTrade: who.canTrade, base };

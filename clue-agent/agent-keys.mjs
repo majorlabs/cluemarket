@@ -1,4 +1,4 @@
-// Personal keys that let a person's AI assistant (Claude, Codex, Cursor and others) use Clue for them through MCP.
+// Personal keys that let a person's AI agent (Claude, Codex, Cursor and others) use Clue for them through MCP.
 // A key can read markets, run research within the person's free allowance, and keep their Journal. It can ask for trades
 // only if the person ticked "can trade" when making it. It can never move money out or make more keys. Only a hash of each key is stored; the key itself is shown once, when it is made.
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -9,9 +9,9 @@ const hash = (token) => createHash('sha256').update(String(token)).digest('hex')
 const looksLikeKey = (t) => typeof t === 'string' && t.startsWith(KEY_PREFIX) && /^[a-z0-9_]{40,80}$/.test(t);
 
 export async function createKey(store, userId, label, { now = new Date(), canTrade = false, clientId = null } = {}) {
-  const name = String(label || 'My assistant').trim().slice(0, 60) || 'My assistant';
+  const name = String(label || 'My AI agent').trim().slice(0, 60) || 'My AI agent';
   const live = await store.all('SELECT id FROM agent_keys WHERE user_id=? AND revoked_at IS NULL', userId);
-  if (live.length >= MAX_KEYS) throw Object.assign(new Error(`You can have up to ${MAX_KEYS} assistant keys. Remove one first.`), { status: 400 });
+  if (live.length >= MAX_KEYS) throw Object.assign(new Error(`You can have up to ${MAX_KEYS} agent keys. Remove one first.`), { status: 400 });
   const token = KEY_PREFIX + randomBytes(24).toString('hex');
   const id = randomUUID();
   await store.run('INSERT INTO agent_keys (id,user_id,token_hash,label,created_at,can_trade,client_id) VALUES (?,?,?,?,?,?,?)', id, userId, hash(token), name, now.toISOString(), canTrade ? 1 : 0, clientId);
