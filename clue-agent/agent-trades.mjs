@@ -1,5 +1,5 @@
-// Approve on your phone. An AI app (Claude, ChatGPT, ...) prepares a trade; the person sees it in Clue on their own phone and
-// taps Approve, and the order goes from that phone with their own trading account, exactly like a trade they place by hand.
+// You approve every trade. An AI app (Claude, ChatGPT, ...) prepares a trade; the person sees it in Clue on their own phone or computer and
+// taps Approve, and the order goes from that device with their own trading account, exactly like a trade they place by hand.
 // The AI never places the order and never touches money. A proposal expires after 15 minutes if nobody acts on it.
 import { randomUUID } from 'node:crypto';
 
@@ -53,7 +53,7 @@ export async function listWaiting(store, userId, { now = new Date() } = {}) {
   return (await store.all("SELECT * FROM agent_trades WHERE user_id=? AND status IN ('pending','sending') ORDER BY created_at DESC LIMIT 10", userId)).map(shape);
 }
 
-// The phone takes the trade to send it. Only a pending trade can be taken, and only once, so it can never be sent twice.
+// The person's device takes the trade to send it. Only a pending trade can be taken, and only once, so it can never be sent twice.
 export async function start(store, userId, id, { now = new Date() } = {}) {
   await expireOld(store, now);
   const r = await store.run("UPDATE agent_trades SET status='sending', updated_at=? WHERE id=? AND user_id=? AND status='pending'", now.toISOString(), String(id || ''), userId);
@@ -67,7 +67,7 @@ export async function decline(store, userId, id, { now = new Date() } = {}) {
   return { declined: true };
 }
 
-// What happened when the phone sent it. Only a trade being sent can be finished.
+// What happened when the device sent it. Only a trade being sent can be finished.
 export async function finish(store, userId, id, b, { now = new Date() } = {}) {
   const status = ['filled', 'unfilled', 'failed', 'checked'].includes(b.status) ? b.status : 'failed';
   const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);

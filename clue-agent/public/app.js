@@ -463,15 +463,15 @@ const DOCS = [
   ]],
   ["agents", "Agents: use Clue from your AI", [
     "Clue works inside Claude, Codex, Cursor and other AI assistants. You chat as you normally would, and your assistant uses Clue for you.",
-    ["ul", "“How is my portfolio doing?”", "“Research the Fed's December decision and save my call at 70%.”", "“Make a PnL card for my biggest position.” (the card arrives as a picture in the chat)", "“What changed since my calls?” and “How good are my calls?”", "“Buy $5 of Yes on this market.” (it prepares the trade; you approve it on your phone)"],
+    ["ul", "“How is my portfolio doing?”", "“Research the Fed's December decision and save my call at 70%.”", "“Make a PnL card for my biggest position.” (the card arrives as a picture in the chat)", "“What changed since my calls?” and “How good are my calls?”", "“Buy $5 of Yes on this market.” (it prepares the trade; you approve it in Clue)"],
     ["ol", "In Claude or ChatGPT, open Settings, then Connectors, and add a custom connector with the address https://www.oncluemarket.xyz/api/mcp. In Claude Code, run: claude mcp add --transport http clue https://www.oncluemarket.xyz/api/mcp", "A Clue page opens. Sign in, choose whether it may also trade, and tap Approve.", "Ask away. It works as you: your Journal, your Portfolio, your limits. Disconnect it any time from Agents."],
     "There is no key to copy. Apps that cannot sign in this way can use a key instead: open Agents, then Advanced: connect with a key.",
     "For Claude Code, the Clue plugin adds everything in one install, with the commands /clue:research, /clue:portfolio, /clue:card, /clue:record, /clue:brief and /clue:trade:",
     ["code", "export CLUE_KEY=your_key\nclaude plugin marketplace add majorlabs/cluemarket\nclaude plugin install clue@clue"],
   ]],
-  ["approve", "Trading from your AI: approve on your phone", [
+  ["approve", "Trading from your AI: you approve every trade", [
     "Connect your AI with Also let it trade ticked. Then ask it to buy, for example \u201cPut $5 on Yes for the Fed hike.\u201d",
-    ["ol", "Your AI finds the market, tells you the outcome, amount and worst price, and prepares the trade in Clue.", "It gives you a link. Open it on your phone: Clue shows exactly what will be bought. Waiting trades also show at the top of Agents.", "Tap Approve. The order goes from your phone with your own trading account, just like a trade you place yourself. Or tap Decline.", "Your AI can see whether it filled. A trade nobody approves expires after 15 minutes."],
+    ["ol", "Your AI finds the market, tells you the outcome, amount and worst price, and prepares the trade in Clue.", "It gives you a link. Open it on your phone or computer: Clue shows exactly what will be bought. Waiting trades also show at the top of Agents.", "Tap Approve. The order goes from your own device with your own trading account, just like a trade you place yourself. Or tap Decline.", "Your AI can see whether it filled. A trade nobody approves expires after 15 minutes."],
     "Your AI never places the order and never touches your money.",
   ]],
   ["assistant-trading", "Assistant trading (advanced): an agent wallet", [
@@ -539,7 +539,7 @@ async function connectView(id) {
   app.replaceChildren(card);
 }
 
-/* ---------- approve: a trade an AI prepared, approved here and sent from this phone ---------- */
+/* ---------- approve: a trade an AI prepared, approved here and sent from this device ---------- */
 async function approveView(id) {
   const card = el("section", { class: "card connect-card" });
   app.replaceChildren(card);
@@ -554,7 +554,7 @@ async function approveView(id) {
   const usd = (n) => `$${Number(n).toFixed(2)}`, cents = (p) => `${(p * 100).toFixed(1).replace(/\.0$/, "")}¢`;
   const row = (k, v) => el("div", { class: "tk-row" }, el("span", { class: "muted", text: k }), el("b", { class: "num", text: v }));
   const out = el("div", { class: "approve-out", role: "status", "aria-live": "polite" });
-  const summary = [el("h1", { text: "Approve this trade?" }), el("p", { class: "muted", text: "Your AI prepared this trade. Nothing is bought until you approve it here. The order goes from this phone, with your own trading account." }),
+  const summary = [el("h1", { text: "Approve this trade?" }), el("p", { class: "muted", text: "Your AI prepared this trade. Nothing is bought until you approve it here. The order goes from this device, with your own trading account." }),
     el("div", { class: "approve-box" }, row("Buy", t.outcome || "—"), el("p", { class: "approve-q", text: t.question || "" }), row("Spend", usd(t.amount)), row("Worst price", `${cents(t.maxPrice)} a share`), row("You get, at least", `${(t.amount / t.maxPrice).toFixed(2)} shares`)),
     el("p", { class: "muted small", text: "All or nothing: if it cannot fill completely at that price, nothing is bought and no money is spent." })];
   const ended = { filled: "Done. It filled.", unfilled: "It did not fill at that price. Nothing was bought.", failed: "It did not go through. Nothing was bought.", declined: "You declined this trade.", expired: "This trade expired before it was approved.", checked: "Checked. Real orders are not switched on for this account, so nothing was sent.", sending: "This trade is being sent." };
