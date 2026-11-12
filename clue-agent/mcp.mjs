@@ -5,6 +5,7 @@ import { Readable } from 'node:stream';
 import { store } from './auth.mjs';
 import { userForToken } from './agent-keys.mjs';
 import { AGENT_USER } from './agent-user.mjs';
+import { cardPng, postText } from './card-server.mjs';
 
 export const PROTOCOL_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05'];
 const SERVER_INFO = { name: 'clue', title: 'Clue', version: '1.0.0' };
@@ -29,7 +30,7 @@ export const TOOLS = [
     inputSchema: { type: 'object', properties: { probability: { type: 'number', minimum: 0, maximum: 100 }, reasoning: { type: 'string', maxLength: 5000 }, change_condition: { type: 'string', maxLength: 5000, description: 'What would change this call.' }, research_id: { type: 'string' }, question: { type: 'string' }, market_id: { type: 'string' }, thread_id: { type: 'string' }, outcome_index: { type: 'integer', minimum: 0, description: 'Which outcome the chance is for. 0 is the first (usually Yes).' } }, required: ['probability', 'reasoning', 'change_condition'] }, annotations: { readOnlyHint: false } },
   { name: 'get_journal', title: 'Read the Journal', description: 'The person\'s forecasts, each next to the market price at the time and now, with how resolved calls scored.',
     inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true } },
-  { name: 'share_card', title: 'Make a PnL card', description: 'Make a share card for one of the person\'s positions: a 16:9 picture with the call, its profit or loss, and a code that opens the market, plus a post for X. Pass part of the market name, or nothing for the biggest position. Returns a link to open the card.',
+  { name: 'share_card', title: 'Make a PnL card', description: 'Make a share card for one of the person\'s positions: a 16:9 picture with the call, its profit or loss, and a code that opens the market, plus a post for X. Pass part of the market name, or nothing for the biggest position. The picture comes straight into the chat, with a post ready for X and a link to post it.',
     inputSchema: { type: 'object', properties: { position: { type: 'string', description: 'Part of the market name, the event slug, or the token id.' } } }, annotations: { readOnlyHint: true, openWorldHint: true } },
   { name: 'my_record', title: 'My forecast record', description: 'How good the person\'s saved calls have been: how many resolved calls were on the right side, and how often they beat the market\'s price.',
     inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true } },
@@ -136,7 +137,12 @@ const run = {
     const kind = p.redeemable ? (p.currentPrice >= 0.5 ? 'won' : 'lost') : 'open';
     const card = { kind, question: p.market, side: p.outcome, entry: p.avgPrice, shares: p.shares, paid: p.cost, now: p.currentPrice, payout: kind === 'won' ? p.shares : undefined, eventSlug: p.slug };
     const url = 'https://www.oncluemarket.xyz/#/card/' + Buffer.from(JSON.stringify(card)).toString('base64url');
-    return { card: url, note: 'Open this link to see the card, then save it or post it on X with the words that come with it.', position: p };
+    const marketUrl = p.slug ? `https://www.oncluemarket.xyz/#/event/${encodeURIComponent(p.slug)}` : 'https://www.oncluemarket.xyz';
+    const png = await cardPng({ ...card, url: marketUrl });
+    const post = postText(card, marketUrl).full;
+    const xLink = 'https://x.com/intent/tweet?text=' + encodeURIComponent(post);
+    return { image: png.toString('base64'), post, postOnX: xLink, card: url, position: p,
+      note: 'Show the card picture and the post. postOnX opens X with the post filled in; the card link opens the card on Clue to save or share it.' };
   },
   async my_record(a, d, u) {
     const j = await ok(call(d, u, 'GET', '/api/journal'));
@@ -178,6 +184,10 @@ async function handle(msg, ctx) {
     if (!fn) return rpcError(id, -32602, `Unknown tool: ${name}`);
     try {
       const out = await fn(params.arguments || {}, ctx.dispatch, ctx.userId);
+      if (out && out.image) {                       // a picture goes into the chat as a picture, with its words next to it
+        const { image, ...rest } = out;
+        return { jsonrpc: '2.0', id, result: { content: [{ type: 'image', data: image, mimeType: 'image/png' }, { type: 'text', text: JSON.stringify(rest, null, 1) }], structuredContent: rest, isError: false } };
+      }
       return { jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: JSON.stringify(out, null, 1) }], structuredContent: out, isError: false } };
     } catch (e) {
       if (!e.toolError) console.error('mcp tool failed', name, e);

@@ -72,9 +72,14 @@ function wrap(ctx, text, maxWidth, maxLines) {
   return lines;
 }
 
-function loadImage(src) {
-  return new Promise((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = src; });
-}
+// The browser draws the card on the person's phone; the server draws the same card for assistants (card-server.mjs).
+let env = {
+  canvas: (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; },
+  image: (src) => new Promise((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = src; }),
+  fonts: true,
+};
+export function useEnvironment(e) { env = { ...env, ...e }; }
+const loadImage = (src) => env.image(src);
 
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
@@ -89,14 +94,14 @@ function drawQR(ctx, url, x, y, size) {
 }
 
 async function fonts() {
-  if (!document.fonts) return;
+  if (!env.fonts || typeof document === 'undefined' || !document.fonts) return;
   await Promise.all(['800 200px "Geist"', '700 60px "Geist"', '500 30px "Geist"', '500 24px "Geist Mono"'].map((f) => document.fonts.load(f).catch(() => {})));
 }
 
 export async function render(d) {
   await fonts();
   const t = describe(d);
-  const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
+  const canvas = env.canvas(W, H);
   const ctx = canvas.getContext('2d');
   ctx.textBaseline = 'alphabetic';
 
@@ -132,9 +137,10 @@ export async function render(d) {
   ctx.fillStyle = INK; roundRect(ctx, M, yy, sw, 92, 20); ctx.fill();
   ctx.fillStyle = CREAM; ctx.fillText(side.toUpperCase(), M + 28, yy + 66);
   ctx.fillStyle = INK; ctx.font = `600 54px ${SANS}`;
-  ctx.fillText(`at ${cents(Number(d.entry))}`, M + sw + 28, yy + 66);
+  const at = `at ${cents(Number(d.entry))}`, atW = ctx.measureText(at).width;   // measured in its own font, before the smaller one is set
+  ctx.fillText(at, M + sw + 28, yy + 66);
   ctx.fillStyle = SOFT; ctx.font = `500 30px ${SANS}`;
-  if (d.kind === 'open' && Number.isFinite(Number(d.now))) ctx.fillText(`now ${cents(Number(d.now))}`, M + sw + 28 + ctx.measureText(`at ${cents(Number(d.entry))}`).width + 0, yy + 66 + 0);
+  if (d.kind === 'open' && Number.isFinite(Number(d.now))) ctx.fillText(`now ${cents(Number(d.now))}`, M + sw + 28 + atW + 22, yy + 66);
 
   // three small numbers
   const sy = 800;
@@ -169,4 +175,4 @@ export async function render(d) {
 
 export const toBlob = async (d) => { const c = await render(d); return new Promise((resolve) => c.toBlob(resolve, 'image/png')); };
 
-window.ClueCard = { render, toBlob, describe, postText };
+if (typeof window !== 'undefined') window.ClueCard = { render, toBlob, describe, postText };

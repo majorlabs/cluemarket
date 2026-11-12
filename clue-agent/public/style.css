@@ -924,3 +924,9 @@ dialog .btn{height:48px;border-radius:14px}
 .aw-row small{grid-column:1/-1}
 .aw-row.refused b,.aw-row.failed b{color:var(--no)}
 .aw-row.signed b{color:var(--yes)}
+.share-panel{min-width:0;max-width:100%;overflow:hidden;grid-column:1/-1}
+.share-panel .card-preview{max-width:100%}
+.share-panel .post-text{box-sizing:border-box;max-width:100%}
+.share-row .btn{flex:1 1 auto;justify-content:center}
+.card-page{margin-bottom:120px}
+.card.card-page{padding:20px 18px;box-sizing:border-box;width:100%}

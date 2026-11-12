@@ -9,6 +9,7 @@ import { createSecureClient, remoteBuilderSigning, OrderSide, OrderType } from '
 import { fetchBalanceAllowance } from '@polymarket/client/actions';
 
 const BASE = (process.env.CLUE_URL || 'https://www.oncluemarket.xyz').replace(/\/$/, '');
+{ const u = new URL(BASE); if (u.protocol !== 'https:' && !(u.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(u.hostname))) { process.stderr.write('CLUE_URL must be an https address.\n'); process.exit(1); } }
 const KEY = process.env.CLUE_KEY || '';
 const auth = () => ({ Authorization: 'Bearer ' + KEY });
 const big = (_, v) => (typeof v === 'bigint' ? v.toString() : v);

@@ -52,12 +52,18 @@ const agent = async (key, method, path, body) => {
   return { status: r.status, body: await r.json().catch(() => ({})) };
 };
 const C = production.contracts;
-const orderTypes = { EIP712Domain: [], Order: [{ name: 'tokenId', type: 'uint256' }] };
-const order = (dollars, side = 0, exchange = C.exchangeV3, price = 0.5) => ({ domain: { name: 'Polymarket CTF Exchange', version: '3', chainId: 137, verifyingContract: exchange }, primaryType: 'Order', types: orderTypes,
-  message: { maker: '0x' + '1'.repeat(40), signer: ADDR, tokenId: '123', makerAmount: String(Math.round((side === 0 ? dollars : dollars / price) * 1e6)), takerAmount: String(Math.round((side === 0 ? dollars / price : dollars) * 1e6)), side, signatureType: 3, salt: '1', timestamp: '1', metadata: '0x' + '0'.repeat(64), builder: '0x' + '0'.repeat(64) } });
-const wrapped = (dollars) => { const o = order(dollars); return { ...o, primaryType: 'TypedDataSign', message: { contents: o.message, name: 'x', version: '1', chainId: 137, verifyingContract: ADDR, salt: '0x' + '0'.repeat(64) } }; };
+const F = (list) => list.map(([name, type]) => ({ name, type }));
+const DOMAIN = F([['name', 'string'], ['version', 'string'], ['chainId', 'uint256'], ['verifyingContract', 'address']]);
+const ORDER = F([['salt', 'uint256'], ['maker', 'address'], ['signer', 'address'], ['tokenId', 'uint256'], ['makerAmount', 'uint256'], ['takerAmount', 'uint256'], ['side', 'uint8'], ['signatureType', 'uint8'], ['timestamp', 'uint256'], ['metadata', 'bytes32'], ['builder', 'bytes32']]);
+const TDS = F([['contents', 'Order'], ['name', 'string'], ['version', 'string'], ['chainId', 'uint256'], ['verifyingContract', 'address'], ['salt', 'bytes32']]);
+const Z = '0x' + '0'.repeat(64), DW = '0x' + '1'.repeat(40);
+const order = (dollars, side = 0, exchange = C.exchangeV3, price = 0.5) => ({ domain: { name: 'Polymarket CTF Exchange', version: '3', chainId: 137, verifyingContract: exchange }, primaryType: 'Order', types: { EIP712Domain: DOMAIN, Order: ORDER },
+  message: { maker: ADDR, signer: ADDR, tokenId: '123', makerAmount: String(Math.round((side === 0 ? dollars : dollars / price) * 1e6)), takerAmount: String(Math.round((side === 0 ? dollars / price : dollars) * 1e6)), side, signatureType: 0, salt: '1', timestamp: '1', metadata: Z, builder: Z } });
+const wrapped = (dollars) => { const o = order(dollars); const contents = { ...o.message, maker: DW, signer: DW, signatureType: 3 }; return { ...o, primaryType: 'TypedDataSign', types: { EIP712Domain: DOMAIN, Order: ORDER, TypedDataSign: TDS }, message: { contents, name: 'DepositWallet', version: '1', chainId: 137, verifyingContract: DW, salt: Z } }; };
 const pad = (a) => a.slice(2).toLowerCase().padStart(64, '0');
-const batch = (target, selector, who) => ({ domain: { chainId: 137, verifyingContract: '0x' + '2'.repeat(40) }, primaryType: 'Batch', types: { Batch: [] }, message: { wallet: '0x' + '2'.repeat(40), nonce: '0', deadline: '0', calls: [{ target, value: '0', data: selector + pad(who) + 'f'.repeat(64) }] } });
+const batch = (target, selector, who, extra = {}) => ({ domain: { name: 'DepositWallet', version: '1', chainId: 137, verifyingContract: DW }, primaryType: 'Batch',
+  types: { EIP712Domain: DOMAIN, Batch: F([['wallet', 'address'], ['nonce', 'uint256'], ['deadline', 'uint256'], ['calls', 'Call[]']]), Call: F([['target', 'address'], ['value', 'uint256'], ['data', 'bytes']]) },
+  message: { wallet: DW, nonce: '0', deadline: '0', calls: [{ target, value: '0', data: selector + pad(who) + 'f'.repeat(64), ...extra }] } });
 
 let ann, key;
 test('a person connects their own wallet with their own limits, and it starts switched off', async () => {
@@ -85,7 +91,8 @@ test('orders within the limits are signed, and anything over them is refused bef
   for (let i = 0; i < 2; i++) assert.equal((await agent(key, 'POST', '/api/agent/sign', { typedData: order(250) })).status, 200);
   const day = await agent(key, 'POST', '/api/agent/sign', { typedData: order(100) });
   assert.match(day.body.error, /over your limit of \$1000 a day/);                                // 200+240+250+250 = 940 already
-  assert.equal((await agent(key, 'POST', '/api/agent/sign', { typedData: order(5000, 1) })).status, 200);   // selling what you hold is not spending
+  assert.equal((await agent(key, 'POST', '/api/agent/sign', { typedData: order(100, 1) })).status, 200);    // a sell does not count toward the day's spending
+  assert.match((await agent(key, 'POST', '/api/agent/sign', { typedData: order(5000, 1) })).body.error, /sell is \$5000, over your limit of \$250 per order/);
   assert.equal(seen.length, 5);                                                                    // refusals never reached OutLayer
   assert.equal((await agent(key, 'GET', '/api/agent/wallet')).body.wallet.spentToday, 940);
   await site('PATCH', '/api/agent-wallet', ann, { maxDay: 5000 });                                // the person can raise it
@@ -94,7 +101,7 @@ test('orders within the limits are signed, and anything over them is refused bef
 
 test('only sign-in, Polymarket orders and Polymarket permissions are signed', async () => {
   const sign = (td) => agent(key, 'POST', '/api/agent/sign', { typedData: td });
-  const auth = { domain: { name: 'ClobAuthDomain', version: '1', chainId: 137 }, primaryType: 'ClobAuth', types: { ClobAuth: [] }, message: { address: ADDR, timestamp: '1', nonce: 0, message: 'x' } };
+  const auth = { domain: { name: 'ClobAuthDomain', version: '1', chainId: 137 }, primaryType: 'ClobAuth', types: { EIP712Domain: F([['name', 'string'], ['version', 'string'], ['chainId', 'uint256']]), ClobAuth: F([['address', 'address'], ['timestamp', 'string'], ['nonce', 'uint256'], ['message', 'string']]) }, message: { address: ADDR, timestamp: '1', nonce: 0, message: 'x' } };
   assert.equal((await sign(auth)).status, 200);
   assert.equal((await sign({ ...auth, message: { ...auth.message, address: '0x' + '9'.repeat(40) } })).status, 403);
   assert.equal((await sign(order(1, 0, '0x' + '7'.repeat(40)))).status, 403);                                     // someone else's "exchange"
@@ -103,6 +110,15 @@ test('only sign-in, Polymarket orders and Polymarket permissions are signed', as
   assert.equal((await sign(batch(C.collateralToken, '0x095ea7b3', '0x' + '6'.repeat(40)))).status, 403);       // permission for anyone else
   assert.equal((await sign(batch(C.collateralToken, '0xa9059cbb', '0x' + '6'.repeat(40)))).status, 403);       // a transfer
   assert.equal((await sign({ ...auth, primaryType: 'Withdraw', message: {} })).status, 403);
+  assert.equal((await sign({ ...auth, types: { ...auth.types, ClobAuth: [...auth.types.ClobAuth, { name: 'amount', type: 'uint256' }] } })).status, 403);   // an extra field
+  assert.equal((await sign({ ...auth, domain: { ...auth.domain, name: 'USD Coin' } })).status, 403);                                                    // someone else's domain
+  const noChain = { ...auth, domain: { name: 'ClobAuthDomain', version: '1' } }; assert.equal((await sign(noChain)).status, 403);
+  const o = order(1); assert.equal((await sign({ ...o, message: { ...o.message, maker: '0x' + '5'.repeat(40) } })).status, 403);                    // made by someone else
+  assert.equal((await sign({ ...o, message: { ...o.message, makerAmount: 'lots' } })).status, 400);
+  const b = batch(C.collateralToken, '0x095ea7b3', C.exchangeV3); assert.equal((await sign({ ...b, domain: { ...b.domain, verifyingContract: '0x' + '4'.repeat(40) } })).status, 403);
+  assert.equal((await sign(batch(C.collateralToken, '0x095ea7b3', C.exchangeV3, { operation: 1 }))).status, 403);                                   // a hidden extra on a call
+  assert.equal((await sign(batch(C.conditionalTokens, '0x095ea7b3', C.exchangeV3))).status, 403);                                                   // approve on the wrong token
+  assert.equal((await sign(batch(C.collateralToken, '0x095ea7b3', C.exchangeV3, { value: 'x' }))).status, 400);
   assert.equal((await sign({ ...auth, domain: { ...auth.domain, chainId: 1 } })).status, 403);
 });
 

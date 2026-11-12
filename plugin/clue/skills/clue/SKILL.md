@@ -5,6 +5,8 @@ description: Use when the person asks about prediction markets, the odds of a fu
 
 # Using Clue
 
+Reply the way a good trading bot does in a chat: short, numbers first, one idea per line, and the picture when there is one. After a buy fills, offer the share card. When the person asks how they are doing, lead with the total and today's profit or loss, then the positions.
+
 Clue is a prediction market research desk. The `clue` tools search markets, run sourced research and keep the person's Journal. The `clue-trader` tools trade on Polymarket from the person's own computer with their OutLayer agent wallet.
 
 ## Research before a call
@@ -20,7 +22,7 @@ Market prices are what traders are paying, shown as chances. They are not Clue's
 ## Portfolio, cards and your record
 
 - `get_portfolio`: cash, each position with its profit or loss, the total, and winnings ready to claim.
-- `share_card`: a share card for a position. Give the person the link; the card opens on Clue with Save card and Post on X.
+- `share_card`: the PnL card for a position, as a picture in the chat, with a post ready for X (`postOnX` opens X with it filled in) and a link that opens the card on Clue to save or share.
 - `my_record`: how their resolved calls did and whether they beat the market. Under five resolved calls, say it is too early to judge.
 - `what_changed`: the market now against each saved call. Point out big moves and compare them with what the person said would change their mind.
 
