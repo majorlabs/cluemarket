@@ -50,6 +50,15 @@ CREATE TABLE IF NOT EXISTS trading_accounts (
  user_id TEXT PRIMARY KEY, wallet TEXT NOT NULL, signer TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
  FOREIGN KEY(user_id) REFERENCES "user"(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS fund_deposits (
+ id TEXT PRIMARY KEY, user_id TEXT NOT NULL, deposit_address TEXT NOT NULL, deposit_memo TEXT,
+ send_symbol TEXT NOT NULL, send_chain TEXT NOT NULL, send_amount TEXT NOT NULL, send_usd REAL,
+ receive_amount TEXT, refund_to TEXT, deadline TEXT, state TEXT NOT NULL DEFAULT 'waiting', delivered_amount TEXT,
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ UNIQUE(user_id, deposit_address),
+ FOREIGN KEY(user_id) REFERENCES "user"(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS fund_deposits_user ON fund_deposits(user_id, created_at);
 CREATE TABLE IF NOT EXISTS research_results (
  id TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at TEXT NOT NULL,
  question TEXT NOT NULL, content TEXT NOT NULL, sources TEXT NOT NULL,

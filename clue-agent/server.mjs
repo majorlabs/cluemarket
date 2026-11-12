@@ -7,6 +7,7 @@ import {privyRoute,privyWalletRoute} from './privy-auth.mjs';
 import {ordersLiveFor} from './orders-switch.mjs';
 import {marketsByCondition,parseIds} from './markets-lookup.mjs';
 import {offered as intentsOffered,quote as intentsQuote,status as intentsStatus,limits as intentsLimits} from './intents.mjs';
+import {saveDeposit,listDeposits} from './deposits.mjs';
 import {allowedOrigins,checkOrigin} from './origins.mjs';
 import {cleanAnswer} from './answer-links.mjs';
 import {HourlyBudget} from './budget.mjs';
@@ -28,6 +29,7 @@ const fundUser=new HourlyBudget(30);
 const fundGlobal=new HourlyBudget(300);
 const depositUser=new HourlyBudget(10);   // real deposit addresses: a few per hour is plenty
 const statusUser=new HourlyBudget(600);
+const depositsUser=new HourlyBudget(600);
 const marketLookup=new HourlyBudget(1200);   // names for the orders on the Portfolio; cheap, but not unlimited
 const researchGlobal=new HourlyBudget(Math.max(1,Number(process.env.CLUE_RESEARCH_GLOBAL_PER_HOUR)||60));
 const researchJobs=new Map();
@@ -154,7 +156,15 @@ const app=http.createServer(async(req,res)=>{ try {
   const b=await getBody(req);
   const dry=b.dry!==false;
   if(!fundUser.take(session.user.id)||!fundGlobal.take()||(!dry&&!depositUser.take(session.user.id))) return json(res,429,{error:'Too many requests. Try again in a little while.'});
-  return json(res,200,await intentsQuote({assetId:String(b.assetId||''),amount:String(b.amount??''),refundTo:String(b.refundTo||''),wallet:String(b.wallet||''),dry}));
+  const quoted=await intentsQuote({assetId:String(b.assetId||''),amount:String(b.amount??''),refundTo:String(b.refundTo||''),wallet:String(b.wallet||''),dry});
+  // A real deposit address is noted, so the person can see where the deposit is even after a refresh. A failure here never blocks the deposit.
+  if(!dry) await saveDeposit(store,session.user.id,quoted).catch(e=>console.error('could not note the deposit',e.message));
+  return json(res,200,quoted);
+ }
+ if(req.method==='GET' && url.pathname==='/api/fund/deposits') {
+  const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in to see this.'});
+  if(!depositsUser.take(session.user.id)) return json(res,429,{error:'Too many requests. Try again in a little while.'});
+  return json(res,200,{deposits:await listDeposits(store,session.user.id,(address)=>intentsStatus(address))});
  }
  if(req.method==='GET' && url.pathname==='/api/fund/intents/status') {
   const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in to see this.'});

@@ -209,3 +209,61 @@ test('the limits: $2.50 at least, or a little above Polymarket\'s own floor if t
   const big = await quote({ ...ok, amount: '14000' }, deps);                                                           // $49,000: allowed
   assert.equal(big.send.amount, '14000');
 });
+
+test('server: a real deposit is remembered and the list says where it is, even after a refresh', async () => {
+  const cookie = signup('erin');
+  assert.equal((await call('GET', '/api/fund/deposits')).status, 401);                          // needs a sign-in
+  assert.deepEqual(JSON.parse((await call('GET', '/api/fund/deposits', cookie)).text).deposits, []);
+  const real = { assetId: NEAR_ASSET, amount: '2', refundTo: NEAR_ACCOUNT, wallet: WALLET, dry: false };
+  state.statusBody = { status: 'PENDING_DEPOSIT' };
+  // a price check is not a deposit, so it is not listed
+  await call('POST', '/api/fund/intents/quote', cookie, { ...real, dry: true });
+  assert.deepEqual(JSON.parse((await call('GET', '/api/fund/deposits', cookie)).text).deposits, []);
+  const made = JSON.parse((await call('POST', '/api/fund/intents/quote', cookie, real)).text);
+  assert.equal(made.depositAddress, 'a'.repeat(64));
+
+  const first = JSON.parse((await call('GET', '/api/fund/deposits', cookie)).text).deposits;
+  assert.equal(first.length, 1);
+  assert.equal(first[0].state, 'waiting');
+  assert.equal(first[0].depositAddress, 'a'.repeat(64));
+  assert.deepEqual([first[0].send.symbol, first[0].send.chain, first[0].send.amount], ['wNEAR', 'NEAR', '2']);
+  assert.equal(first[0].receive.amount, '6.96');
+  assert.equal(first[0].refundTo, NEAR_ACCOUNT);
+  assert.equal(first[0].final, false);
+  assert.equal(first[0].expired, true);                                                        // the test quote's deadline is long past
+
+  state.statusBody = { status: 'PROCESSING' };                                                 // NEAR Intents is swapping it
+  assert.equal(JSON.parse((await call('GET', '/api/fund/deposits', cookie)).text).deposits[0].state, 'swapping');
+
+  state.statusBody = { status: 'SUCCESS', swapDetails: { amountOutFormatted: '6.95', amountOutUsd: '6.95' } };
+  const done = JSON.parse((await call('GET', '/api/fund/deposits', cookie)).text).deposits[0];
+  assert.deepEqual([done.state, done.delivered, done.final], ['done', '6.95', true]);
+
+  const asked = seen.status.length;                                                            // a finished deposit is not asked about again
+  const again = JSON.parse((await call('GET', '/api/fund/deposits', cookie)).text).deposits[0];
+  assert.equal(seen.status.length, asked);
+  assert.deepEqual([again.state, again.delivered], ['done', '6.95']);
+  state.statusBody = { status: 'PENDING_DEPOSIT' };
+});
+
+test('server: nobody sees anyone else\'s deposits, and the list never shows the server key', async () => {
+  const gina = signup('gina'), hugo = signup('hugo');
+  const real = { assetId: NEAR_ASSET, amount: '2', refundTo: NEAR_ACCOUNT, wallet: WALLET, dry: false };
+  await call('POST', '/api/fund/intents/quote', gina, real);
+  const mine = await call('GET', '/api/fund/deposits', gina);
+  assert.equal(JSON.parse(mine.text).deposits.length, 1);
+  assert.ok(!mine.text.includes('server-jwt-secret'));
+  assert.deepEqual(JSON.parse((await call('GET', '/api/fund/deposits', hugo)).text).deposits, []);
+});
+
+test('server: a refunded or failed deposit says so, and stays that way', async () => {
+  const cookie = signup('ines');
+  const real = { assetId: NEAR_ASSET, amount: '2', refundTo: NEAR_ACCOUNT, wallet: WALLET, dry: false };
+  await call('POST', '/api/fund/intents/quote', cookie, real);
+  state.statusBody = { status: 'REFUNDED' };
+  assert.equal(JSON.parse((await call('GET', '/api/fund/deposits', cookie)).text).deposits[0].state, 'refunded');
+  state.statusBody = { status: 'PROCESSING' };                                                 // a later odd answer does not undo a final state
+  const d = JSON.parse((await call('GET', '/api/fund/deposits', cookie)).text).deposits[0];
+  assert.deepEqual([d.state, d.final], ['refunded', true]);
+  state.statusBody = { status: 'PENDING_DEPOSIT' };
+});
