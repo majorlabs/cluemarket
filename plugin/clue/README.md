@@ -4,7 +4,7 @@ Research prediction markets, keep a forecast journal and trade on Polymarket fro
 
 ## Install
 
-1. In Clue (https://www.oncluemarket.xyz), sign in, open the account menu, choose **Connect an AI assistant** and make a key.
+1. In Clue (https://www.oncluemarket.xyz), sign in, open the account menu, choose **Connect an AI assistant** and make a key. Tick **Can trade** if you want your assistant to trade.
 2. Put the key in your shell: `export CLUE_KEY=clue_ak_...`
 3. In Claude Code:
 
@@ -17,7 +17,8 @@ Research prediction markets, keep a forecast journal and trade on Polymarket fro
 
 - `clue` tools: search markets, get a market, research with sources, save forecasts, read your Journal and Portfolio.
 - `clue-trader` tools: buy, sell, open orders and cancel, from your own computer.
-- Commands: `/clue:research`, `/clue:portfolio`, `/clue:trade`.
+- Commands: `/clue:research`, `/clue:portfolio`, `/clue:trade`, `/clue:card`, `/clue:record`, `/clue:brief`.
+- Share cards for your positions, your forecast record, and what changed since your calls.
 
 ## Trading
 

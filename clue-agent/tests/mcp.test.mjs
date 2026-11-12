@@ -69,7 +69,7 @@ test('an assistant can connect, list tools, and keep the Journal for its person 
   const note = await fetch(base + '/api/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key }, body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) });
   assert.equal(note.status, 202);
   const names = (await rpc(key, 'tools/list', {})).body.result.tools.map((t) => t.name);
-  for (const t of ['search_markets', 'get_market', 'research', 'research_status', 'research_allowance', 'save_forecast', 'get_journal', 'get_portfolio']) assert.ok(names.includes(t), t);
+  for (const t of ['search_markets', 'get_market', 'research', 'research_status', 'research_allowance', 'save_forecast', 'get_journal', 'get_portfolio', 'share_card', 'my_record', 'what_changed']) assert.ok(names.includes(t), t);
   assert.equal(names.some((t) => /trade|order|withdraw|deposit|send/.test(t)), false);
 
   const saved = await tool(key, 'save_forecast', { question: 'Will it rain in Lagos tomorrow?', probability: 62, reasoning: 'Wet season.', change_condition: 'A dry forecast.' });
@@ -78,6 +78,9 @@ test('an assistant can connect, list tools, and keep the Journal for its person 
   assert.ok(JSON.stringify(journal).includes('Will it rain in Lagos tomorrow?'));
   assert.equal(JSON.stringify((await site('GET', '/api/journal', cat)).body).includes('Lagos'), false);
   assert.ok(JSON.stringify((await tool(key, 'get_journal')).structuredContent).includes('Lagos'));
+  const rec = (await tool(key, 'my_record')).structuredContent; assert.equal(rec.resolved, 0); assert.match(rec.summary, /No calls have resolved yet/);
+  assert.ok(Array.isArray((await tool(key, 'what_changed')).structuredContent.calls));
+  assert.equal((await tool(key, 'share_card')).isError, true);                                     // no trading account, so nothing to put on a card
   const bad = await tool(key, 'save_forecast', { question: 'Will it rain?', probability: 140, reasoning: 'x', change_condition: 'y' });
   assert.equal(bad.isError, true);
   assert.equal((await rpc(key, 'tools/call', { name: 'place_order', arguments: {} })).body.error.code, -32602);

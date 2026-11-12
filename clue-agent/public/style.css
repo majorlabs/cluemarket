@@ -913,3 +913,14 @@ dialog .btn{height:48px;border-radius:14px}
 .aw-steps{margin:10px 0 12px 18px;display:grid;gap:6px;font-size:14px}
 .aw-state{display:grid;gap:2px;border:1px solid var(--line-strong);border-radius:12px;padding:10px 12px;margin:12px 0}
 .aw-state.on b{color:var(--yes)}
+.card-page{max-width:760px;margin:0 auto;display:grid;gap:12px}
+.card-page .card-preview{width:100%;height:auto;border-radius:12px}
+.mcp-trade{display:flex;gap:8px;align-items:flex-start;margin-top:8px;font-size:13.5px;color:var(--muted)}
+.mcp-trade input{margin-top:3px}
+.mcp-scope{display:inline-block;margin-left:8px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 7px;border-radius:999px;border:1px solid var(--line-strong);color:var(--muted)}
+.mcp-scope.trade{color:var(--brand-text);border-color:var(--brand)}
+.aw-log{display:grid;gap:6px;margin-top:6px}
+.aw-row{display:grid;grid-template-columns:auto 1fr auto;gap:4px 10px;align-items:baseline;border:1px solid var(--line-strong);border-radius:10px;padding:8px 10px;font-size:13px}
+.aw-row small{grid-column:1/-1}
+.aw-row.refused b,.aw-row.failed b{color:var(--no)}
+.aw-row.signed b{color:var(--yes)}

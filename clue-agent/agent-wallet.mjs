@@ -9,6 +9,9 @@ import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from 'node:
 import { production } from '@polymarket/client';
 
 const OUTLAYER = () => process.env.OUTLAYER_BASE || 'https://api.outlayer.ai';
+const CLOB = () => process.env.CLOB_BASE || 'https://clob.polymarket.com';
+// How far from the market's middle price an order may be. A buy above it, or a sell below it, is refused.
+const SLACK = () => Math.min(0.2, Math.max(0.01, Number(process.env.CLUE_AGENT_PRICE_SLACK) || 0.05));
 const C = production.contracts;
 const lower = (a) => String(a || '').toLowerCase();
 const EXCHANGES = new Set([C.standardExchange, C.negRiskExchange, C.exchangeV3].map(lower));
@@ -39,15 +42,30 @@ const limits = (b) => {
   return { maxOrder: money(maxOrder), maxDay: money(maxDay) };
 };
 
-async function spentToday(store, userId, now) {
-  const r = await store.get("SELECT COALESCE(SUM(usd),0) AS total FROM agent_orders WHERE user_id=? AND day=? AND side='BUY'", userId, today(now));
-  return money(Number(r?.total || 0));
+const SPENT = "SELECT COALESCE(SUM(usd),0) AS total FROM agent_orders WHERE user_id=? AND day=? AND side='BUY' AND status IN ('pending','signed')";
+async function spentToday(db, userId, now) { const r = await db.get(SPENT, userId, today(now)); return money(Number(r?.total || 0)); }
+
+// The market's middle price for one outcome, read from Polymarket's public prices. No price, no signature.
+async function midpoint(tokenId) {
+  try {
+    const r = await fetch(`${CLOB()}/midpoint?token_id=${encodeURIComponent(tokenId)}`, { signal: AbortSignal.timeout(8000), headers: { accept: 'application/json' } });
+    const mid = Number((await r.json()).mid);
+    return r.ok && mid > 0 && mid < 1 ? mid : null;
+  } catch { return null; }
+}
+
+const log = (db, userId, now, e) => db.run('INSERT INTO agent_orders (id,user_id,created_at,day,kind,side,token_id,usd,price,status,reason) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+  randomUUID(), userId, now.toISOString(), today(now), e.kind, e.side || null, e.tokenId || null, e.usd || 0, e.price ?? null, e.status, e.reason || null);
+
+export async function activity(store, userId, limit = 20) {
+  return (await store.all('SELECT created_at, kind, side, usd, price, status, reason FROM agent_orders WHERE user_id=? ORDER BY created_at DESC LIMIT ?', userId, limit))
+    .map((r) => ({ at: r.created_at, kind: r.kind, side: r.side, usd: r.usd, price: r.price, status: r.status, reason: r.reason }));
 }
 
 export async function describeWallet(store, userId, { now = new Date() } = {}) {
   const w = await store.get('SELECT address, enabled, max_order, max_day, created_at, updated_at FROM agent_wallets WHERE user_id=?', userId);
   if (!w) return { wallet: null };
-  return { wallet: { provider: 'outlayer', address: w.address, enabled: Boolean(w.enabled), maxOrder: w.max_order, maxDay: w.max_day, spentToday: await spentToday(store, userId, now), connectedAt: w.created_at } };
+  return { wallet: { provider: 'outlayer', address: w.address, enabled: Boolean(w.enabled), maxOrder: w.max_order, maxDay: w.max_day, spentToday: await spentToday(store, userId, now), connectedAt: w.created_at }, activity: await activity(store, userId, 10) };
 }
 
 export async function connectWallet(store, sealingKey, userId, b, { now = new Date() } = {}) {
@@ -89,7 +107,11 @@ export function classify(td, address) {
     const side = String(o.side) === '0' || o.side === 'BUY' ? 'BUY' : String(o.side) === '1' || o.side === 'SELL' ? 'SELL' : null;
     if (!side) throw fail(400, 'Invalid order side.');
     let maker; try { maker = BigInt(o.makerAmount); BigInt(o.takerAmount); BigInt(o.tokenId); } catch { throw fail(400, 'Invalid order amounts.'); }
-    return { kind: 'order', side, tokenId: String(o.tokenId), usd: side === 'BUY' ? Number(maker) / 1e6 : 0 };
+    if (maker < 0n) throw fail(400, 'Invalid order amounts.');
+    const taker = BigInt(o.takerAmount);
+    if (maker <= 0n || taker <= 0n) throw fail(400, 'Invalid order amounts.');
+    const price = side === 'BUY' ? Number(maker) / Number(taker) : Number(taker) / Number(maker);
+    return { kind: 'order', side, tokenId: String(o.tokenId), usd: side === 'BUY' ? Number(maker) / 1e6 : 0, price };
   }
   if (t === 'Batch') {
     const calls = td.message.calls;
@@ -106,19 +128,45 @@ export function classify(td, address) {
   throw fail(403, 'That request cannot be signed. Clue signs only sign-in, orders and trading permissions.');
 }
 
-export async function signFor(store, sealingKey, userId, td, { now = new Date() } = {}) {
+// One signature at a time per person, so two orders sent together cannot both slip under the daily limit.
+const queues = new Map();
+function serial(userId, fn) {
+  const prev = queues.get(userId) || Promise.resolve();
+  const next = prev.catch(() => {}).then(fn);
+  queues.set(userId, next.finally(() => { if (queues.get(userId) === next) queues.delete(userId); }).catch(() => {}));
+  return next;
+}
+
+export function signFor(store, sealingKey, userId, td, opts = {}) { return serial(userId, () => signNow(store, sealingKey, userId, td, opts)); }
+
+async function signNow(store, sealingKey, userId, td, { now = new Date() } = {}) {
   const w = await store.get('SELECT key_sealed, address, enabled, max_order, max_day FROM agent_wallets WHERE user_id=?', userId);
   if (!w) throw fail(404, 'No assistant wallet is connected. Connect one in Clue: account menu, Assistant trading.');
   if (!w.enabled) throw fail(403, 'Assistant trading is switched off. Switch it on in Clue: account menu, Assistant trading.');
-  const what = classify(td, w.address);
-  if (what.kind === 'order' && what.side === 'BUY') {
-    if (what.usd > w.max_order + 1e-9) throw fail(403, `This order is $${money(what.usd)}, over your limit of $${w.max_order} per order.`);
+  let what;
+  try { what = classify(td, w.address); } catch (e) { await log(store, userId, now, { kind: String(td?.primaryType || 'unknown').slice(0, 40), status: 'refused', reason: e.message }); throw e; }
+  let entry = null;
+  if (what.kind === 'order') {
+    const refuse = async (reason) => { await log(store, userId, now, { ...what, status: 'refused', reason }); throw fail(403, reason); };
+    const mid = await midpoint(what.tokenId);
+    if (mid === null) await refuse('Clue could not read this market\'s price right now, so it did not sign. Try again in a minute.');
+    const slack = SLACK();
+    if (what.side === 'BUY' && what.price > mid + slack) await refuse(`This buy is at ${Math.round(what.price * 100)}¢ but the market is at about ${Math.round(mid * 100)}¢. Clue signs buys up to ${Math.round(slack * 100)}¢ above the market.`);
+    if (what.side === 'SELL' && what.price < mid - slack) await refuse(`This sell is at ${Math.round(what.price * 100)}¢ but the market is at about ${Math.round(mid * 100)}¢. Clue signs sells down to ${Math.round(slack * 100)}¢ below the market.`);
+    if (what.side === 'BUY' && what.usd > w.max_order + 1e-9) await refuse(`This order is $${money(what.usd)}, over your limit of $${w.max_order} per order.`);
     const spent = await spentToday(store, userId, now);
-    if (spent + what.usd > w.max_day + 1e-9) throw fail(403, `This order would take today's total to $${money(spent + what.usd)}, over your limit of $${w.max_day} a day.`);
+    if (what.side === 'BUY' && spent + what.usd > w.max_day + 1e-9) await refuse(`This order would take today's total to $${money(spent + what.usd)}, over your limit of $${w.max_day} a day.`);
+    entry = randomUUID();
+    await store.run('INSERT INTO agent_orders (id,user_id,created_at,day,kind,side,token_id,usd,price,status) VALUES (?,?,?,?,?,?,?,?,?,?)', entry, userId, now.toISOString(), today(now), 'order', what.side, what.tokenId, money(what.usd), what.price, 'pending');
   }
-  const key = unseal(sealingKey, w.key_sealed);
-  const r = await outlayer(key, 'POST', '/wallet/v1/evm/sign-typed-data', { chain: 'ethereum', typed_data: td });
-  if (!/^0x[0-9a-fA-F]{130}$/.test(String(r.signature || ''))) throw fail(502, 'OutLayer did not return a signature.');
-  if (what.kind === 'order') await store.run('INSERT INTO agent_orders (id,user_id,created_at,day,side,token_id,usd) VALUES (?,?,?,?,?,?,?)', randomUUID(), userId, now.toISOString(), today(now), what.side, what.tokenId, money(what.usd));
+  let key;
+  try { key = unseal(sealingKey, w.key_sealed); }
+  catch { if (entry) await store.run("UPDATE agent_orders SET status='failed', reason=? WHERE id=?", 'wallet key could not be opened', entry); throw fail(409, 'Clue can no longer open your wallet key. Disconnect the wallet in Clue and connect it again.'); }
+  let r;
+  try { r = await outlayer(key, 'POST', '/wallet/v1/evm/sign-typed-data', { chain: 'ethereum', typed_data: td }); }
+  catch (e) { if (entry) await store.run("UPDATE agent_orders SET status='failed', reason=? WHERE id=?", String(e.message).slice(0, 200), entry); throw e; }
+  if (!/^0x[0-9a-fA-F]{130}$/.test(String(r.signature || ''))) { if (entry) await store.run("UPDATE agent_orders SET status='failed', reason=? WHERE id=?", 'no signature', entry); throw fail(502, 'OutLayer did not return a signature.'); }
+  if (entry) await store.run("UPDATE agent_orders SET status='signed' WHERE id=?", entry);
+  else await log(store, userId, now, { kind: what.kind, status: 'signed' });
   return { signature: r.signature, kind: what.kind };
 }

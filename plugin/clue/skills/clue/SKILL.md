@@ -17,9 +17,16 @@ Clue is a prediction market research desk. The `clue` tools search markets, run 
 
 Market prices are what traders are paying, shown as chances. They are not Clue's forecast.
 
+## Portfolio, cards and your record
+
+- `get_portfolio`: cash, each position with its profit or loss, the total, and winnings ready to claim.
+- `share_card`: a share card for a position. Give the person the link; the card opens on Clue with Save card and Post on X.
+- `my_record`: how their resolved calls did and whether they beat the market. Under five resolved calls, say it is too early to judge.
+- `what_changed`: the market now against each saved call. Point out big moves and compare them with what the person said would change their mind.
+
 ## Trading
 
-1. Check `trading_status` first. If trading is off or no wallet is connected, tell the person to open the account menu in Clue and choose Assistant trading. If `setUp` is false, run `setup_trading` once.
+1. Trading needs an assistant key made with **Can trade** ticked. Check `trading_status` first. If trading is off or no wallet is connected, tell the person to open the account menu in Clue and choose Assistant trading. If `setUp` is false, run `setup_trading` once.
 2. Get the outcome's `token_id` from `get_market`.
 3. Before every `buy` or `sell`, state the market, the outcome, the amount and the worst price, and wait for the person to say yes.
 4. Use `max_price` a little above the current chance for a buy (for example 0.42 when it shows 40%), and `min_price` a little below for a sell.
