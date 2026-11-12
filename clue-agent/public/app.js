@@ -249,9 +249,47 @@ function openAccountMenu() {
     el("div", { class: "actions", style: "flex-direction:column;align-items:stretch;margin-top:14px" },
       el("a", { class: "btn", href: "#/portfolio", text: "Portfolio", onclick: () => dialog.close() }),
       el("a", { class: "btn", href: "#/saved", text: "Journal", onclick: () => dialog.close() }),
+      el("button", { class: "btn", type: "button", text: "Connect an AI assistant", onclick: openAssistants }),
       el("button", { class: "btn", type: "button", style: "color:var(--no)", text: "Disconnect", onclick: signOut }),
       el("button", { class: "btn ghost", type: "button", text: "Close", onclick: () => dialog.close() })));
   if (!dialog.open) dialog.showModal();
+}
+// Lets a person use Clue from Claude, Codex, Cursor and other assistants over MCP. A key reads markets, runs research within
+// the free allowance and keeps the Journal. It cannot trade or move money. The key is shown once, when it is made.
+const MCP_URL = `${location.origin}/api/mcp`;
+const copyBtn = (text, label = "Copy") => el("button", { class: "btn small", type: "button", text: label, onclick: async (ev) => { try { await navigator.clipboard.writeText(text); ev.currentTarget.textContent = "Copied"; } catch { ev.currentTarget.textContent = "Select and copy"; } } });
+const snippet = (title, text) => el("div", { class: "mcp-snip" }, el("div", { class: "mcp-snip-head" }, el("span", { class: "label", text: title }), copyBtn(text)), el("pre", {}, el("code", { text })));
+async function openAssistants(fresh) {
+  const list = el("div", { class: "mcp-keys" }, el("p", { class: "muted", text: "Loading…" }));
+  const make = el("button", { class: "btn primary", type: "button", text: "Make a key" });
+  const label = el("input", { type: "text", maxlength: "60", placeholder: "Name it, e.g. Claude", "aria-label": "Key name" });
+  make.onclick = async () => {
+    make.disabled = true;
+    try { const k = await post("/api/agent-keys", { label: label.value.trim() || "My assistant" }); openAssistants(k); }
+    catch (e) { make.disabled = false; list.prepend(el("p", { class: "err", text: e.message })); }
+  };
+  const key = fresh?.token || "YOUR_KEY";
+  const shown = fresh?.token ? el("div", { class: "mcp-new" },
+    el("strong", { text: "Your new key. Copy it now: it will not be shown again." }),
+    el("div", { class: "acct-addr" }, el("code", { text: fresh.token }), copyBtn(fresh.token))) : null;
+  dialog.replaceChildren(
+    el("h2", { text: "Connect an AI assistant" }),
+    el("p", { class: "muted", text: "Use Clue from Claude, Codex, Cursor or any assistant that supports MCP. It can search markets, run research with your free daily allowance, save forecasts to your Journal and read your Portfolio. It cannot place trades or move money." }),
+    shown,
+    snippet("Claude Code", `claude mcp add --transport http clue ${MCP_URL} --header "Authorization: Bearer ${key}"`),
+    snippet("Codex (~/.codex/config.toml)", `[mcp_servers.clue]\nurl = "${MCP_URL}"\nhttp_headers = { "Authorization" = "Bearer ${key}" }`),
+    snippet("Cursor and others (mcp.json)", JSON.stringify({ mcpServers: { clue: { url: MCP_URL, headers: { Authorization: `Bearer ${key}` } } } }, null, 2)),
+    el("h3", { text: "Your keys" }), list,
+    el("div", { class: "mcp-make" }, label, make),
+    el("div", { class: "actions" }, el("button", { class: "btn ghost", type: "button", text: "Back", onclick: openAccountMenu }), el("button", { class: "btn ghost", type: "button", text: "Close", onclick: () => dialog.close() })));
+  if (!dialog.open) dialog.showModal();
+  try {
+    const { keys } = await api("/api/agent-keys");
+    list.replaceChildren(...(keys.length ? keys.map((k) => el("div", { class: "mcp-key" },
+      el("div", {}, el("strong", { text: k.label }), el("div", { class: "muted small", text: `Made ${when(k.createdAt)}${k.lastUsedAt ? ` · last used ${when(k.lastUsedAt)}` : " · not used yet"}` })),
+      el("button", { class: "btn small", type: "button", style: "color:var(--no)", text: "Remove", onclick: async (ev) => { ev.currentTarget.disabled = true; try { await api(`/api/agent-keys/${k.id}`, { method: "DELETE" }); } catch { /* already gone */ } openAssistants(); } })))
+      : [el("p", { class: "muted", text: "No keys yet. Make one, then paste it into your assistant." })]));
+  } catch (e) { list.replaceChildren(el("p", { class: "err", text: e.message })); }
 }
 async function signOut() {
   dialog.close();

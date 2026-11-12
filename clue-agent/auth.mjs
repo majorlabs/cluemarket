@@ -59,6 +59,12 @@ CREATE TABLE IF NOT EXISTS fund_deposits (
  FOREIGN KEY(user_id) REFERENCES "user"(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS fund_deposits_user ON fund_deposits(user_id, created_at);
+CREATE TABLE IF NOT EXISTS agent_keys (
+ id TEXT PRIMARY KEY, user_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, label TEXT NOT NULL,
+ created_at TEXT NOT NULL, last_used_at TEXT, revoked_at TEXT,
+ FOREIGN KEY(user_id) REFERENCES "user"(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS agent_keys_user ON agent_keys(user_id);
 CREATE TABLE IF NOT EXISTS research_results (
  id TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at TEXT NOT NULL,
  question TEXT NOT NULL, content TEXT NOT NULL, sources TEXT NOT NULL,

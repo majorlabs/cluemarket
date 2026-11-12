@@ -3,6 +3,9 @@ import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { store } from './auth.mjs';
 import {initWalletAuth,walletSession,walletRoute} from './wallet-auth.mjs';
+import {AGENT_USER} from './agent-user.mjs';
+import {createKey,listKeys,revokeKey} from './agent-keys.mjs';
+import {mcpRoute} from './mcp.mjs';
 import {privyRoute,privyWalletRoute} from './privy-auth.mjs';
 import {ordersLiveFor} from './orders-switch.mjs';
 import {marketsByCondition,parseIds} from './markets-lookup.mjs';
@@ -102,12 +105,15 @@ async function researchOnce(question, market) {
  console.log('research answer',JSON.stringify({seconds,answerChars:content.length,searchResults:sources.length,finish,fields:[...fields]}));
  return {content,model,retrievedAt:new Date().toISOString(),searchReported:true,sources,usage};
 }
-const app=http.createServer(async(req,res)=>{ try {
+const handler=async(req,res)=>{ try {
  const url=new URL(req.url,`http://${host}:${port}`);
  if(req.method==='GET' && url.pathname==='/healthz') return json(res,200,{ok:true,service:'clue-api'});
- if (!allowedHosts.includes(req.headers.host)) return json(res,403,{error:'Invalid host'});
+ // An assistant's call, passed on by the MCP route below. It never came from the network, so the browser checks do not apply.
+ const fromAgent=Boolean(req[AGENT_USER]);
+ if(url.pathname==='/api/mcp' && !fromAgent) return mcpRoute(req,res,{dispatch:(r,s)=>handler(r,s)});
+ if (!fromAgent && !allowedHosts.includes(req.headers.host)) return json(res,403,{error:'Invalid host'});
  const requestOrigin=hosted ? (checkOrigin(req.headers.origin,publicOrigins) || publicOrigin) : `http://${req.headers.host}`;
- if (req.method!=='GET' && req.method!=='HEAD' && (hosted ? !checkOrigin(req.headers.origin,publicOrigins) : req.headers.origin !== requestOrigin)) return json(res,403,{error:'Invalid origin'});
+ if (!fromAgent && req.method!=='GET' && req.method!=='HEAD' && (hosted ? !checkOrigin(req.headers.origin,publicOrigins) : req.headers.origin !== requestOrigin)) return json(res,403,{error:'Invalid origin'});
  if(req.method==='GET' && url.pathname==='/api/privy/wallet'){const session=await walletSession(req);if(!session?.user?.id)return json(res,401,{error:'Sign in to see your wallet.'});return json(res,200,await privyWalletRoute(session.user.id));}
  if(url.pathname.startsWith('/api/privy/'))return json(res,200,await privyRoute(req,res,url.pathname,req.method==='POST'?await getBody(req):{},requestOrigin));
  if(url.pathname.startsWith('/api/wallet/'))return json(res,200,await walletRoute(req,res,url.pathname,req.method==='POST'?await getBody(req):{},requestOrigin));
@@ -183,6 +189,16 @@ const app=http.createServer(async(req,res)=>{ try {
   const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in to get a funding quote.'});
   if(!fundUser.take(session.user.id)||!fundGlobal.take()) return json(res,429,{error:'Too many quotes. Try again in a little while.'});
   return json(res,200,await fundingQuote({source:url.searchParams.get('source'),amount:url.searchParams.get('amount'),address:url.searchParams.get('address')}));
+ }
+ if(url.pathname==='/api/agent-keys' || url.pathname.startsWith('/api/agent-keys/')) {
+  // Keys are managed only from the signed-in page, never by an assistant.
+  if(fromAgent) return json(res,403,{error:'Not allowed.'});
+  const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in to connect an assistant.'});
+  if(req.method==='GET' && url.pathname==='/api/agent-keys') return json(res,200,{keys:await listKeys(store,session.user.id)});
+  if(req.method==='POST' && url.pathname==='/api/agent-keys') { const body=await getBody(req); return json(res,201,await createKey(store,session.user.id,body.label)); }
+  const keyMatch=url.pathname.match(/^\/api\/agent-keys\/([a-f0-9-]{36})$/);
+  if(req.method==='DELETE' && keyMatch) return json(res,(await revokeKey(store,session.user.id,keyMatch[1]))?200:404,{removed:true});
+  return json(res,405,{error:'Method not allowed.'});
  }
  if(url.pathname==='/api/journal') {
   if(req.method!=='GET') return json(res,405,{error:'Method not allowed.'});
@@ -297,5 +313,6 @@ const app=http.createServer(async(req,res)=>{ try {
  if(req.method==='GET' && ['/fonts/geist-latin-wght-normal.woff2','/fonts/geist-mono-latin-wght-normal.woff2'].includes(url.pathname)) {const content=await readFile(new URL('./public'+url.pathname,import.meta.url));res.writeHead(200,{'Content-Type':'font/woff2','Cache-Control':'public, max-age=31536000, immutable','X-Content-Type-Options':'nosniff'});return res.end(content);}
  if(req.method==='GET' && ASSET_TYPES[url.pathname]) {const content=await readFile(new URL('./public'+url.pathname,import.meta.url));res.writeHead(200,{'Content-Type':ASSET_TYPES[url.pathname],'Cache-Control':'public, max-age=3600','X-Content-Type-Options':'nosniff'});return res.end(content);}
  json(res,404,{error:'Not found'});
- } catch(err){ if(!err.status) console.error('request failed', req.method, req.url, err); json(res,err.status || 500,{error:err.status ? err.message : 'Something went wrong. Please try again.'});} });
+ } catch(err){ if(!err.status) console.error('request failed', req.method, req.url, err); json(res,err.status || 500,{error:err.status ? err.message : 'Something went wrong. Please try again.'});}  };
+const app=http.createServer(handler);
 app.listen(port,host,()=>console.log(`Clue local preview: http://${host}:${port}`));
