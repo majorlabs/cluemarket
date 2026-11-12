@@ -959,3 +959,8 @@ dialog .btn{height:48px;border-radius:14px}
 .connect-trade small{display:block}
 .connect-actions{display:flex;gap:10px}.connect-actions .btn{flex:1;justify-content:center}
 .mcp-adv{margin-top:12px}.mcp-adv summary{cursor:pointer;font-weight:600}
+.approve-box{border:1px solid var(--line-strong);border-radius:12px;padding:12px 14px;display:grid;gap:6px}
+.approve-q{margin:0;font-weight:600}
+.approve-out p{margin:0}.approve-out.err p{color:var(--no)}.approve-out.ok p{color:var(--yes)}
+.agents-waiting:empty{display:none}
+a.aw-row{text-decoration:none;color:var(--ink)}

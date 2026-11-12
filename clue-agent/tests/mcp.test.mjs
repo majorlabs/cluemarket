@@ -70,7 +70,7 @@ test('an assistant can connect, list tools, and keep the Journal for its person 
   assert.equal(note.status, 202);
   const names = (await rpc(key, 'tools/list', {})).body.result.tools.map((t) => t.name);
   for (const t of ['search_markets', 'get_market', 'research', 'research_status', 'research_allowance', 'save_forecast', 'get_journal', 'get_portfolio', 'share_card', 'my_record', 'what_changed']) assert.ok(names.includes(t), t);
-  assert.equal(names.some((t) => /trade|order|withdraw|deposit|send/.test(t)), false);
+  assert.equal(names.filter((t) => !['propose_trade', 'trade_status'].includes(t)).some((t) => /trade|order|withdraw|deposit|send|buy|sell/.test(t)), false);   // only a proposal the person approves on their phone
 
   const saved = await tool(key, 'save_forecast', { question: 'Will it rain in Lagos tomorrow?', probability: 62, reasoning: 'Wet season.', change_condition: 'A dry forecast.' });
   assert.equal(saved.isError, false, JSON.stringify(saved)); assert.equal(saved.structuredContent.saved, true);

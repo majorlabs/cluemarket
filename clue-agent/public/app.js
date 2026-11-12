@@ -395,6 +395,7 @@ async function route() {
   if (parts[0] === "saved") { setNav("saved"); return savedView(parts[1], stale); }
   if (parts[0] === "agents") { setNav("agents"); return agentsView(); }
   if (parts[0] === "connect") { setNav(""); return connectView(parts[1] || ""); }
+  if (parts[0] === "approve") { setNav("agents"); return approveView(parts[1] || ""); }
   if (parts[0] === "docs") { setNav(""); return docsView(parts[1]); }
   if (parts[0] === "portfolio") { setNav("portfolio"); return portfolioView(stale); }
   if (parts[0] === "card") { setNav(""); return cardView(parts[1] || ""); }
@@ -453,13 +454,18 @@ const DOCS = [
   ]],
   ["agents", "Agents: use Clue from your AI", [
     "Clue works inside Claude, Codex, Cursor and other AI assistants. You chat as you normally would, and your assistant uses Clue for you.",
-    ["ul", "“How is my portfolio doing?”", "“Research the Fed's December decision and save my call at 70%.”", "“Make a PnL card for my biggest position.” (the card arrives as a picture in the chat)", "“What changed since my calls?” and “How good are my calls?”", "“Buy $5 of Yes on this market.” (with assistant trading switched on)"],
+    ["ul", "“How is my portfolio doing?”", "“Research the Fed's December decision and save my call at 70%.”", "“Make a PnL card for my biggest position.” (the card arrives as a picture in the chat)", "“What changed since my calls?” and “How good are my calls?”", "“Buy $5 of Yes on this market.” (it prepares the trade; you approve it on your phone)"],
     ["ol", "In Claude or ChatGPT, open Settings, then Connectors, and add a custom connector with the address https://www.oncluemarket.xyz/api/mcp. In Claude Code, run: claude mcp add --transport http clue https://www.oncluemarket.xyz/api/mcp", "A Clue page opens. Sign in, choose whether it may also trade, and tap Approve.", "Ask away. It works as you: your Journal, your Portfolio, your limits. Disconnect it any time from Agents."],
     "There is no key to copy. Apps that cannot sign in this way can use a key instead: open Agents, then Advanced: connect with a key.",
     "For Claude Code, the Clue plugin adds everything in one install, with the commands /clue:research, /clue:portfolio, /clue:card, /clue:record, /clue:brief and /clue:trade:",
     ["code", "export CLUE_KEY=your_key\nclaude plugin marketplace add majorlabs/cluemarket\nclaude plugin install clue@clue"],
   ]],
-  ["assistant-trading", "Assistant trading", [
+  ["approve", "Trading from your AI: approve on your phone", [
+    "Connect your AI with Also let it trade ticked. Then ask it to buy, for example \u201cPut $5 on Yes for the Fed hike.\u201d",
+    ["ol", "Your AI finds the market, tells you the outcome, amount and worst price, and prepares the trade in Clue.", "It gives you a link. Open it on your phone: Clue shows exactly what will be bought. Waiting trades also show at the top of Agents.", "Tap Approve. The order goes from your phone with your own trading account, just like a trade you place yourself. Or tap Decline.", "Your AI can see whether it filled. A trade nobody approves expires after 15 minutes."],
+    "Your AI never places the order and never touches your money.",
+  ]],
+  ["assistant-trading", "Assistant trading (advanced): an agent wallet", [
     "Your assistant can trade for you with an agent wallet on OutLayer, NEAR's secure custody for AI agents. The wallet's keys stay in OutLayer's secure hardware, and you choose the limits.",
     ["ol", "At app.outlayer.ai, open Custody, then Wallets, and create a wallet. In its policy, allow evm_sign, leave the other capabilities off, and save.", "In Clue, open Agents, then Assistant trading. Paste the wallet key (it starts with wk_), set your most per order and most per day, and switch it on.", "Connect your AI with “Also let it trade” ticked, or make a key with Can trade ticked for the Clue plugin.", "Ask your assistant for trading_status, fund the trading account it shows (or use Add money), and run setup_trading once.", "Ask for a trade. Your assistant shows you the market, the amount and the worst price, and waits for your yes."],
     "Every order is checked by Clue before your wallet signs it: it must fit your limits and be close to the live market price, or it is refused. Clue signs only Polymarket sign-in, orders and Polymarket's trading permissions. It never signs transfers or withdrawals. Orders are sent to Polymarket from your own computer.",
@@ -524,6 +530,54 @@ async function connectView(id) {
   app.replaceChildren(card);
 }
 
+/* ---------- approve: a trade an AI prepared, approved here and sent from this phone ---------- */
+async function approveView(id) {
+  const card = el("section", { class: "card connect-card" });
+  app.replaceChildren(card);
+  if (!user) {
+    card.replaceChildren(el("h1", { text: "Approve a trade" }), el("p", { class: "muted", text: "Sign in to see the trade your AI prepared." }), el("button", { class: "btn primary", type: "button", text: "Sign in", onclick: () => openAccountDialog("Sign in to approve your trade.") }));
+    document.addEventListener("clue:account", () => { if (location.hash.startsWith("#/approve/")) route(); }, { once: true });
+    return;
+  }
+  card.replaceChildren(el("p", { class: "loading", role: "status", text: "Opening the trade…" }));
+  let t;
+  try { t = await api(`/api/agent-trades/${encodeURIComponent(id)}`); } catch (e) { card.replaceChildren(el("h1", { text: "Trade not found" }), el("p", { class: "muted", text: e.message })); return; }
+  const usd = (n) => `$${Number(n).toFixed(2)}`, cents = (p) => `${(p * 100).toFixed(1).replace(/\.0$/, "")}¢`;
+  const row = (k, v) => el("div", { class: "tk-row" }, el("span", { class: "muted", text: k }), el("b", { class: "num", text: v }));
+  const out = el("div", { class: "approve-out", role: "status", "aria-live": "polite" });
+  const summary = [el("h1", { text: "Approve this trade?" }), el("p", { class: "muted", text: "Your AI prepared this trade. Nothing is bought until you approve it here. The order goes from this phone, with your own trading account." }),
+    el("div", { class: "approve-box" }, row("Buy", t.outcome || "—"), el("p", { class: "approve-q", text: t.question || "" }), row("Spend", usd(t.amount)), row("Worst price", `${cents(t.maxPrice)} a share`), row("You get, at least", `${(t.amount / t.maxPrice).toFixed(2)} shares`)),
+    el("p", { class: "muted small", text: "All or nothing: if it cannot fill completely at that price, nothing is bought and no money is spent." })];
+  const ended = { filled: "Done. It filled.", unfilled: "It did not fill at that price. Nothing was bought.", failed: "It did not go through. Nothing was bought.", declined: "You declined this trade.", expired: "This trade expired before it was approved.", checked: "Checked. Real orders are not switched on for this account, so nothing was sent.", sending: "This trade is being sent." };
+  if (t.status !== "pending") { card.replaceChildren(...summary.slice(0, 1), el("div", { class: "approve-box" }, row("Buy", t.outcome || "—"), el("p", { class: "approve-q", text: t.question || "" }), row("Spend", usd(t.amount))), el("p", { text: ended[t.status] || t.status }), t.eventSlug ? el("a", { class: "btn small", href: `#/event/${encodeURIComponent(t.eventSlug)}`, text: "Open the market" }) : null); return; }
+  const approveBtn = el("button", { class: "btn primary", type: "button", text: `Approve ${usd(t.amount)}` });
+  const declineBtn = el("button", { class: "btn", type: "button", text: "Decline" });
+  const say = (cls, text, ...more) => { out.className = `approve-out ${cls}`; out.replaceChildren(el("p", { text }), ...more); };
+  declineBtn.onclick = async () => { approveBtn.disabled = declineBtn.disabled = true; try { await post(`/api/agent-trades/${t.id}/decline`, {}); say("muted", "Declined. Nothing was bought. You can tell your AI."); } catch (e) { say("err", e.message); } };
+  approveBtn.onclick = async () => {
+    approveBtn.disabled = declineBtn.disabled = true;
+    // The same checks as a trade placed by hand: where you are, that trading is set up on this account, then the order itself.
+    say("muted", "Checking you can trade from here…");
+    const geo = await window.ClueTicket.checkGeoblock().catch(() => ({ state: "unknown" }));
+    if (geo.state === "blocked") { say("err", "Polymarket does not take orders from where you are right now, so nothing was sent."); approveBtn.disabled = declineBtn.disabled = false; return; }
+    const wallet = await myTradingWallet().catch(() => null);
+    if (!wallet) { say("err", "Set up trading on this account first: open any market and follow the steps. Then come back to this link.", t.eventSlug ? el("a", { class: "btn small", href: `#/event/${encodeURIComponent(t.eventSlug)}`, text: "Open the market" }) : null); approveBtn.disabled = declineBtn.disabled = false; return; }
+    try { await post(`/api/agent-trades/${t.id}/start`, {}); } catch (e) { say("err", e.message); return; }
+    let res;
+    try {
+      const cfg = await api("/api/pm/config").catch(() => ({ ordersLive: false, builderCode: null }));
+      say("muted", "Opening your trading account…"); await loadTrading();
+      res = await window.clueTrading.order({ assetId: t.tokenId, spend: t.amount, maxPrice: t.maxPrice, builderCode: cfg.builderCode, send: cfg.ordersLive, onStep: (st) => say("muted", { account: "Opening your trading account…", sign: "Signing with your wallet…", send: "Sending your order…", match: "Matching with sellers…" }[st] || "Working…") });
+    } catch (e) { res = { ok: false, sent: false, error: e.message || "The order could not be placed." }; }
+    const status = !res.ok ? "failed" : !res.sent ? "checked" : res.filled ? "filled" : "unfilled";
+    try { await post(`/api/agent-trades/${t.id}/result`, { status, shares: res.shares, paid: res.paid, avgPrice: res.avgPrice, orderId: res.orderId, message: res.error || res.note }); } catch { /* the result still shows here */ }
+    if (status === "filled") say("ok", `Done. You bought ${Number(res.shares).toFixed(2)} shares for ${usd(res.paid)}. Your AI can see it now.`, el("a", { class: "btn small", href: "#/portfolio", text: "See your Portfolio" }));
+    else if (status === "checked") say("muted", ended.checked);
+    else say("err", res.error || (status === "unfilled" ? res.note || ended.unfilled : ended.failed));
+  };
+  card.replaceChildren(...summary, el("div", { class: "connect-actions" }, approveBtn, declineBtn), out, el("p", { class: "muted small", text: `Expires ${new Date(t.expiresAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.` }));
+}
+
 /* ---------- agents: use Clue from an AI assistant, and let it trade within your limits ---------- */
 function agentsView() {
   const intro = el("section", { class: "card agents-hero" },
@@ -542,7 +596,9 @@ function agentsView() {
     el("p", { class: "muted", text: "One install adds research, your Journal, your Portfolio, PnL cards and trading to Claude Code, with commands like /clue:research, /clue:portfolio, /clue:card, /clue:brief and /clue:trade." }),
     snippet("Install", "export CLUE_KEY=YOUR_KEY\nclaude plugin marketplace add majorlabs/cluemarket\nclaude plugin install clue@clue"),
     el("p", { class: "muted small" }, "Make a key above first. For trading, tick Can trade and set up Assistant trading below. ", el("a", { href: "#/docs/agents", text: "Read the guide" })));
-  app.replaceChildren(el("div", { class: "agents-page" }, intro, agentHosts.keys, plugin, agentHosts.wallet));
+  const waiting = el("div", { class: "agents-waiting" });
+  api("/api/agent-trades").then(({ trades }) => { if (!trades.length || !waiting.isConnected) return; waiting.replaceChildren(el("section", { class: "card agents-sec" }, el("h2", { text: "Waiting for your approval" }), ...trades.map((x) => el("a", { class: "aw-row", href: `#/approve/${x.id}` }, el("span", { text: `Buy ${x.outcome}` }), el("span", { class: "muted", text: (x.question || "").slice(0, 60) }), el("b", { text: `$${Number(x.amount).toFixed(2)}` }))))); }).catch(() => {});
+  app.replaceChildren(el("div", { class: "agents-page" }, intro, waiting, agentHosts.keys, plugin, agentHosts.wallet));
   openAssistants(); openAgentWallet();
 }
 

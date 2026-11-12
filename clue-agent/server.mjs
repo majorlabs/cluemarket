@@ -5,6 +5,7 @@ import { store, sealingKey } from './auth.mjs';
 import {initWalletAuth,walletSession,walletRoute} from './wallet-auth.mjs';
 import {AGENT_USER} from './agent-user.mjs';
 import {createKey,listKeys,revokeKey,revokeAll,userForToken} from './agent-keys.mjs';
+import {getTrade,listWaiting,start as tradeStart,decline as tradeDecline,finish as tradeFinish} from './agent-trades.mjs';
 import {resourceMetadata,serverMetadata,register as oauthRegister,authorize as oauthAuthorize,describeRequest as oauthDescribe,decide as oauthDecide,token as oauthToken,readForm} from './oauth.mjs';
 import {describeWallet,connectWallet,updateWallet,removeWallet,signFor} from './agent-wallet.mjs';
 import {mcpRoute} from './mcp.mjs';
@@ -127,7 +128,7 @@ const handler=async(req,res)=>{ try {
  if(!fromAgent && req.method==='POST' && url.pathname==='/api/oauth/register') { if(!oauthReg.take('all')) return json(res,429,{error:'slow_down'}); try { return json(res,201,await oauthRegister(store,await getBody(req))); } catch(e) { return oauthFail(e); } }
  if(!fromAgent && req.method==='GET' && url.pathname==='/api/oauth/authorize') { try { const r=await oauthAuthorize(store,url.searchParams); res.writeHead(302,{Location:r.redirect||`${pubBase}/#/connect/${r.request}`,'Cache-Control':'no-store'}); return res.end(); } catch(e) { return oauthFail(e); } }
  if(!fromAgent && req.method==='POST' && url.pathname==='/api/oauth/token') { try { return json(res,200,await oauthToken(store,await readForm(req))); } catch(e) { return oauthFail(e); } }
- if(url.pathname==='/api/mcp' && !fromAgent) return mcpRoute(req,res,{dispatch:(r,s)=>handler(r,s),resourceMetadataUrl:`${pubBase}/.well-known/oauth-protected-resource`});
+ if(url.pathname==='/api/mcp' && !fromAgent) return mcpRoute(req,res,{dispatch:(r,s)=>handler(r,s),resourceMetadataUrl:`${pubBase}/.well-known/oauth-protected-resource`,base:pubBase});
  // The local order sender that comes with the Clue plugin. It authenticates with the person's assistant key, not a browser
  // cookie, so the browser checks below do not apply. It can only ask for signatures; it never sends anything to Polymarket from here.
  if(!fromAgent && (url.pathname.startsWith('/api/agent/') || (url.pathname==='/api/pm/sign' && /^Bearer clue_ak_/.test(String(req.headers.authorization||''))))) {
@@ -247,6 +248,20 @@ const handler=async(req,res)=>{ try {
    const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in first.'});
    const b=await getBody(req); return json(res,200,await oauthDecide(store,session.user.id,b.id,{approve:b.approve===true,canTrade:b.canTrade===true}));
   } catch(e) { if(e.oauth) return json(res,e.status||400,{error:e.message}); throw e; }
+ }
+ if(url.pathname==='/api/agent-trades' || url.pathname.startsWith('/api/agent-trades/')) {
+  // Trades an AI prepared, approved or declined by the signed-in person on their own device. Never by an AI.
+  if(fromAgent) return json(res,403,{error:'Not allowed.'});
+  const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in to see this.'});
+  const owner=session.user.id, m=url.pathname.match(/^\/api\/agent-trades\/([a-f0-9-]{36})(?:\/(start|decline|result))?$/);
+  try {
+   if(req.method==='GET' && url.pathname==='/api/agent-trades') return json(res,200,{trades:await listWaiting(store,owner)});
+   if(req.method==='GET' && m && !m[2]) return json(res,200,await getTrade(store,owner,m[1]));
+   if(req.method==='POST' && m && m[2]==='start') return json(res,200,await tradeStart(store,owner,m[1]));
+   if(req.method==='POST' && m && m[2]==='decline') return json(res,200,await tradeDecline(store,owner,m[1]));
+   if(req.method==='POST' && m && m[2]==='result') return json(res,200,await tradeFinish(store,owner,m[1],await getBody(req)));
+  } catch(e) { if(e.toolError) return json(res,e.status||400,{error:e.message}); throw e; }
+  return json(res,405,{error:'Method not allowed.'});
  }
  if(url.pathname==='/api/agent-keys' || url.pathname.startsWith('/api/agent-keys/')) {
   // Keys are managed only from the signed-in page, never by an assistant.

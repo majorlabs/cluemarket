@@ -28,6 +28,10 @@ Market prices are what traders are paying, shown as chances. They are not Clue's
 
 ## Trading
 
+With the hosted Clue connection (Claude app, ChatGPT), use `propose_trade`: confirm the market, outcome, amount and worst price with the person, then give them the approve link. They approve on their phone and the order goes from there. Check with `trade_status`.
+
+With the plugin's `clue-trader` (Claude Code and an OutLayer agent wallet):
+
 1. Trading needs an assistant key made with **Can trade** ticked. Check `trading_status` first. If trading is off or no wallet is connected, tell the person to open Agents in Clue and set up Assistant trading. If `setUp` is false, run `setup_trading` once.
 2. Get the outcome's `token_id` from `get_market`.
 3. Before every `buy` or `sell`, state the market, the outcome, the amount and the worst price, and wait for the person to say yes.
