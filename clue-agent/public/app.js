@@ -250,6 +250,7 @@ function openAccountMenu() {
       el("a", { class: "btn", href: "#/portfolio", text: "Portfolio", onclick: () => dialog.close() }),
       el("a", { class: "btn", href: "#/saved", text: "Journal", onclick: () => dialog.close() }),
       el("a", { class: "btn", href: "#/agents", text: "Agents", onclick: () => dialog.close() }),
+      el("a", { class: "btn", href: "#/docs", text: "Docs and help", onclick: () => dialog.close() }),
       el("button", { class: "btn", type: "button", style: "color:var(--no)", text: "Disconnect", onclick: signOut }),
       el("button", { class: "btn ghost", type: "button", text: "Close", onclick: () => dialog.close() })));
   if (!dialog.open) dialog.showModal();
@@ -379,6 +380,7 @@ async function route() {
   if (parts[0] === "ask") { setNav("ask"); return askView(qs, stale); }
   if (parts[0] === "saved") { setNav("saved"); return savedView(parts[1], stale); }
   if (parts[0] === "agents") { setNav("agents"); return agentsView(); }
+  if (parts[0] === "docs") { setNav(""); return docsView(parts[1]); }
   if (parts[0] === "portfolio") { setNav("portfolio"); return portfolioView(stale); }
   if (parts[0] === "card") { setNav(""); return cardView(parts[1] || ""); }
   setNav("board");
@@ -403,6 +405,78 @@ function cardView(code) {
   openShare(data, into);
 }
 
+/* ---------- docs: everything about Clue, in one place ---------- */
+// Each section: [id, title, blocks]. A block is a paragraph (string), a list (["ul", ...items]), steps (["ol", ...items]),
+// a command (["code", text]) or a link row (["links", [label, href], ...]). Plain text only: nothing here becomes HTML.
+const DOCS = [
+  ["start", "Getting started", [
+    "Clue is a place to research any question about the future, make your own call on it, and trade it. Research runs on NEAR AI Cloud, money comes in through NEAR Intents, and trades go to Polymarket's markets.",
+    ["ol", "Open oncluemarket.xyz on your phone or computer.", "Tap Sign in and choose email, Google, an Ethereum wallet, or a NEAR wallet.", "With email or Google, Clue makes a wallet for you. There is nothing to install and no seed phrase to write down.", "Pick a market from Markets, or search for a topic."],
+    "Prices on Clue are shown as chances. A Yes at 39¢ means traders put it at about 39%. If the call comes in, each share pays $1.",
+  ]],
+  ["research", "Research", [
+    "Ask any question, with or without a market. Clue searches the web for the latest news and numbers and gives you a short answer you can take in at a glance.",
+    ["ul", "The short answer", "The evidence for and against, each with a link to its source", "What to watch next", "How sure the answer is"],
+    "Only links the search actually found are shown. Everyone gets 2 free researches a day, and they reset at midnight UTC. Open a market and tap Research, or go to Ask Clue.",
+  ]],
+  ["journal", "Your calls and the Journal", [
+    "After research, save your own chance for the question, why you think so, and what would change your mind. Your Journal keeps every call next to the market price when you made it and the price now.",
+    "When a market resolves, your call is scored against the market's price at the time, so you can see whether you are beating the crowd. You can add a note on what you learned. Everything in the Journal is private to you unless you choose to share it.",
+  ]],
+  ["trading", "Trading", [
+    ["ol", "Open a market and choose a side.", "Set up trading the first time. It is gasless: you approve once in your wallet and Clue does the rest.", "Enter how much to spend. Clue shows the shares you get, the worst price it will accept, and what you get back if the call comes in.", "Place the order. It fills completely at your price or not at all, so you never end up with half an order you did not expect."],
+    "Orders go from your own device straight to Polymarket. Orders still waiting on the market show in Portfolio, where you can cancel them.",
+  ]],
+  ["money", "Add money and withdraw", [
+    "Open Portfolio and tap Add money. You can send from many chains through NEAR Intents, including USDC on NEAR, or send USDC straight from Solana or Polygon. Whatever you send arrives as pUSD, Polymarket's dollar.",
+    ["ol", "Choose what you are sending and how much. Clue shows what will arrive.", "Tap Get my deposit address and send to it from your wallet or exchange.", "The deposit stays at the top of Add money, with live status, until it lands. It stays there after a refresh too.", "If a deposit cannot finish, it goes back to your refund address. Clue shows when and where."],
+    "A deposit sent earlier can be added by pasting its address. To take money out, tap Withdraw in Portfolio and choose the chain and address. Withdrawals go through Polymarket's own bridge.",
+  ]],
+  ["portfolio", "Portfolio and share cards", [
+    "Portfolio shows your cash, every position with its profit or loss, your history, and orders still waiting. When a market ends in your favour, tap Claim to move the winnings into your cash.",
+    "Tap Share on any position to make a 16:9 card of your call: live, won or lost. It comes with a post ready for X and a code that opens the same market, so people who see it can make their own call. Save the card, copy the post, or post it on X.",
+  ]],
+  ["agents", "Agents: use Clue from your AI", [
+    "Clue works inside Claude, Codex, Cursor and other AI assistants. You chat as you normally would, and your assistant uses Clue for you.",
+    ["ul", "“How is my portfolio doing?”", "“Research the Fed's December decision and save my call at 70%.”", "“Make a PnL card for my biggest position.” (the card arrives as a picture in the chat)", "“What changed since my calls?” and “How good are my calls?”", "“Buy $5 of Yes on this market.” (with assistant trading switched on)"],
+    ["ol", "Open Agents and make a key. Leave Can trade off for research only.", "Copy the setup for your assistant: Claude Code, Codex, or Cursor and others.", "Ask away. The key works as you: your Journal, your Portfolio, your limits."],
+    "For Claude Code, the Clue plugin adds everything in one install, with the commands /clue:research, /clue:portfolio, /clue:card, /clue:record, /clue:brief and /clue:trade:",
+    ["code", "export CLUE_KEY=your_key\nclaude plugin marketplace add majorlabs/cluemarket\nclaude plugin install clue@clue"],
+  ]],
+  ["assistant-trading", "Assistant trading", [
+    "Your assistant can trade for you with an agent wallet on OutLayer, NEAR's secure custody for AI agents. The wallet's keys stay in OutLayer's secure hardware, and you choose the limits.",
+    ["ol", "At app.outlayer.ai, open Custody, then Wallets, and create a wallet. In its policy, allow evm_sign, leave the other capabilities off, and save.", "In Clue, open Agents, then Assistant trading. Paste the wallet key (it starts with wk_), set your most per order and most per day, and switch it on.", "Make a key with Can trade ticked and install the Clue plugin.", "Ask your assistant for trading_status, fund the trading account it shows (or use Add money), and run setup_trading once.", "Ask for a trade. Your assistant shows you the market, the amount and the worst price, and waits for your yes."],
+    "Every order is checked by Clue before your wallet signs it: it must fit your limits and be close to the live market price, or it is refused. Clue signs only Polymarket sign-in, orders and Polymarket's trading permissions. It never signs transfers or withdrawals. Orders are sent to Polymarket from your own computer.",
+    "Everything your assistant asks for shows under Assistant trading, signed or refused, with the reason. Switch it off there at any time, remove the key, or freeze the wallet on OutLayer.",
+  ]],
+  ["safety", "How your money and keys are kept safe", [
+    ["ul", "Your trading wallet is yours. Clue never holds your money.", "Orders go from your own device or computer to Polymarket.", "Assistant keys are stored only as a fingerprint, and are shown once when made. Remove one at any time.", "Keys are read-only unless you tick Can trade.", "An OutLayer wallet key is stored sealed and is never shown again. Clue checks your limits and the live price on every order, and refuses anything else.", "Every request from your assistant is logged where you can see it."],
+  ]],
+  ["faq", "Questions people ask", [
+    ["ul", "Do I need crypto to start? No. Sign in with email or Google and add money from any of the supported chains.", "What does 39¢ mean? Traders put the outcome at about 39%. Each share pays $1 if it comes in.", "Why did my research take a while? Clue searches for the latest news first. Most answers take under a minute.", "My deposit has not arrived. It stays at the top of Add money with its status. If it cannot finish, it goes back to your refund address automatically.", "Can my AI spend more than I allow? No. Your limits per order and per day are checked by Clue before anything is signed, and your wallet only holds what you put in it."],
+  ]],
+  ["help", "Get help", [
+    "Stuck, found a bug, or have an idea? Open an issue on GitHub and we will get back to you.",
+    ["links", ["Open an issue on GitHub", "https://github.com/majorlabs/cluemarket/issues"], ["Read the code", "https://github.com/majorlabs/cluemarket"]],
+  ]],
+];
+function docsView(section) {
+  const block = (b) => {
+    if (typeof b === "string") return el("p", { text: b });
+    const [kind, ...rest] = b;
+    if (kind === "ul" || kind === "ol") return el(kind, {}, ...rest.map((t) => el("li", { text: t })));
+    if (kind === "code") return el("div", { class: "mcp-snip" }, el("div", { class: "mcp-snip-head" }, el("span", { class: "label", text: "Command" }), copyBtn(rest[0])), el("pre", {}, el("code", { text: rest[0] })));
+    if (kind === "links") return el("div", { class: "docs-links" }, ...rest.map(([label, href]) => el("a", { class: "btn small", href, target: "_blank", rel: "noopener", text: label })));
+    return null;
+  };
+  const toc = el("nav", { class: "docs-toc card", "aria-label": "Docs contents" }, el("b", { text: "Contents" }), ...DOCS.map(([id, title]) => el("a", { href: `#/docs/${id}`, text: title })));
+  const body = el("div", { class: "docs-body" },
+    el("section", { class: "card docs-sec docs-intro" }, el("h1", { text: "Clue docs" }), el("p", { class: "muted", text: "Everything about Clue: research, your calls, trading, money in and out, and using Clue from your AI." })),
+    ...DOCS.map(([id, title, blocks]) => el("section", { class: "card docs-sec", id: `docs-${id}` }, el("h2", { text: title }), ...blocks.map(block))));
+  app.replaceChildren(el("div", { class: "docs-page" }, toc, body));
+  if (section) { const t = document.getElementById(`docs-${section}`); if (t) requestAnimationFrame(() => t.scrollIntoView({ block: "start" })); }
+}
+
 /* ---------- agents: use Clue from an AI assistant, and let it trade within your limits ---------- */
 function agentsView() {
   const intro = el("section", { class: "card agents-hero" },
@@ -420,7 +494,7 @@ function agentsView() {
     el("h2", { text: "The Clue plugin for Claude Code" }),
     el("p", { class: "muted", text: "One install adds research, your Journal, your Portfolio, PnL cards and trading to Claude Code, with commands like /clue:research, /clue:portfolio, /clue:card, /clue:brief and /clue:trade." }),
     snippet("Install", "export CLUE_KEY=YOUR_KEY\nclaude plugin marketplace add majorlabs/cluemarket\nclaude plugin install clue@clue"),
-    el("p", { class: "muted small", text: "Make a key above first. For trading, tick Can trade and set up Assistant trading below." }));
+    el("p", { class: "muted small" }, "Make a key above first. For trading, tick Can trade and set up Assistant trading below. ", el("a", { href: "#/docs/agents", text: "Read the guide" })));
   app.replaceChildren(el("div", { class: "agents-page" }, intro, agentHosts.keys, plugin, agentHosts.wallet));
   openAssistants(); openAgentWallet();
 }
