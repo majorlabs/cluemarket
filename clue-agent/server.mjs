@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash as statsHash, timingSafeEqual } from 'node:crypto';
 import { store, sealingKey } from './auth.mjs';
 import {initWalletAuth,walletSession,walletRoute} from './wallet-auth.mjs';
 import {findTradingWallet} from './trading-wallet.mjs';
@@ -160,6 +160,7 @@ const handler=async(req,res)=>{ try {
  if(url.pathname.startsWith('/api/privy/'))return json(res,200,await privyRoute(req,res,url.pathname,req.method==='POST'?await getBody(req):{},requestOrigin));
  if(url.pathname.startsWith('/api/wallet/'))return json(res,200,await walletRoute(req,res,url.pathname,req.method==='POST'?await getBody(req):{},requestOrigin));
  if(url.pathname.startsWith('/api/auth/'))return json(res,410,{error:'Use your NEAR wallet to connect.'});
+ if(url.pathname==='/api/admin/stats'&&req.method==='GET'){const want=process.env.STATS_TOKEN||'';const got=String(req.headers.authorization||'').replace(/^Bearer /,'');const h=(v)=>statsHash('sha256').update(v).digest();if(want.length<32||!timingSafeEqual(h(want),h(got)))return json(res,404,{error:'Not found.'});const n=async(sql)=>{try{const r=await store.get(sql);return Number(r&&r.n)||0;}catch{return null;}};const users=await store.all('SELECT "createdAt" AS c FROM "user"').catch(()=>[]);const byDay={};let first=null;for(const u of users){const d=String(u.c instanceof Date?u.c.toISOString():u.c||'').slice(0,10);if(!d)continue;byDay[d]=(byDay[d]||0)+1;if(!first||d<first)first=d;}return json(res,200,{users:users.length,firstSignup:first,signupsByDay:byDay,usersWithResearch:await n('SELECT count(DISTINCT user_id) AS n FROM research_threads'),researchThreads:await n('SELECT count(*) AS n FROM research_threads'),forecasts:await n('SELECT count(*) AS n FROM forecast_revisions'),tradingAccounts:await n('SELECT count(*) AS n FROM trading_accounts'),agentKeys:await n('SELECT count(*) AS n FROM agent_keys'),usersWithAgents:await n('SELECT count(DISTINCT user_id) AS n FROM agent_keys'),agentTrades:await n('SELECT count(*) AS n FROM agent_trades'),usersWhoTradedViaAgent:await n('SELECT count(DISTINCT user_id) AS n FROM agent_trades'),sharedReports:await n('SELECT count(*) AS n FROM public_reports')});}
  const publicMatch=url.pathname.match(/^\/api\/public\/([a-f0-9-]+)$/);
  if(req.method==='GET' && publicMatch){const item=await store.get('SELECT snapshot, created_at FROM public_reports WHERE id=?',publicMatch[1]);if(!item)return json(res,404,{error:'Shared report unavailable.'}); return json(res,200,{snapshot:JSON.parse(item.snapshot),publishedAt:item.created_at});}
  if(req.method==='GET' && url.pathname==='/api/pm/config') {
