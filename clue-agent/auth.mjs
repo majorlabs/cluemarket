@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth';
+import Database from 'better-sqlite3';
 import pg from 'pg';
 import { randomBytes, createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -20,7 +21,6 @@ if (isPostgres) {
   if (!existsSync(secretPath)) writeFileSync(secretPath, randomBytes(32).toString('hex'), { mode: 0o600, flag: 'wx' });
   chmodSync(secretPath, 0o600);
   secret ||= readFileSync(secretPath, 'utf8').trim();
-  const { default: Database } = await import('better-sqlite3');   // only for the local preview; hosted Clue uses Postgres
   database = new Database(join(directory, 'clue.sqlite'));
   database.pragma('journal_mode = WAL');
   database.pragma('foreign_keys = ON');
@@ -93,11 +93,6 @@ CREATE TABLE IF NOT EXISTS agent_orders (
  FOREIGN KEY(user_id) REFERENCES "user"(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS agent_orders_day ON agent_orders(user_id, day);
-CREATE TABLE IF NOT EXISTS research_jobs (
- id TEXT PRIMARY KEY, user_id TEXT NOT NULL, status TEXT NOT NULL, started_at REAL NOT NULL, code INTEGER, error TEXT,
- FOREIGN KEY(user_id) REFERENCES "user"(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS research_jobs_user ON research_jobs(user_id, status);
 CREATE TABLE IF NOT EXISTS research_results (
  id TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at TEXT NOT NULL,
  question TEXT NOT NULL, content TEXT NOT NULL, sources TEXT NOT NULL,
