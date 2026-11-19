@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { waitUntil } from '@vercel/functions';
 import { readFile } from 'node:fs/promises';
 import { randomUUID, createHash as statsHash, timingSafeEqual } from 'node:crypto';
 import { store, sealingKey } from './auth.mjs';
@@ -45,8 +46,11 @@ const statusUser=new HourlyBudget(600);
 const depositsUser=new HourlyBudget(600);
 const marketLookup=new HourlyBudget(1200);   // names for the orders on the Portfolio; cheap, but not unlimited
 const researchGlobal=new HourlyBudget(Math.max(1,Number(process.env.CLUE_RESEARCH_GLOBAL_PER_HOUR)||60));
-const researchJobs=new Map();
-const sweepJobs=()=>{const cut=Date.now()-30*60000;for(const [k,j] of researchJobs)if(j.startedAt<cut)researchJobs.delete(k)};
+// Research runs after the reply is sent, so jobs live in the database: any server instance can answer how one is going.
+// On Vercel, waitUntil keeps the function alive until the work is done; on a plain Node server the promise simply runs.
+const keepAlive=(p)=>{try{waitUntil(p);}catch{}return p;};
+const JOB_TIMEOUT_MS=10*60000;
+const sweepJobs=()=>store.run("UPDATE research_jobs SET status='failed', code=504, error=? WHERE status='running' AND started_at<?",'The research took too long and was stopped. Please try again.',Date.now()-JOB_TIMEOUT_MS).catch(()=>{});
 const NO_RESEARCH_YET='Started from a forecast. No research has been run yet.';
 const ASSET_TYPES={'/assets/clue-mark.jpg':'image/jpeg','/assets/clue-board.jpg':'image/jpeg','/assets/clue-mark.svg':'image/svg+xml','/assets/clue-mark-on-dark.svg':'image/svg+xml','/assets/favicon-32.png':'image/png','/assets/apple-touch-icon-180.png':'image/png','/assets/og-1200x630.png':'image/png','/assets/coins/chain-arb.svg':'image/svg+xml','/assets/coins/chain-base.svg':'image/svg+xml','/assets/coins/chain-eth.svg':'image/svg+xml','/assets/coins/chain-near.svg':'image/svg+xml','/assets/coins/chain-op.svg':'image/svg+xml','/assets/coins/chain-pol.svg':'image/svg+xml','/assets/coins/chain-sol.svg':'image/svg+xml','/assets/coins/eth.svg':'image/svg+xml','/assets/coins/near.svg':'image/svg+xml','/assets/coins/sol.svg':'image/svg+xml','/assets/coins/usdc.svg':'image/svg+xml','/assets/coins/usdt.svg':'image/svg+xml'};
 const headers = {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
@@ -374,31 +378,31 @@ const handler=async(req,res)=>{ try {
   const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Connect your NEAR wallet to research this question.'});
   const body=await getBody(req); const question=typeof body.question==='string'?body.question.trim():''; if(question.length<5 || question.length>2000) return json(res,400,{error:'Enter a question between 5 and 2,000 characters.'});
   const market=body.market && body.market.id!==undefined && body.market.id!==null ? await marketRecord(body.market.id) : null;
-  const owner=session.user.id; sweepJobs();
-  if([...researchJobs.values()].some(j=>j.userId===owner&&j.status==='running')) return json(res,429,{error:'Your last research is still running. Wait for it to finish.'});
+  const owner=session.user.id; await sweepJobs();
+  if(await store.get("SELECT id FROM research_jobs WHERE user_id=? AND status='running'",owner)) return json(res,429,{error:'Your last research is still running. Wait for it to finish.'});
   const slot=await reserve(owner);
   if(!slot.ok){ const a=await allowance(owner); return json(res,429,{error:slot.reason==='user-limit'?`You have used your ${a.freePerDay} free researches for today. They reset at midnight UTC.`:'Research is paused for today to keep costs under control. Please try again tomorrow.',allowance:a}); }
   if(!researchGlobal.take()){ await release(slot.id); return json(res,429,{error:'Clue is handling a lot of research right now. Please try again in a little while.'}); }
   // Research can take a minute, longer than a proxy will hold one request open. Start it, return a ticket, and let the page ask how it is going.
-  const researchId=randomUUID(), job={userId:owner,status:'running',startedAt:Date.now()}; researchJobs.set(researchId,job);
-  (async()=>{
+  const researchId=randomUUID(); await store.run("INSERT INTO research_jobs (id,user_id,status,started_at) VALUES (?,?,'running',?)",researchId,owner,Date.now());
+  keepAlive((async()=>{
    try {
     const result=await research(question,market);
     const spent=await settle(slot.id,result.usage); console.log(`research cost $${spent.cost.toFixed(5)}${spent.estimated?' (estimated: provider sent no usage)':''}`);
     await store.run('INSERT INTO research_results (id,user_id,created_at,question,content,sources,market,model,retrieved_at) VALUES (?,?,?,?,?,?,?,?,?)',researchId,owner,new Date().toISOString(),question,result.content,JSON.stringify(result.sources),market?JSON.stringify(market):null,result.model,result.retrievedAt);
-    job.status='done';
+    await store.run("UPDATE research_jobs SET status='done' WHERE id=?",researchId);
    } catch(err) {
     await release(slot.id).catch(()=>{});
-    job.status='failed'; job.code=err.status||500; job.error=err.status?err.message:'Something went wrong. Please try again.';
+    await store.run("UPDATE research_jobs SET status='failed', code=?, error=? WHERE id=?",err.status||500,err.status?err.message:'Something went wrong. Please try again.',researchId).catch(()=>{});
     if(!err.status) console.error('research failed',err);
    }
-  })();
+  })());
   return json(res,202,{researchId,status:'running'});
  }
  const jobMatch=url.pathname.match(/^\/api\/research\/([a-f0-9-]{36})$/);
  if(req.method==='GET' && jobMatch) {
   const session=await walletSession(req); if(!session?.user?.id) return json(res,401,{error:'Sign in to see your research.'});
-  const owner=session.user.id, job=researchJobs.get(jobMatch[1]);
+  const owner=session.user.id, job=await store.get('SELECT user_id AS "userId", status, code, error FROM research_jobs WHERE id=?',jobMatch[1]);
   if(job){
    if(job.userId!==owner) return json(res,404,{error:'No such research.'});
    if(job.status==='running') return json(res,200,{status:'running'});
@@ -413,5 +417,6 @@ const handler=async(req,res)=>{ try {
  if(req.method==='GET' && ASSET_TYPES[url.pathname]) {const content=await readFile(new URL('./public'+url.pathname,import.meta.url));res.writeHead(200,{'Content-Type':ASSET_TYPES[url.pathname],'Cache-Control':'public, max-age=3600','X-Content-Type-Options':'nosniff'});return res.end(content);}
  json(res,404,{error:'Not found'});
  } catch(err){ if(!err.status) console.error('request failed', req.method, req.url, err); json(res,err.status || 500,{error:err.status ? err.message : 'Something went wrong. Please try again.'});}  };
-const app=http.createServer(handler);
-app.listen(port,host,()=>console.log(`Clue local preview: http://${host}:${port}`));
+export default handler;
+// On Vercel the platform calls the handler (api/index.mjs); everywhere else Clue runs its own server.
+if(!process.env.VERCEL){const app=http.createServer(handler);app.listen(port,host,()=>console.log(`Clue local preview: http://${host}:${port}`));}

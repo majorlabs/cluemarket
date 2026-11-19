@@ -5,23 +5,23 @@
   "rewrites": [
     {
       "source": "/.well-known/oauth-protected-resource",
-      "destination": "https://clue-api-development.up.railway.app/api/oauth/meta/resource"
+      "destination": "/api/index"
     },
     {
       "source": "/.well-known/oauth-protected-resource/:path*",
-      "destination": "https://clue-api-development.up.railway.app/api/oauth/meta/resource"
+      "destination": "/api/index"
     },
     {
       "source": "/.well-known/oauth-authorization-server",
-      "destination": "https://clue-api-development.up.railway.app/api/oauth/meta/server"
+      "destination": "/api/index"
     },
     {
       "source": "/.well-known/oauth-authorization-server/:path*",
-      "destination": "https://clue-api-development.up.railway.app/api/oauth/meta/server"
+      "destination": "/api/index"
     },
     {
       "source": "/api/:path*",
-      "destination": "https://clue-api-development.up.railway.app/api/:path*"
+      "destination": "/api/index"
     }
   ],
   "headers": [
@@ -55,5 +55,11 @@
         }
       ]
     }
-  ]
+  ],
+  "functions": {
+    "api/index.mjs": {
+      "maxDuration": 300,
+      "includeFiles": "public/**"
+    }
+  }
 }
