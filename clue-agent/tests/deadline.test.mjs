@@ -22,7 +22,7 @@ test('the shipped trading bundle reads the balance with a deadline and a backup 
   const { Script } = await import('node:vm');
   const bundle = await readFile(new URL('../public/trading.js', import.meta.url), 'utf8');
   new Script(bundle);                                                                   // it still parses
-  assert.match(bundle, /Reading your balance took longer than 15 seconds/);
+  assert.match(bundle, /Reading your balance took longer than 15 seconds|\(\w+\(\),\s*15e3,\s*"Reading your balance"\)/);   // inlined, or through the shared deadline helper
   assert.match(bundle, /balance read failed, trying the next server/);
   assert.match(bundle, /Could not read your balance right now/);
 });
