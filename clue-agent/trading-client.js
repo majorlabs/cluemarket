@@ -78,6 +78,13 @@ const REFUSALS = {
   insufficient_balance_or_allowance: 'Your account does not have enough money or permission for this order. No money was spent.',
   market_not_ready: 'This market is not ready for orders yet. No money was spent.',
 };
+const SELL_REFUSALS = {
+  fok_not_filled: 'The price moved before the sale could fill, so nothing was sold. Your shares are still yours.',
+  fak_not_filled: 'The price moved before the sale could fill, so nothing was sold. Your shares are still yours.',
+  unmatched: 'Nobody was buying at your price floor, so nothing was sold. Your shares are still yours.',
+  insufficient_balance_or_allowance: 'Your account needs permission to sell these shares. Open Portfolio, then Set up trading, and try again. Nothing was sold.',
+  market_not_ready: 'This market is not taking orders right now. Nothing was sold.',
+};
 const num = (v) => Number(v || 0);
 
 // Buy with a dollar amount. All-or-nothing: the order fills completely at no worse than maxPrice, or it does not happen.
@@ -120,6 +127,36 @@ window.clueTrading.order = async function order({ assetId, spend, maxPrice, buil
     if (/reject|denied|cancel/i.test(text) && !(e && e.name === 'UserInputError')) return { ok: false, sent: false, error: 'You cancelled the request in your wallet. Nothing was sent.' };
     if (e && e.name === 'UserInputError') return { ok: false, sent: false, error: 'This market would not take that size or price. Nothing was sent. Try a slightly different amount.' };
     return { ok: false, sent: false, error: 'The order could not be placed. If you are not sure whether it went through, check your positions before trying again.', detail: describe(send ? 'order' : 'check', e) };
+  }
+};
+
+// Sell shares the person holds, to close a call early. All-or-nothing: every share sells at no less than minPrice, or nothing sells.
+// onStep: 'account', 'sign', 'send', 'match'.
+window.clueTrading.sell = async function sell({ assetId, shares, minPrice, builderCode, onStep = () => {} }) {
+  const size = Math.floor(num(shares) * 100) / 100;
+  if (!(size > 0)) return { ok: false, sent: false, error: 'There are no shares to sell.' };
+  const floor = Math.max(0.01, Math.min(0.99, Math.round(num(minPrice) * 100) / 100));
+  try {
+    onStep('account');
+    const client = await openClient();
+    onStep('sign');
+    const signed = await client.createMarketOrder({ assetId, side: OrderSide.SELL, shares: String(size), minPrice: String(floor), orderType: OrderType.FOK, ...(builderCode ? { builderCode } : {}) });
+    onStep('send');
+    const res = await client.postOrder(signed);
+    if (!res.ok) return { ok: false, sent: true, error: SELL_REFUSALS[res.code] || 'Polymarket did not accept the sale. Nothing was sold.' };
+    const sold = num(res.makingAmount), got = num(res.takingAmount);
+    if (res.status === 'matched' && sold > 0) return { ok: true, sent: true, filled: true, shares: sold, received: got, avgPrice: got / sold, orderId: res.orderId };
+    onStep('match');
+    const f = await follow(client, res.orderId);
+    if (f && f.ok) return { ok: true, sent: true, filled: true, shares: f.shares, received: f.paid, avgPrice: f.avgPrice, orderId: f.orderId };
+    if (f) return { ok: false, sent: true, error: 'The price moved before the sale could fill, so nothing was sold. Your shares are still yours.' };
+    return { ok: true, sent: true, filled: false, orderId: res.orderId, note: 'The sale was accepted and is still being matched. Your cash will update when it is done.' };
+  } catch (e) {
+    console.error('sell failed', e);
+    const text = String((e && e.message) || e || '');
+    if (/reject|denied|cancel/i.test(text) && !(e && e.name === 'UserInputError')) return { ok: false, sent: false, error: 'You cancelled the request in your wallet. Nothing was sold.' };
+    if (e && e.name === 'UserInputError') return { ok: false, sent: false, error: 'This market would not take that sale right now. Nothing was sold. Try a slightly lower price floor.' };
+    return { ok: false, sent: false, error: 'The sale could not be placed. Check your positions before trying again.', detail: describe('order', e) };
   }
 };
 

@@ -471,7 +471,7 @@ const DOCS = [
     "A deposit sent earlier can be added by pasting its address. To take money out, tap Withdraw in Portfolio and choose the chain and address. Withdrawals go through Polymarket's own bridge.",
   ]],
   ["portfolio", "Portfolio and share cards", [
-    "Portfolio shows your cash, every position with its profit or loss, your history, and orders still waiting. When a market ends in your favour, tap Claim to move the winnings into your cash.",
+    "Portfolio shows your cash, every position with its profit or loss, your history, and orders still waiting. To close a call early, tap Sell on the position, choose how many shares, and confirm: they sell to the buyers on the market and the money goes to your cash. When a market ends in your favour, tap Claim to move the winnings into your cash.",
     "Tap Share on any position to make a 16:9 card of your call: live, won or lost. It comes with a post ready for X and a code that opens the same market, so people who see it can make their own call. Save the card, copy the post, or post it on X.",
   ]],
   ["agents", "Agents: use Clue from your AI", [
@@ -765,6 +765,65 @@ async function portfolioView(stale) {
     setTimeout(() => load(true), 6000);                                              // the data service and the chain catch up a moment later
   }
 
+  // Sell a call before it ends: pick how many shares, see what you get, confirm. All-or-nothing at no less than the price floor shown.
+  function openSell(p, into) {
+    const n = T.positionNumbers(p), owned = Math.floor(n.shares * 100) / 100;
+    const amount = el("input", { class: "tk-input num", type: "number", inputmode: "decimal", min: "0.01", step: "0.01", max: String(owned), value: String(owned), "aria-label": "Shares to sell" });
+    const est = el("div"), go = el("button", { class: "btn primary", type: "button", text: "Sell" });
+    let book = null, plan = null;                                                    // book: the buyers waiting now; plan: what this sale would get
+    const shares = () => Math.min(owned, Math.floor(Number(amount.value || 0) * 100) / 100);
+    // Walk down the buyers, best price first, the way the sale fills. The floor sits 2¢ under the last price it reaches.
+    const walk = (k) => {
+      let left = k, got = 0, last = 0;
+      for (const lv of book.bids) { if (left <= 0) break; const take = Math.min(left, lv.size); got += take * lv.price; left -= take; last = lv.price; }
+      return left > 1e-9 ? null : { got, floor: Math.max(0.01, Math.round((last - 0.02) * 100) / 100) };
+    };
+    const row = (label, value, tone = "") => el("div", { class: "tk-row" }, el("span", { class: "muted", text: label }), el("b", { class: `num ${tone}`, text: value }));
+    const draw = () => {
+      const k = shares(); plan = null; go.disabled = true; go.textContent = k > 0 ? `Sell ${k.toFixed(2)} shares` : "Sell";
+      if (!book) { est.replaceChildren(el("p", { class: "muted small", text: "Reading the buyers' prices…" })); return; }
+      if (!book.available || !book.bids.length) { est.replaceChildren(el("p", { class: "status err", text: "Nobody is buying this outcome right now, so it cannot be sold yet. Try again later." })); return; }
+      const min = Number(book.minOrderSize) || 0;
+      if (k > 0 && min && k < min && owned >= min) { est.replaceChildren(el("p", { class: "status err", text: `The smallest sale on this market is ${min} shares.` })); return; }
+      const w = k > 0 ? walk(k) : null;
+      if (k > 0 && !w) { est.replaceChildren(el("p", { class: "status err", text: "There are not enough buyers right now for that many shares. Try fewer." })); return; }
+      const part = n.shares > 0 ? k / n.shares : 0, got = w ? w.got : 0, pnl = got - n.paid * part;
+      plan = w && { shares: k, floor: w.floor }; go.disabled = !plan;
+      est.replaceChildren(
+        row("Best buyer now", pfCents(book.bids[0].price)),
+        row("You get about", pfUsd(got)),
+        w ? row("At least", `${pfUsd(k * w.floor)} · ${pfCents(w.floor)} a share`) : null,
+        row("Profit on these shares", pfSigned(pnl), pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""));
+    };
+    amount.addEventListener("input", draw);
+    go.onclick = () => plan && sellShares(p, plan.shares, plan.floor, into);
+    into.replaceChildren(el("div", { class: "review" },
+      el("b", { text: "Sell this call" }),
+      el("p", { class: "muted small", text: `You hold ${owned.toFixed(2)} ${p.outcome} shares. Sell some or all of them now to the buyers on the market. The money goes to your cash.` }),
+      el("label", { class: "tk-label" }, "Shares to sell ", el("span", { class: "share-row" }, amount, el("button", { class: "btn small", type: "button", text: "All shares", onclick: () => { amount.value = String(owned); draw(); } }))),
+      est,
+      el("p", { class: "muted small", text: "All or nothing: every share sells at the price floor or better, or nothing sells." }),
+      el("div", { class: "share-row" }, go, el("button", { class: "btn", type: "button", text: "Cancel", onclick: () => into.replaceChildren() }))));
+    draw();
+    api(`/api/book?token=${encodeURIComponent(p.token_id)}&depth=60`).then((b) => { book = b; draw(); }).catch(() => { est.replaceChildren(el("p", { class: "status err", text: "Could not read the buyers' prices. Try again in a moment." })); });
+  }
+
+  async function sellShares(p, shares, floor, into) {
+    const pr = progress([{ id: "load", label: "Getting ready" }, { id: "account", label: "Opening your trading account" }, { id: "sign", label: "Signing with your wallet" }, { id: "send", label: "Sending your sale" }, { id: "match", label: "Matching with buyers" }]);
+    into.replaceChildren(pr.node); pr.advance("load");
+    const bad = (title, text, detail) => { pr.fail(); into.append(el("div", { class: "ending bad" }, el("span", { class: "ending-i", "aria-hidden": "true", text: "✕" }), el("b", { text: title })), el("p", { text }), detail ? el("small", { class: "err-detail", text: `(${detail})` }) : null); };
+    const geo = await window.ClueTicket.checkGeoblock().catch(() => ({ state: "unknown" }));
+    if (geo.state === "blocked") return bad("Not sold", "Polymarket does not take orders from where you are right now, so nothing was sent.");
+    try { await loadTrading(); } catch (e) { return bad("Not sold", e.message); }
+    const cfg = await ordersConfigFor();
+    const r = await window.clueTrading.sell({ assetId: p.token_id, shares, minPrice: floor, builderCode: cfg.builderCode, onStep: (s) => pr.advance(s) });
+    if (!r.ok) return bad("Not sold", r.error, r.detail);
+    pr.finish();
+    into.append(el("div", { class: "ending ok" }, el("span", { class: "ending-i", "aria-hidden": "true", text: "✓" }),
+      el("b", { text: r.filled ? `Sold ${r.shares.toFixed(2)} shares for ${pfUsd(r.received)}. It is in your cash.` : r.note })));
+    setTimeout(() => load(true), 6000);
+  }
+
   function positionRow(p) {
     const s = T.positionState(p), n = T.positionNumbers(p), sharePanel = el("div", { class: "share-panel" }), claimPanel = el("div", { class: "claim-panel" });
     const tone = n.pnl > 0 ? "pos" : n.pnl < 0 ? "neg" : "";
@@ -781,6 +840,7 @@ async function portfolioView(stale) {
       s !== "open" ? el("p", { class: `pf-end ${s === "lost" ? "neg" : "pos"}`, text: s === "won" ? `Ended: you called it. ${pfUsd(n.value)} is waiting for you.` : s === "partial" ? `Ended: this market paid out part. ${pfUsd(n.value)} is waiting for you.` : "Ended: it went the other way." }) : null,
       el("div", { class: "pf-actions" },
         s === "won" || s === "partial" ? el("button", { class: "btn primary small", type: "button", text: `Claim ${pfUsd(n.value)}`, onclick: (ev) => { ev.currentTarget.hidden = true; claimPositions([p], claimPanel); } }) : null,
+        s === "open" && p.token_id && n.shares >= 0.01 ? el("button", { class: "btn small", type: "button", text: "Sell", onclick: () => openSell(p, claimPanel) }) : null,
         s !== "partial" ? el("button", { class: "btn small", type: "button", text: "Share", onclick: (ev) => { ev.currentTarget.hidden = true; share(); } }) : null,
         el("a", { class: "btn small", href: `#/event/${encodeURIComponent(p.event_slug || p.slug)}`, text: "View market" })),
       claimPanel, sharePanel);
