@@ -167,12 +167,12 @@ function syncSavedSetup() {
 }
 let accountLookup = { id: null, state: null };
 // A person's cash is the pUSD their trading account holds on Polygon. Anyone can read it from a public server: no sign-in step, so it shows at once.
-const CHAIN_READERS = ["https://polygon-bor-rpc.publicnode.com", "https://polygon.drpc.org"];
+const CHAIN_READERS = ["https://polygon-bor-rpc.publicnode.com", "https://polygon.drpc.org", "https://1rpc.io/matic"];
 async function readCashRaw(wallet) {
   const call = window.ClueTicket.cashCall(wallet); if (!call) return null;
   for (const url of CHAIN_READERS) {
     try {
-      const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [call, "latest"] }) });
+      const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [call, "latest"] }), signal: AbortSignal.timeout(8000) });   // a server that stalls is skipped, not waited on
       const raw = (await r.json()).result;
       if (window.ClueTicket.cashParse(raw) !== null) return raw;
     } catch { /* try the next server */ }
