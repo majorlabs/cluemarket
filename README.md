@@ -1,30 +1,14 @@
-<p align="center">
-  <img src="clue-agent/public/assets/clue-mark.svg" alt="Clue" width="88">
-</p>
+![Clue](https://raw.githubusercontent.com/majorlabs/cluemarket/main/clue-agent/public/assets/apple-touch-icon-180.png)
 
-<h1 align="center">Clue Markets</h1>
+# Clue Markets
 
-<p align="center">
-  <b>A clearer view of what comes next.</b><br>
-  Research any question, see where real prediction markets stand, record your own private forecast, trade it, and learn from what happens. Now from your AI agent too.
-</p>
+**A clearer view of what comes next.** Research any question, see where real prediction markets stand, record your own private forecast, trade it, and learn from what happens. Now from your AI agent too.
 
-<p align="center">
-  <a href="https://www.oncluemarket.xyz">Live site</a> ·
-  <a href="#try-it-in-five-minutes">Try it</a> ·
-  <a href="#use-clue-from-your-ai-agent">From your AI agent</a> ·
-  <a href="https://www.oncluemarket.xyz/#/docs">Docs</a> ·
-  <a href="#quick-start">Run it yourself</a> ·
-  <a href="docs/TRADING_PLAN.md">Trading plan</a> ·
-  <a href="docs/SECURITY_REVIEW.md">Security</a>
-</p>
+[Live site](https://www.oncluemarket.xyz) · [Try it](#try-it-in-five-minutes) · [From your AI agent](#use-clue-from-your-ai-agent) · [Docs](https://www.oncluemarket.xyz/#/docs) · [Run it yourself](#quick-start) · [Trading plan](docs/TRADING_PLAN.md) · [Security](docs/SECURITY_REVIEW.md)
 
-<p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
-  <a href="https://near.org"><img src="https://img.shields.io/badge/built%20on-NEAR-000000.svg" alt="Built on NEAR"></a>
-</p>
+[![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Built on NEAR](https://img.shields.io/badge/built%20on-NEAR-000000.svg)](https://near.org)
 
-<p align="center"><img src="docs/images/home.png" alt="The Clue Markets home page: the glass header, the ask box and the most traded markets" width="880"></p>
+![The Clue Markets home page: the glass header, the ask box and the most traded markets](https://raw.githubusercontent.com/majorlabs/cluemarket/main/docs/images/home.png)
 
 ## What is Clue?
 
@@ -53,24 +37,15 @@ Clue puts it in one place. Pick a real market, read exactly how it resolves, ask
 | **Agent wallets on NEAR** | For an agent that trades on its own, connect your OutLayer agent wallet and set your own limits per order and per day. Clue checks every order against them and the live price before the wallet signs it. |
 | **Agents page and Docs** | One page for your connected AI agents, your budget, trades waiting for approval and agent wallets, with a disconnect-all switch. A full guide lives at [oncluemarket.xyz/#/docs](https://www.oncluemarket.xyz/#/docs). |
 
-<table>
-  <tr>
-    <td><img src="docs/images/market.png" alt="A market page with the candidates, the chart and the trade card" width="430"></td>
-    <td><img src="docs/images/portfolio.png" alt="The Portfolio with positions, claim, share and withdraw" width="430"></td>
-  </tr>
-  <tr>
-    <td align="center"><b>A market page</b>: the exact question, live prices and the trade card</td>
-    <td align="center"><b>The Portfolio</b>: cash, positions, share and withdraw</td>
-  </tr>
-  <tr>
-    <td><img src="docs/images/journal.png" alt="The Journal comparing forecasts with the market" width="430"></td>
-    <td><img src="docs/images/share-card.png" alt="A share card for a live call on the Vikings at 39 cents" width="430"></td>
-  </tr>
-  <tr>
-    <td align="center"><b>The Journal</b>: your forecast next to the market, and what changed</td>
-    <td align="center"><b>A share card</b>: a live call, ready to post on X</td>
-  </tr>
-</table>
+| A market page | The Portfolio |
+| --- | --- |
+| ![A market page with the candidates, the chart and the trade card](https://raw.githubusercontent.com/majorlabs/cluemarket/main/docs/images/market.png) | ![The Portfolio with positions, claim, share and withdraw](https://raw.githubusercontent.com/majorlabs/cluemarket/main/docs/images/portfolio.png) |
+| The exact question, live prices and the trade card | Cash, positions, share and withdraw |
+
+| The Journal | A share card |
+| --- | --- |
+| ![The Journal comparing forecasts with the market](https://raw.githubusercontent.com/majorlabs/cluemarket/main/docs/images/journal.png) | ![A share card for a live call on the Vikings at 39 cents](https://raw.githubusercontent.com/majorlabs/cluemarket/main/docs/images/share-card.png) |
+| Your forecast next to the market, and what changed | A live call, ready to post on X |
 
 ## Try it in five minutes
 
@@ -87,7 +62,7 @@ Open **https://www.oncluemarket.xyz**. Nothing needs signing in until step 5.
 9. **Trade.** With cash in your account, tap **Review my order**, check the box, and place it. *You should see* live steps and then the result.
 10. **Open your Portfolio.** *You should see* your cash, your positions and your history, with **Sell**, **Claim**, **Cancel** and **Withdraw** where they apply.
 
-<p align="center"><img src="docs/images/phone.png" alt="The home page on a phone, with the tab bar at the bottom" width="260"></p>
+![The home page on a phone, with the tab bar at the bottom](https://raw.githubusercontent.com/majorlabs/cluemarket/main/docs/images/phone.png)
 
 On a phone, Markets, Ask Clue, Portfolio and Journal sit in a tab bar at the bottom of the screen, so every page is one tap away. Clue opens in its light look, and there's a dark one too, and the sun or moon button in the header switches between them.
 
